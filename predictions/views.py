@@ -665,6 +665,14 @@ def _google_login(request, identity, *, accept_terms, ref, next_url):
     return redirect(next_url or "match_list")
 
 
+def about(request):
+    return render(request, "predictions/about.html")
+
+
+def contact(request):
+    return render(request, "predictions/contact.html")
+
+
 def how_it_works(request):
     return render(request, "predictions/how_it_works.html")
 

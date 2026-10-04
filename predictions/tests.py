@@ -620,6 +620,17 @@ class TermsAndPrivacyTests(TestCase):
         self.assertContains(response, "Referral Credits")
         self.assertContains(response, 'href="%s"' % reverse("privacy"))
 
+    def test_about_page_renders(self):
+        response = self.client.get(reverse("about"))
+        self.assertContains(response, "<title>About · WinSports</title>")
+        self.assertContains(response, "About WinSports")
+        self.assertContains(response, 'href="%s"' % reverse("contact"))
+
+    def test_contact_page_renders(self):
+        response = self.client.get(reverse("contact"))
+        self.assertContains(response, "<title>Contact · WinSports</title>")
+        self.assertContains(response, "mailto:winsportsapp@gmail.com")
+
     def test_how_it_works_page_renders(self):
         response = self.client.get(reverse("how_it_works"))
         self.assertContains(response, "How WinSports Works")
@@ -651,6 +662,8 @@ class TermsAndPrivacyTests(TestCase):
         self.assertContains(response, 'href="%s"' % reverse("terms"))
         self.assertContains(response, 'href="%s"' % reverse("privacy"))
         self.assertContains(response, 'href="%s"' % reverse("how_it_works"))
+        self.assertContains(response, 'href="%s"' % reverse("about"))
+        self.assertContains(response, 'href="%s"' % reverse("contact"))
 
     def test_register_page_shows_required_terms_checkbox(self):
         response = self.client.get(reverse("register"))
@@ -767,7 +780,7 @@ class RegistrationLocationTests(TestCase):
         self.assertIn("state", response.context["form"].errors)
 
     def test_state_not_belonging_to_selected_country_is_rejected(self):
-        # Texas is a real, listed state -- just not one of India's.
+        # Texas isn't one of India's states.
         response = self.client.post(
             reverse("register"), registration_data(country="India", state="Texas")
         )
@@ -775,7 +788,7 @@ class RegistrationLocationTests(TestCase):
         self.assertFalse(User.objects.filter(username="newuser").exists())
         self.assertIn("state", response.context["form"].errors)
 
-    def test_all_nine_countries_accept_a_state_from_their_own_list(self):
+    def test_every_country_accepts_a_state_from_its_own_list(self):
         for index, (country, states) in enumerate(STATES_BY_COUNTRY.items()):
             response = self.client.post(
                 reverse("register"),
@@ -792,14 +805,8 @@ class RegistrationLocationTests(TestCase):
     def test_representative_subdivision_per_country_is_accepted(self):
         cases = [
             ("India", "Kerala"),
-            ("Bahrain", "Capital Governorate"),
-            ("Kuwait", "Hawalli"),
-            ("Oman", "Muscat"),
-            ("Qatar", "Doha"),
-            ("Saudi Arabia", "Riyadh"),
-            ("United Arab Emirates (UAE)", "Dubai"),
-            ("United Kingdom (UK)", "Scotland"),
-            ("United States (USA)", "California"),
+            ("India", "Maharashtra"),
+            ("India", "Tamil Nadu"),
         ]
         for index, (country, state) in enumerate(cases):
             response = self.client.post(
@@ -5330,9 +5337,9 @@ class AccountLocationTests(TestCase):
         self.assertEqual((self.user.profile.country, self.user.profile.state), ("", ""))
 
     def test_state_must_belong_to_the_country(self):
-        other_country = next(c for c in STATES_BY_COUNTRY if c != "India")
         for data in (
-            {"country": other_country, "state": "Kerala"},
+            # Telangana is deliberately not one of India's listed states.
+            {"country": "India", "state": "Telangana"},
             {"country": "", "state": "Kerala"},
         ):
             with self.subTest(data=data):

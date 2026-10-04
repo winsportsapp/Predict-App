@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block title %}About{% endblock %}
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-lg-9">
+    <div class="card card-body">
+      <h1 class="h3 mb-3">About WinSports</h1>
+      <p>WinSports (winsports.cc) is a free-to-play sports prediction game for sports fans across India. You predict the results of real matches, earn points for correct predictions, and compete with other fans on monthly and all-time leaderboards.</p>
+
+      <h2 class="h5 mt-3">What You Can Predict</h2>
+      <p>We publish daily matches in Football, Cricket, Tennis, Badminton and Hockey. Each match shows the points you can win or lose for each pick before you choose, so you always know how each pick can affect your score.</p>
+
+      <h2 class="h5 mt-3">100% Free to Play</h2>
+      <p>There are no entry fees, no deposits, and no betting or wagering of any kind. Nothing is required to play or to be eligible for prizes. Each month, the top 3 eligible players on the leaderboard may receive gift vouchers. Prizes are available to residents of India only. See our <a href="{% url 'terms' %}">Terms &amp; Conditions</a>.</p>
+
+      <h2 class="h5 mt-3">Fair Play</h2>
+      <p>Leaderboard rankings are based only on prediction points. Referral credits, advertisements and anything else outside your predictions never change your score. Multiple accounts, bots and other attempts to manipulate the leaderboard are not allowed. Read the full rules on our <a href="{% url 'how_it_works' %}">How It Works</a> page.</p>
+
+      <h2 class="h5 mt-3">How WinSports Is Funded</h2>
+      <p>WinSports is free for everyone. To cover running costs, the site may show third-party advertisements. Ads never affect predictions, points, rankings or prizes.</p>
+
+      <h2 class="h5 mt-3">Who We Are</h2>
+      <p class="mb-3">WinSports is run by the WinSports team. We built it to give sports fans a fun, fair and free way to test their sports knowledge against each other. We'd love to hear from you: questions, feedback and match suggestions are always welcome on our <a href="{% url 'contact' %}">Contact</a> page.</p>
+
+      <p class="mb-0 small text-muted">
+        See also our <a href="{% url 'terms' %}">Terms and Conditions</a> and <a href="{% url 'privacy' %}">Privacy Policy</a>.
+      </p>
+    </div>
+  </div>
+</div>
+{% endblock %}
