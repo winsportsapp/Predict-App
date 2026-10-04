@@ -637,6 +637,15 @@ class TermsAndPrivacyTests(TestCase):
         self.assertContains(response, "mailto:winsportsapp@gmail.com")
         self.assertContains(response, 'href="%s"' % reverse("terms"))
 
+    def test_homepage_title_and_meta_description(self):
+        response = self.client.get(reverse("match_list"))
+        self.assertContains(response, "<title>WinSports – Free Sports Predictions, Leaderboard &amp; Prizes</title>", html=False)
+        self.assertContains(response, '<meta name="description" content="WinSports is a 100% free sports prediction game.')
+
+    def test_inner_page_title_ends_with_brand(self):
+        response = self.client.get(reverse("leaderboard"))
+        self.assertContains(response, "<title>Leaderboard · WinSports</title>")
+
     def test_footer_links_on_every_page(self):
         response = self.client.get(reverse("match_list"))
         self.assertContains(response, 'href="%s"' % reverse("terms"))
@@ -820,7 +829,7 @@ class PasswordResetFlowTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertTemplateUsed(response, "registration/password_reset_form.html")
         self.assertTemplateUsed(response, "base.html")
-        self.assertContains(response, "Sports Predictions")  # navbar brand
+        self.assertContains(response, "WinSports")  # navbar brand
 
     def test_login_page_links_to_password_reset(self):
         response = self.client.get(reverse("login"))
@@ -837,7 +846,7 @@ class PasswordResetFlowTests(TestCase):
         response = self.client.get(reverse("password_reset_done"))
         self.assertEqual(response.status_code, 200)
         self.assertTemplateUsed(response, "registration/password_reset_done.html")
-        self.assertContains(response, "Sports Predictions")
+        self.assertContains(response, "WinSports")
 
     def test_full_flow_from_email_link_to_login_with_new_password(self):
         self._request_reset()
@@ -856,7 +865,7 @@ class PasswordResetFlowTests(TestCase):
         self.assertTemplateUsed(
             confirm_page, "registration/password_reset_confirm.html"
         )
-        self.assertContains(confirm_page, "Sports Predictions")
+        self.assertContains(confirm_page, "WinSports")
 
         completed = self.client.post(
             set_password_url,
@@ -872,7 +881,7 @@ class PasswordResetFlowTests(TestCase):
         self.assertTemplateUsed(
             complete_page, "registration/password_reset_complete.html"
         )
-        self.assertContains(complete_page, "Sports Predictions")
+        self.assertContains(complete_page, "WinSports")
 
         self.assertTrue(
             self.client.login(username="resetuser", password=self.NEW_PASSWORD)
@@ -892,9 +901,9 @@ class PasswordResetFlowTests(TestCase):
     def test_reset_email_names_account_and_uses_project_subject(self):
         self._request_reset()
         message = mail.outbox[0]
-        self.assertEqual(message.subject, "Reset your Sports Predictions password")
+        self.assertEqual(message.subject, "Reset your WinSports password")
         self.assertIn("resetuser", message.body)
-        self.assertIn("Sports Predictions", message.body)
+        self.assertIn("WinSports", message.body)
 
     def test_reset_email_matches_case_insensitively_and_only_one_account(self):
         make_user("bystander", email="bystander@example.com")
@@ -937,7 +946,7 @@ class PasswordChangeFlowTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertTemplateUsed(response, "registration/password_change_form.html")
         self.assertTemplateUsed(response, "base.html")
-        self.assertContains(response, "Sports Predictions")
+        self.assertContains(response, "WinSports")
         self.assertNotContains(response, 'id="content-main"')
 
     def test_my_account_exposes_change_password_link(self):
@@ -963,7 +972,7 @@ class PasswordChangeFlowTests(TestCase):
         self.assertEqual(done.status_code, 200)
         self.assertTemplateUsed(done, "registration/password_change_done.html")
         self.assertTemplateUsed(done, "base.html")
-        self.assertContains(done, "Sports Predictions")
+        self.assertContains(done, "WinSports")
 
     def test_successful_change_keeps_session_and_swaps_password(self):
         self._login()
