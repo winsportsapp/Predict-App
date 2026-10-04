@@ -5611,3 +5611,44 @@ class PushSubscriptionViewTests(TestCase):
         public = base64.urlsafe_b64decode(lines["VAPID_PUBLIC_KEY"] + "==")
         private = base64.urlsafe_b64decode(lines["VAPID_PRIVATE_KEY"] + "=")
         self.assertEqual((len(public), len(private)), (65, 32))
+
+
+class CrawlerAndAdsFilesTests(TestCase):
+    def test_robots_txt_blocks_private_pages_and_points_to_sitemap(self):
+        response = self.client.get("/robots.txt")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response["Content-Type"], "text/plain")
+        body = response.content.decode()
+        self.assertIn("Disallow: /admin/", body)
+        self.assertIn("Disallow: /account/", body)
+        self.assertIn("Sitemap: http://testserver/sitemap.xml", body)
+
+    def test_sitemap_lists_public_pages(self):
+        response = self.client.get("/sitemap.xml")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response["Content-Type"], "application/xml")
+        body = response.content.decode()
+        for path in ("/", "/sport/cricket/", "/leaderboard/", "/how-it-works/",
+                     "/about/", "/contact/", "/terms/", "/privacy/"):
+            self.assertIn("<loc>http://testserver%s</loc>" % path, body)
+        self.assertNotIn("/account/", body)
+
+    @override_settings(ADSENSE_CLIENT_ID="")
+    def test_no_adsense_id_means_no_script_and_no_ads_txt(self):
+        response = self.client.get(reverse("match_list"))
+        self.assertNotContains(response, "adsbygoogle.js")
+        self.assertEqual(self.client.get("/ads.txt").status_code, 404)
+
+    @override_settings(ADSENSE_CLIENT_ID="ca-pub-1234567890123456")
+    def test_adsense_id_adds_head_script_and_ads_txt(self):
+        response = self.client.get(reverse("match_list"))
+        self.assertContains(
+            response,
+            "adsbygoogle.js?client=ca-pub-1234567890123456",
+        )
+        ads = self.client.get("/ads.txt")
+        self.assertEqual(ads.status_code, 200)
+        self.assertEqual(
+            ads.content.decode(),
+            "google.com, pub-1234567890123456, DIRECT, f08c47fec0942fa0\n",
+        )
