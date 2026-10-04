@@ -788,6 +788,13 @@ class RegistrationLocationTests(TestCase):
         self.assertFalse(User.objects.filter(username="newuser").exists())
         self.assertIn("state", response.context["form"].errors)
 
+    def test_register_page_starts_with_india_selected(self):
+        response = self.client.get(reverse("register"))
+        form = response.context["form"]
+        self.assertEqual(form["country"].value(), "India")
+        self.assertContains(response, '<option value="India" selected>India</option>', html=True)
+        self.assertNotContains(response, '<option value="">Select a country</option>', html=True)
+
     def test_every_country_accepts_a_state_from_its_own_list(self):
         for index, (country, states) in enumerate(STATES_BY_COUNTRY.items()):
             response = self.client.post(
