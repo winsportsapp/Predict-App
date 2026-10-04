@@ -70,6 +70,11 @@
           first prediction, you earn credits toward a gift voucher.
           You will earn {{ credits_per_referral }} credits per referral & first prediction.
         </p>
+        <p class="small text-muted">
+          Referral credits are separate from prediction points and do not affect your leaderboard ranking.
+          Credits can be redeemed separately for eligible vouchers according to the
+          <a href="{% url 'terms' %}">redemption rules</a>.
+        </p>
         <div class="input-group mb-2">
           <input type="text" id="referral-link" class="form-control" value="{{ referral_link }}" readonly>
           <button type="button" class="btn btn-outline-secondary" id="copy-referral-link">Copy</button>

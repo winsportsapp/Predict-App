@@ -23,13 +23,18 @@
       </form>
     </div>
     <p class="small text-muted mb-2">Minimum of 100 Counts (Predictions) required along with the higher points to be eligible for Medals</p>
+    <p class="small text-muted mb-2">
+      Rankings are based only on prediction points. Referral credits do not affect points or rankings.
+      <a href="{% url 'how_it_works' %}" class="link-secondary">How it works</a>
+    </p>
     {% if show_voucher_announcement %}
       <div class="alert alert-info small" role="alert">
         Gift vouchers are expected to be issued to the medal winners after October month
         results for the monthly winners if the Leaderboard has a minimum of 25 active
-        players. You have the opportunity to win the Gift vouchers with your prediction
-        skills and also through referrals. Copy Referral Link from the "My Account"
-        section and earn credits.
+        players. Leaderboard prizes are won through prediction points only.
+        Separately, you can earn referral credits by sharing your referral link from
+        "My Account" and redeem them for vouchers there; referral credits do not affect
+        leaderboard points or rankings.
       </div>
     {% endif %}
     {% if is_past_month %}
