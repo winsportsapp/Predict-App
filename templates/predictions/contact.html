@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% block title %}Contact{% endblock %}
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-lg-9">
+    <div class="card card-body">
+      <h1 class="h3 mb-3">Contact Us</h1>
+      <p>Have a question, a problem with your account, or feedback about WinSports? Email us and the WinSports team will get back to you.</p>
+
+      <p class="fs-5 mb-3">
+        <a href="mailto:winsportsapp@gmail.com">winsportsapp@gmail.com</a>
+      </p>
+
+      <h2 class="h5 mt-2">What We Can Help With</h2>
+      <ul>
+        <li><strong>Account help:</strong> trouble logging in, resetting your password, or updating your details.</li>
+        <li><strong>Leaderboard prizes:</strong> claiming a monthly gift voucher, eligibility and verification.</li>
+        <li><strong>Referral credits:</strong> questions about credits or a voucher redemption.</li>
+        <li><strong>Match results and points:</strong> if you think a result or score looks wrong.</li>
+        <li><strong>Feedback:</strong> ideas, match or sport suggestions, and bug reports.</li>
+        <li><strong>Privacy requests:</strong> questions about your data or requests to delete your account.</li>
+      </ul>
+
+      <h2 class="h5 mt-3">Help Us Help You</h2>
+      <p class="mb-3">Please include your WinSports username in your email, and for match questions, the teams and date of the match. Never send us your password.</p>
+
+      <p class="mb-0 small text-muted">
+        Many common questions are answered on our <a href="{% url 'how_it_works' %}">How It Works</a> page.
+        See also our <a href="{% url 'terms' %}">Terms and Conditions</a> and <a href="{% url 'privacy' %}">Privacy Policy</a>.
+      </p>
+    </div>
+  </div>
+</div>
+{% endblock %}
