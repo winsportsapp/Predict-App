@@ -746,6 +746,65 @@ def service_worker(request):
     return response
 
 
+# Public pages listed in /sitemap.xml, by URL name (with kwargs).
+SITEMAP_PAGES = (
+    [("match_list", {})]
+    + [("sport_matches", {"sport_slug": slug}) for slug in SPORT_SLUGS]
+    + [
+        ("leaderboard", {}),
+        ("closed_matches", {}),
+        ("how_it_works", {}),
+        ("about", {}),
+        ("contact", {}),
+        ("terms", {}),
+        ("privacy", {}),
+    ]
+)
+
+
+def robots_txt(request):
+    """Crawl everything public; keep crawlers out of admin and account pages."""
+    lines = [
+        "User-agent: *",
+        "Disallow: /admin/",
+        "Disallow: /accounts/",
+        "Disallow: /account/",
+        "Disallow: /predictions/mine/",
+        "Disallow: /push/",
+        "",
+        "Sitemap: " + request.build_absolute_uri(reverse("sitemap_xml")),
+    ]
+    return HttpResponse("\n".join(lines) + "\n", content_type="text/plain")
+
+
+def sitemap_xml(request):
+    """A plain sitemap of the public pages (no per-match URLs)."""
+    urls = "".join(
+        "  <url><loc>%s</loc></url>\n"
+        % request.build_absolute_uri(reverse(name, kwargs=kwargs))
+        for name, kwargs in SITEMAP_PAGES
+    )
+    body = (
+        '<?xml version="1.0" encoding="UTF-8"?>\n'
+        '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n'
+        + urls
+        + "</urlset>\n"
+    )
+    return HttpResponse(body, content_type="application/xml")
+
+
+def ads_txt(request):
+    """Authorises Google as this site's ad seller; 404 until AdSense is set."""
+    client_id = settings.ADSENSE_CLIENT_ID
+    if not client_id:
+        raise Http404("AdSense is not configured.")
+    publisher = client_id.removeprefix("ca-")
+    return HttpResponse(
+        "google.com, %s, DIRECT, f08c47fec0942fa0\n" % publisher,
+        content_type="text/plain",
+    )
+
+
 def offline(request):
     """Shown by the service worker when a page can't be reached."""
     return render(request, "pwa/offline.html")

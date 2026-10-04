@@ -5,6 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block full_title %}{% block title %}Predict{% endblock %} · WinSports{% endblock %}</title>
   <meta name="description" content="{% block meta_description %}WinSports is a 100% free sports prediction game. Predict football, cricket, tennis, badminton and hockey matches, climb the monthly leaderboard and win gift vouchers. No betting, no entry fees.{% endblock %}">
+  {% if adsense_client_id %}
+    <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client={{ adsense_client_id }}" crossorigin="anonymous"></script>
+  {% endif %}
   <link rel="manifest" href="{% url 'web_manifest' %}">
   <meta name="theme-color" content="#0B3D2E">
   <link rel="icon" type="image/png" sizes="32x32" href="{% static 'predictions/icons/favicon-32.png' %}">
