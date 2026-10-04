@@ -27,12 +27,15 @@ class RegistrationForm(UserCreationForm):
             "winners."
         ),
     )
+    # India is the only country, so it starts selected (no placeholder)
+    # and the State dropdown is filled in on page load.
     country = forms.ChoiceField(
-        choices=[("", "Select a country")] + COUNTRY_CHOICES,
+        choices=COUNTRY_CHOICES,
+        initial="India",
         label="Country",
     )
     state = forms.ChoiceField(
-        choices=[("", "Select a country first")] + STATE_CHOICES,
+        choices=[("", "Select a state")] + STATE_CHOICES,
         label="State",
     )
     age = forms.TypedChoiceField(
