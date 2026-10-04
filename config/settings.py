@@ -115,6 +115,7 @@ TEMPLATES = [
                 'predictions.context_processors.public_nav',
                 'predictions.context_processors.google_login',
                 'predictions.context_processors.app_alerts',
+                'predictions.context_processors.adsense',
             ],
         },
     },
@@ -292,6 +293,14 @@ VAPID_PRIVATE_KEY = env('VAPID_PRIVATE_KEY', default='').strip().strip('"\'').st
 # Contact the push services (Google, Apple, Mozilla) can reach if something
 # goes wrong: a mailto: or https: URL.
 VAPID_SUBJECT = env('VAPID_SUBJECT', default='mailto:admin@winsports.cc')
+
+# Google AdSense publisher ID from the AdSense account, e.g.
+# ca-pub-1234567890123456 (a bare pub-... is accepted too). Set = every page
+# loads the AdSense script in <head> and /ads.txt names the publisher.
+# Unset = no ad code anywhere and /ads.txt returns 404.
+ADSENSE_CLIENT_ID = env('ADSENSE_CLIENT_ID', default='').strip().strip('"\'').strip()
+if ADSENSE_CLIENT_ID.startswith('pub-'):
+    ADSENSE_CLIENT_ID = 'ca-' + ADSENSE_CLIENT_ID
 
 
 # Logging
