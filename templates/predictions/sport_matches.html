@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 {% load prediction_extras %}
 {% block title %}{{ sport_name }}{% endblock %}
+{% block full_title %}{% if is_home %}WinSports – Free Sports Predictions, Leaderboard &amp; Prizes{% else %}{{ sport_name }} · WinSports{% endif %}{% endblock %}
 {% block extra_head %}{% if is_home %}{% include "predictions/_home_styles.html" %}{% endif %}{% endblock %}
 {% block content %}
 {# Logged-out visitors on `/` get the intro instead of the match list. #}
