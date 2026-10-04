@@ -50,3 +50,8 @@ def app_alerts(request):
     if request.user.is_authenticated:
         context["open_prediction_count"] = services.open_matches(request.user).count()
     return context
+
+
+def adsense(request):
+    """The AdSense publisher ID for the <head> script, or "" when unset."""
+    return {"adsense_client_id": settings.ADSENSE_CLIENT_ID}
