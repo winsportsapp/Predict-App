@@ -33,7 +33,7 @@ class RegistrationForm(UserCreationForm):
     )
     state = forms.ChoiceField(
         choices=[("", "Select a country first")] + STATE_CHOICES,
-        label="State / Province / Region",
+        label="State",
     )
     age = forms.TypedChoiceField(
         choices=[("", "Select your age")]
@@ -126,7 +126,7 @@ class LocationForm(forms.ModelForm):
     )
     state = forms.ChoiceField(
         choices=[("", "Select a country first")] + STATE_CHOICES,
-        label="State / Province / Region",
+        label="State",
         required=False,
     )
 
