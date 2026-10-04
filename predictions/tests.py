@@ -616,8 +616,20 @@ class TermsAndPrivacyTests(TestCase):
         response = self.client.get(reverse("terms"))
         self.assertContains(response, "Terms and Conditions")
         self.assertContains(response, "Welcome to winsports.cc")
-        self.assertContains(response, "Last Updated: September 24, 2026")
+        self.assertContains(response, "Last Updated: October 4, 2026")
+        self.assertContains(response, "Referral Credits")
         self.assertContains(response, 'href="%s"' % reverse("privacy"))
+
+    def test_how_it_works_page_renders(self):
+        response = self.client.get(reverse("how_it_works"))
+        self.assertContains(response, "How WinSports Works")
+        self.assertContains(response, "Referral credits are completely separate from prediction points")
+        self.assertContains(response, 'href="%s"' % reverse("terms"))
+
+    def test_privacy_page_does_not_claim_adsense_is_active(self):
+        response = self.client.get(reverse("privacy"))
+        self.assertContains(response, "We may use third-party advertising providers, including Google AdSense")
+        self.assertNotContains(response, "We use third-party advertising companies")
 
     def test_privacy_page_renders(self):
         response = self.client.get(reverse("privacy"))
@@ -629,6 +641,7 @@ class TermsAndPrivacyTests(TestCase):
         response = self.client.get(reverse("match_list"))
         self.assertContains(response, 'href="%s"' % reverse("terms"))
         self.assertContains(response, 'href="%s"' % reverse("privacy"))
+        self.assertContains(response, 'href="%s"' % reverse("how_it_works"))
 
     def test_register_page_shows_required_terms_checkbox(self):
         response = self.client.get(reverse("register"))

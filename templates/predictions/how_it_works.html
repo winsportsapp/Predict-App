@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+{% block title %}How It Works{% endblock %}
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-lg-9">
+    <div class="card card-body">
+      <h1 class="h3 mb-3">How WinSports Works</h1>
+      <p>WinSports is a 100% free-to-play sports prediction platform. You make predictions on real matches, score points based on your results, and compete on the leaderboard.</p>
+      <ul>
+        <li>No entry fees</li>
+        <li>No deposits</li>
+        <li>No betting or wagering</li>
+        <li>No purchase required to participate or to be eligible for prizes</li>
+      </ul>
+
+      <h2 class="h5 mt-3">How Prediction Points Work</h2>
+      <ul>
+        <li>Each match shows the points you can win or lose for each pick before you make your choice.</li>
+        <li>Once you submit a prediction, its point values are locked in.</li>
+        <li>When the result is in, points are awarded or deducted based on whether your prediction was correct.</li>
+        <li>Prediction points come only from your prediction results. They cannot be bought, and they cannot be earned through referrals or advertisements.</li>
+      </ul>
+
+      <h2 class="h5 mt-3">Monthly Leaderboard</h2>
+      <ul>
+        <li>Players are ranked by the prediction points they earn from matches played during the month. Separate monthly and all-time leaderboards are shown.</li>
+        <li>A minimum of 100 predictions is required to be eligible for a medal.</li>
+        <li>The top 3 eligible players may receive the announced monthly gift-voucher prizes, subject to the age, state and other eligibility rules in our <a href="{% url 'terms' %}">Terms &amp; Conditions</a>.</li>
+        <li>Leaderboard position is determined by prediction performance only. Referral credits do not contribute to leaderboard points.</li>
+      </ul>
+
+      <h2 class="h5 mt-3">Referral Credits</h2>
+      <ul>
+        <li>WinSports also has a separate referral-credit system. Share your referral link from <a href="{% url 'my_account' %}">My Account</a>; once a friend registers with it and makes their first prediction, you earn referral credits.</li>
+        <li>Referral credits are completely separate from prediction points. They do not add prediction points, do not affect leaderboard rankings, and cannot be converted into prediction points.</li>
+        <li>Once you reach the required number of credits, you can redeem them separately for an eligible gift voucher from My Account, according to the referral and redemption rules in our <a href="{% url 'terms' %}">Terms &amp; Conditions</a>.</li>
+      </ul>
+
+      <h2 class="h5 mt-3">Two Separate Paths</h2>
+      <div class="row g-3 mb-2">
+        <div class="col-md-6">
+          <div class="border rounded p-3 h-100">
+            <div class="fw-semibold mb-1">Predictions</div>
+            <div class="small">Prediction Points → Leaderboard → Monthly Top 3 Prizes</div>
+          </div>
+        </div>
+        <div class="col-md-6">
+          <div class="border rounded p-3 h-100">
+            <div class="fw-semibold mb-1">Referrals</div>
+            <div class="small">Referral Activity → Referral Credits → Separate Voucher Redemption</div>
+          </div>
+        </div>
+      </div>
+      <p>These two paths are independent: activity in one never changes the other.</p>
+
+      <h2 class="h5 mt-3">Advertisements</h2>
+      <ul class="mb-3">
+        <li>WinSports may show third-party advertisements to keep the platform free.</li>
+        <li>Viewing or clicking an advertisement never earns prediction points, referral credits, vouchers or any other advantage.</li>
+      </ul>
+
+      <p class="mb-0 small text-muted">
+        See also our <a href="{% url 'terms' %}">Terms and Conditions</a> and <a href="{% url 'privacy' %}">Privacy Policy</a>.
+        Questions? Contact the admin at <a href="mailto:winsportsapp@gmail.com">winsportsapp@gmail.com</a>.
+      </p>
+    </div>
+  </div>
+</div>
+{% endblock %}
