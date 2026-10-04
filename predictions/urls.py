@@ -28,6 +28,8 @@ urlpatterns = [
     # Match alerts (app notifications); called by pwa.js.
     path("push/subscribe/", views.push_subscribe, name="push_subscribe"),
     path("push/unsubscribe/", views.push_unsubscribe, name="push_unsubscribe"),
+    path("about/", views.about, name="about"),
+    path("contact/", views.contact, name="contact"),
     path("how-it-works/", views.how_it_works, name="how_it_works"),
     path("terms/", views.terms, name="terms"),
     path("privacy/", views.privacy, name="privacy"),
