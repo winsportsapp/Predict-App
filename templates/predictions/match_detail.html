@@ -4,8 +4,8 @@
 {% block content %}
 <div class="match-detail-page">
   <div class="mb-3">
-    <a href="{% url 'sport_matches' match.sport.name.lower %}" class="btn btn-outline-secondary btn-sm rounded-pill px-3">
-      &larr; Back to {{ match.sport.name }}
+    <a href="{% url 'match_list' %}" class="btn btn-outline-secondary btn-sm rounded-pill px-3">
+      &larr; Back to matches
     </a>
   </div>
 
@@ -58,9 +58,9 @@
           <dt class="col-sm-4 text-muted">Tournament / Event</dt>
           <dd class="col-sm-8 fw-semibold text-dark">{{ match.event_name }}</dd>
         {% endif %}
-        <dt class="col-sm-4 text-muted">Kickoff Time</dt>
+        <dt class="col-sm-4 text-muted">Kickoff</dt>
         <dd class="col-sm-8 fw-semibold text-dark">{{ match.start_time|date:"N j, Y, P T" }}</dd>
-        <dt class="col-sm-4 text-muted">Prediction Deadline</dt>
+        <dt class="col-sm-4 text-muted">Prediction deadline</dt>
         <dd class="col-sm-8 fw-semibold text-dark">{{ match.prediction_deadline|date:"N j, Y, P T" }}</dd>
       </dl>
     </div>
@@ -69,15 +69,15 @@
   {% if user_prediction %}
     <div class="card border-0 shadow-sm rounded-4 p-4 bg-white mb-3">
       <div class="d-flex align-items-center justify-content-between mb-2">
-        <h2 class="h6 fw-bold text-dark mb-0">Your Submitted Pick</h2>
+        <h2 class="h6 fw-bold text-dark mb-0">Your pick</h2>
         {% if match.is_scored %}
           {% if user_prediction.is_correct %}
             <span class="badge bg-success text-white rounded-pill px-3 py-1">
-              ✓ WON (+{{ user_prediction.points_earned }} pts)
+              Hit (+{{ user_prediction.points_earned }} pts)
             </span>
           {% else %}
             <span class="badge bg-danger text-white rounded-pill px-3 py-1">
-              ✗ LOST ({{ user_prediction.points_earned }} pts)
+              Miss ({{ user_prediction.points_earned }} pts)
             </span>
           {% endif %}
         {% else %}
@@ -96,7 +96,7 @@
     <div class="card border-0 shadow-sm rounded-4 p-4 bg-white mb-3">
       <h2 class="h6 fw-bold text-dark mb-2">Official Match Result</h2>
       <div class="h5 fw-bold text-success mb-1">
-        Winner: {{ match.winner_name }}
+        Result: <strong>{{ match.winner_name }}</strong>
         {% if match.score_display %}
           <span class="text-muted fs-6">({{ match.score_display }})</span>
         {% endif %}
@@ -109,7 +109,7 @@
     <div class="mt-3">
       {% if user.is_authenticated %}
         <a class="btn btn-success rounded-pill px-4" href="{% url 'predict' match.pk %}">
-          {% if user_prediction %}Change pick{% else %}Make Pick Now{% endif %}
+          {% if user_prediction %}Change pick{% else %}Predict{% endif %}
         </a>
       {% else %}
         <a class="btn btn-outline-success rounded-pill px-4" href="{% url 'login' %}">Log in to predict</a>
