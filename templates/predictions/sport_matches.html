@@ -4,32 +4,34 @@
 {% block full_title %}{% if is_home %}WinSports – Free Sports Predictions, Leaderboard &amp; Prizes{% else %}{{ sport_name }} · WinSports{% endif %}{% endblock %}
 {% block extra_head %}{% if is_home %}{% include "predictions/_home_styles.html" %}{% endif %}{% endblock %}
 {% block content %}
+<!-- Sports Horizontal Scrolling Pills Bar (APK Style) -->
+<div class="sports-pill-wrapper mb-4">
+  <div class="d-flex align-items-center gap-2 overflow-auto py-1 px-1 sports-pill-scroller">
+    {% for sport in nav_sports %}
+      <a href="{% url 'sport_matches' sport.slug %}"
+         class="btn btn-sm text-nowrap sports-tab-pill {% if sport.slug == sport_slug %}active-pill{% else %}inactive-pill{% endif %}">
+        <span class="pill-sport-name">
+          {% if sport.slug == 'football' %}⚽{% elif sport.slug == 'cricket' %}🏏{% elif sport.slug == 'tennis' %}🎾{% elif sport.slug == 'badminton' %}🏸{% elif sport.slug == 'hockey' %}🏑{% else %}🏆{% endif %}
+          <span class="ms-1">{{ sport.name }}</span>
+        </span>
+        {% if sport.has_open %}
+          <span class="badge text-bg-success predict-pill-badge mt-1">Predict</span>
+          <span class="visually-hidden">Predict now</span>
+        {% endif %}
+      </a>
+    {% endfor %}
+    <a href="{% url 'closed_matches' %}"
+       class="btn btn-sm text-nowrap sports-tab-pill inactive-pill">
+      <span class="pill-sport-name">🔒 Closed</span>
+    </a>
+  </div>
+</div>
+
 {# Logged-out visitors on `/` get the intro instead of the match list. #}
 {% if is_home and not user.is_authenticated %}
   {% include "predictions/_home_intro.html" %}
 {% else %}
 <div class="matches-page">
-  <!-- Sports Horizontal Scrolling Pills Bar (APK Style - Mobile Only) -->
-  <div class="sports-pill-wrapper mb-4 d-lg-none">
-    <div class="d-flex align-items-center gap-2 overflow-auto py-1 px-1 sports-pill-scroller">
-      {% for sport in nav_sports %}
-        <a href="{% url 'sport_matches' sport.slug %}"
-           class="btn btn-sm text-nowrap sports-tab-pill {% if sport.slug == sport_slug %}active-pill{% else %}inactive-pill{% endif %}">
-          <span class="pill-sport-name">
-            {% if sport.slug == 'football' %}⚽{% elif sport.slug == 'cricket' %}🏏{% elif sport.slug == 'tennis' %}🎾{% elif sport.slug == 'badminton' %}🏸{% elif sport.slug == 'hockey' %}🏑{% else %}🏆{% endif %}
-            <span class="ms-1">{{ sport.name }}</span>
-          </span>
-          {% if sport.has_open %}
-            <span class="badge text-bg-success predict-pill-badge mt-1">Predict</span>
-          {% endif %}
-        </a>
-      {% endfor %}
-      <a href="{% url 'closed_matches' %}"
-         class="btn btn-sm text-nowrap sports-tab-pill inactive-pill">
-        <span class="pill-sport-name">🔒 Closed</span>
-      </a>
-    </div>
-  </div>
 
   <!-- Sport Header -->
   <div class="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center gap-2 mb-3">
@@ -179,7 +181,7 @@
             <a href="{% url 'sport_matches' sport.slug %}" class="btn btn-outline-secondary btn-sm rounded-pill">
               {{ sport.name }}
               {% if sport.has_open %}
-                <span class="badge text-bg-success ms-1 predict-pill-badge">Predict</span>
+                <span class="badge text-bg-success ms-1 predict-pill-badge">Predict<span class="visually-hidden"> now</span></span>
               {% endif %}
             </a>
           {% endif %}

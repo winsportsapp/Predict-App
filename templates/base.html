@@ -455,17 +455,15 @@
     <div class="desktop-nav-bar d-none d-lg-block mt-2 pt-2 border-top border-white border-opacity-10">
       <div class="container d-flex align-items-center justify-content-between">
         <ul class="nav align-items-center gap-1" id="sports-nav">
-          {% for sport in nav_sports %}
-            <li class="nav-item">
-              <a class="nav-link text-white-50 px-2 py-1 rounded text-center lh-sm {% if sport.slug == sport_slug %}text-white fw-bold active-sport-link{% endif %}"
-                 href="{% url 'sport_matches' sport.slug %}">
-                <span>{{ sport.name }}</span>
-                {% if sport.has_open %}
-                  <span class="badge text-bg-success d-block predict-now-badge">Predict now</span>
-                {% endif %}
-              </a>
-            </li>
-          {% endfor %}
+          <li class="nav-item">
+            <a class="nav-link text-white-50 px-2 py-1 rounded {% if request.resolver_match.url_name in 'match_list sport_matches match_detail' %}text-white fw-bold active-sport-link{% endif %}"
+               href="{% url 'match_list' %}">
+              Matches
+              {% if open_prediction_count %}
+                <span class="badge text-bg-success predict-now-badge ms-1">{{ open_prediction_count }}</span>
+              {% endif %}
+            </a>
+          </li>
           <li class="nav-item">
             <a class="nav-link text-white-50 px-2 py-1 rounded {% if request.resolver_match.url_name == 'closed_matches' %}text-white fw-bold active-sport-link{% endif %}"
                href="{% url 'closed_matches' %}">Closed Matches</a>
