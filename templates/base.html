@@ -35,6 +35,9 @@
       } catch (e) {}
     })();
   </script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
   <script src="{% static 'predictions/pwa.js' %}" data-sw-url="{% url 'service_worker' %}"
     {% if user.is_authenticated %}
@@ -47,29 +50,72 @@
       {% endif %}
     {% endif %} defer></script>
   <style>
+    :root {
+      --ws-primary: #0B3D2E;
+      --ws-primary-dark: #06261c;
+      --ws-accent: #22c55e;
+      --ws-surface: #ffffff;
+      --ws-bg: #f8fafc;
+      --ws-border: #e2e8f0;
+      --ws-text: #0f172a;
+      --ws-muted: #64748b;
+    }
+    body {
+      font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+      background-color: var(--ws-bg);
+      color: var(--ws-text);
+      -webkit-font-smoothing: antialiased;
+    }
     form input:not([type=hidden]):not([type=radio]):not([type=checkbox]):not([type=submit]),
     form select, form textarea {
       display: block;
       width: 100%;
-      padding: .375rem .75rem;
-      font-size: 1rem;
-      border: 1px solid #dee2e6;
-      border-radius: .375rem;
+      padding: .5rem .75rem;
+      font-size: 0.95rem;
+      border: 1px solid var(--ws-border);
+      border-radius: .5rem;
+      background-color: #ffffff;
     }
     form ul {
       list-style: none;
       padding-left: 0;
     }
+    .card {
+      border: 1px solid var(--ws-border);
+      border-radius: 14px;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03);
+    }
     .pick-btn {
       white-space: normal;
       word-break: break-word;
-      line-height: 1.3;
-      padding: .5rem .4rem;
+      line-height: 1.25;
+      padding: .45rem .25rem;
+      border-radius: 10px;
+      font-size: .8rem;
+      transition: all .15s ease;
     }
-    /* Pick-box colours go through Bootstrap's --bs-btn-* variables so its
-       hover/active/focus rules pick them up instead of falling back to blue. */
+    .pick-team-name {
+      font-size: .82rem;
+      font-weight: 700;
+      line-height: 1.2;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .pick-points-line {
+      font-size: .7rem;
+      line-height: 1.25;
+    }
+    .match-teams-title {
+      font-size: 1rem;
+      font-weight: 700;
+    }
+    .match-meta-info {
+      font-size: .8rem;
+      line-height: 1.35;
+    }
     .pick-btn-unselected {
-      --bs-btn-border-width: 2px;
+      --bs-btn-border-width: 1.5px;
       --bs-btn-bg: #fff;
       --bs-btn-color: #1e293b;
       --bs-btn-border-color: #cbd5e1;
@@ -85,14 +131,14 @@
       color: #15803d;
     }
     .pick-btn-selected {
-      --bs-btn-border-width: 2px;
-      --bs-btn-bg: #1e293b;
+      --bs-btn-border-width: 1.5px;
+      --bs-btn-bg: #0B3D2E;
       --bs-btn-color: #fff;
       --bs-btn-border-color: #22c55e;
-      --bs-btn-hover-bg: #0f172a;
+      --bs-btn-hover-bg: #06261c;
       --bs-btn-hover-color: #fff;
       --bs-btn-hover-border-color: #22c55e;
-      --bs-btn-active-bg: #0f172a;
+      --bs-btn-active-bg: #06261c;
       --bs-btn-active-color: #fff;
       --bs-btn-active-border-color: #22c55e;
       --bs-btn-focus-shadow-rgb: 34, 197, 94;
@@ -100,7 +146,6 @@
     .pick-btn-selected strong {
       color: #4ade80;
     }
-    /* Negative (losing) points are red instead of green. */
     .pick-btn-unselected strong.pts-negative {
       color: #dc2626;
     }
@@ -109,9 +154,10 @@
     }
     .sport-heading {
       color: #0B3D2E;
+      font-weight: 800;
     }
     .match-title-link {
-      color: #1e293b;
+      color: #0f172a;
       text-decoration: none;
     }
     .match-title-link:hover,
@@ -124,22 +170,29 @@
     }
     @media (min-width: 768px) {
       .pick-panel {
-        width: 50%;
+        width: 60%;
+        max-width: 540px;
+      }
+    }
+    @media (min-width: 992px) {
+      .match-card-col {
+        max-width: 720px;
       }
     }
     .team-flag {
-      height: 16px;
-      width: 22px;
+      height: 18px;
+      width: 24px;
       object-fit: cover;
       border: 1px solid rgba(0, 0, 0, .15);
-      border-radius: 2px;
+      border-radius: 3px;
       vertical-align: middle;
-      margin-right: 4px;
+      margin-right: 6px;
     }
     .predict-now-badge {
-      font-size: .65rem;
+      font-size: .62rem;
       padding: .15em .5em;
-      margin-top: 2px;
+      border-radius: 999px;
+      font-weight: 700;
     }
     .medal-icon {
       width: 26px;
@@ -147,16 +200,11 @@
       vertical-align: middle;
       margin-left: 4px;
     }
-    /* Table text longer than about 35 characters wraps onto the next line
-       instead of widening the column. */
     .cell-wrap {
       max-width: 35ch;
       white-space: normal;
       overflow-wrap: anywhere;
     }
-    /* table-layout: fixed makes every column's width/max-width an actual
-       cap instead of a hint the browser overrides for nowrap content --
-       required for the ellipsis truncation below to ever kick in. */
     .leaderboard-table {
       table-layout: fixed;
       width: 100%;
@@ -173,8 +221,6 @@
     .leaderboard-table td:last-child {
       width: 5.5rem;
     }
-    /* Long Player/State/Country values are truncated with an ellipsis
-       instead of stretching the row past the mobile viewport. */
     .leaderboard-table .lb-cell {
       overflow: hidden;
       text-overflow: ellipsis;
@@ -195,21 +241,18 @@
     .leaderboard-table td:nth-child(5) {
       width: 3.5rem;
     }
-    /* Right-align Count/Points so the ones digit stays in a fixed column as
-       the number gains digits, instead of shifting left-to-right. Headers
-       are right-aligned to match, so the digits sit under the header text. */
     .leaderboard-table th:nth-last-child(2),
     .leaderboard-table td:nth-last-child(2) {
       text-align: right;
     }
     .leaderboard-table th:last-child {
       text-align: right;
-      padding-right: 34px; /* matches the reserved medal-icon space below */
+      padding-right: 34px;
     }
     .leaderboard-table td:last-child {
       text-align: right;
       position: relative;
-      padding-right: 34px; /* reserved for the medal icon, present or not */
+      padding-right: 34px;
     }
     .leaderboard-table td:last-child .medal-icon {
       position: absolute;
@@ -218,10 +261,6 @@
       transform: translateY(-50%);
       margin-left: 0;
     }
-    /* Phones and the installed app: drop the Country column so the table
-       fits (the flag before each player name still shows the country), cap
-       Player at 10 and State at 7 characters (done in the template) and let
-       Player take whatever width is left. */
     @media (max-width: 767.98px) {
       .leaderboard-table {
         font-size: .875rem;
@@ -256,27 +295,101 @@
         height: 24px;
       }
     }
-    .navbar-brand-green {
-      background-color: #0B3D2E;
+    /* App Header */
+    .app-header {
+      background: linear-gradient(180deg, #06261c 0%, #0B3D2E 100%);
+      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
     }
-    .nav-row-account {
-      column-gap: .5rem;
+    .brand-title {
+      font-weight: 800;
+      letter-spacing: -0.02em;
     }
-    /* Phones and tablets: no hamburger -- every menu item stays visible,
-       sports and main pages wrap at full size, then the account links. */
+    .brand-badge-f2p {
+      background-color: #22c55e !important;
+      font-size: 0.65rem;
+      font-weight: 800;
+      letter-spacing: 0.05em;
+    }
+    .points-pill {
+      background: rgba(255, 255, 255, 0.12);
+      border: 1px solid rgba(255, 255, 255, 0.22);
+      font-size: 0.85rem;
+    }
+    .active-sport-link {
+      background-color: rgba(255, 255, 255, 0.15);
+      border-radius: 8px;
+    }
+    /* Mobile Fixed Bottom Navigation Bar */
+    .mobile-bottom-nav {
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      height: 60px;
+      background: #ffffff;
+      border-top: 1px solid #e2e8f0;
+      box-shadow: 0 -4px 18px rgba(0, 0, 0, 0.06);
+      z-index: 1025;
+      padding-bottom: env(safe-area-inset-bottom, 0px);
+    }
+    .mobile-nav-container {
+      display: flex;
+      height: 100%;
+      max-width: 600px;
+      margin: 0 auto;
+      justify-content: space-around;
+      align-items: center;
+    }
+    .mobile-nav-item {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      flex: 1;
+      height: 100%;
+      color: #64748b;
+      text-decoration: none;
+      font-size: 0.68rem;
+      font-weight: 600;
+      padding: 4px 2px;
+      transition: color 0.15s ease;
+      position: relative;
+    }
+    .mobile-nav-icon {
+      font-size: 1.15rem;
+      line-height: 1.2;
+      margin-bottom: 2px;
+      display: inline-block;
+    }
+    .mobile-nav-item.active {
+      color: #0B3D2E;
+      font-weight: 700;
+    }
+    .mobile-nav-item.active .mobile-nav-icon {
+      transform: scale(1.08);
+    }
+    .mobile-nav-badge {
+      position: absolute;
+      top: -2px;
+      right: -8px;
+      background-color: #22c55e;
+      color: #ffffff;
+      font-size: 0.6rem;
+      font-weight: 800;
+      padding: 1px 4px;
+      border-radius: 999px;
+      line-height: 1;
+    }
+    /* Responsive body padding for bottom navigation */
     @media (max-width: 991.98px) {
-      .navbar-brand-green .navbar-nav .nav-link {
-        padding: .35rem .6rem;
+      body {
+        padding-bottom: 74px !important;
       }
-      .navbar-brand-green .navbar-nav .nav-link.active {
-        text-decoration: underline;
-        text-underline-offset: .3em;
+      body.pwa-banner-open {
+        padding-bottom: 148px !important;
       }
-      .nav-row-account {
-        font-size: .875rem;
-        margin-top: .35rem;
-        padding-top: .35rem;
-        border-top: 1px solid rgba(255, 255, 255, .2);
+      .pwa-banner {
+        bottom: 68px !important;
       }
     }
     /* "Install app" banner, shown by pwa.js on phones only. */
@@ -300,9 +413,6 @@
       height: 40px;
       border-radius: 9px;
     }
-    body.pwa-banner-open {
-      padding-bottom: 80px;
-    }
     @media (min-width: 992px) {
       .pwa-banner {
         display: none;
@@ -314,89 +424,101 @@
   </style>
   {% block extra_head %}{% endblock %}
 </head>
-<body class="bg-light">
-  <nav class="navbar navbar-expand navbar-dark navbar-brand-green mb-4">
-    <div class="container flex-column flex-lg-row align-items-stretch align-items-lg-center">
-      {# Sports and main pages share one list so phones wrap it at full size. #}
-      <ul class="navbar-nav flex-wrap me-lg-auto" id="sports-nav">
-        {% for sport in nav_sports %}
+<body>
+  <!-- Header / App Bar -->
+  <header class="app-header py-2 py-lg-3 mb-4 shadow-sm">
+    <div class="container d-flex align-items-center justify-content-between">
+      <div class="d-flex align-items-center gap-2">
+        <a class="navbar-brand text-white fw-bold d-flex align-items-center gap-2 m-0 text-decoration-none" href="{% url 'match_list' %}">
+          <span class="fs-4 brand-title">WinSports</span>
+          <span class="badge rounded-pill brand-badge-f2p">FREE</span>
+        </a>
+      </div>
+
+      <div class="d-flex align-items-center gap-2">
+        {% if user.is_authenticated %}
+          <div class="points-pill d-flex align-items-center gap-1 px-3 py-1 rounded-pill text-white shadow-sm">
+            <span>🏆</span>
+            <span class="fw-bold">{{ user_points }}</span>
+            <span class="small text-white-50">pts</span>
+          </div>
+        {% else %}
+          <div class="d-flex align-items-center gap-2">
+            <a href="{% url 'login' %}" class="btn btn-outline-light btn-sm px-3 rounded-pill">Log in</a>
+            <a href="{% url 'register' %}" class="btn btn-success btn-sm px-3 rounded-pill fw-semibold">Register</a>
+          </div>
+        {% endif %}
+      </div>
+    </div>
+
+    <!-- Desktop Sub-Navigation Menu -->
+    <div class="desktop-nav-bar d-none d-lg-block mt-2 pt-2 border-top border-white border-opacity-10">
+      <div class="container d-flex align-items-center justify-content-between">
+        <ul class="nav align-items-center gap-1" id="sports-nav">
           <li class="nav-item">
-            <a class="nav-link lh-sm {% if sport.slug == sport_slug %}active{% endif %}"
-               href="{% url 'sport_matches' sport.slug %}">
-              {{ sport.name }}
-              {% if sport.has_open %}
-                <span class="badge text-bg-success d-block predict-now-badge">Predict now</span>
+            <a class="nav-link text-white-50 px-2 py-1 rounded {% if request.resolver_match.url_name in 'match_list sport_matches match_detail' %}text-white fw-bold active-sport-link{% endif %}"
+               href="{% url 'match_list' %}">
+              Matches
+              {% if open_prediction_count %}
+                <span class="badge text-bg-success predict-now-badge ms-1">{{ open_prediction_count }}</span>
               {% endif %}
             </a>
           </li>
-        {% endfor %}
-        <li class="nav-item">
-          <a class="nav-link {% if request.resolver_match.url_name == 'closed_matches' %}active{% endif %}"
-             href="{% url 'closed_matches' %}"><span class="d-lg-none">Closed</span><span class="d-none d-lg-inline">Closed Matches</span></a>
-        </li>
-        {% if user.is_authenticated %}
           <li class="nav-item">
-            <a class="nav-link {% if request.resolver_match.url_name == 'my_predictions' %}active{% endif %}"
-               href="{% url 'my_predictions' %}"><span class="d-lg-none">Predictions</span><span class="d-none d-lg-inline">My Predictions</span></a>
-          </li>
-        {% endif %}
-        <li class="nav-item">
-          <a class="nav-link {% if request.resolver_match.url_name == 'leaderboard' %}active{% endif %}"
-             href="{% url 'leaderboard' %}">Leaderboard</a>
-        </li>
-      </ul>
-      <ul class="navbar-nav flex-wrap align-items-center nav-row-account">
-        {% if user.is_authenticated %}
-          <li class="nav-item">
-            <span class="navbar-text text-white-50">{{ user.username }}</span>
+            <a class="nav-link text-white-50 px-2 py-1 rounded {% if request.resolver_match.url_name == 'closed_matches' %}text-white fw-bold active-sport-link{% endif %}"
+               href="{% url 'closed_matches' %}">Closed Matches</a>
           </li>
           <li class="nav-item">
-            <span class="badge text-bg-warning">{{ user_points }} pts</span>
+            <a class="nav-link text-white-50 px-2 py-1 rounded {% if request.resolver_match.url_name == 'analytics' %}text-white fw-bold active-sport-link{% endif %}"
+               href="{% url 'analytics' %}">Analytics</a>
+          </li>
+          {% if user.is_authenticated %}
+            <li class="nav-item">
+              <a class="nav-link text-white-50 px-2 py-1 rounded {% if request.resolver_match.url_name == 'my_predictions' %}text-white fw-bold active-sport-link{% endif %}"
+                 href="{% url 'my_predictions' %}">My Picks</a>
+            </li>
+          {% endif %}
+          <li class="nav-item">
+            <a class="nav-link text-white-50 px-2 py-1 rounded {% if request.resolver_match.url_name == 'how_it_works' %}text-white fw-bold active-sport-link{% endif %}"
+               href="{% url 'how_it_works' %}">Fair Play</a>
           </li>
           <li class="nav-item">
-            <a class="nav-link lh-sm {% if request.resolver_match.url_name == 'my_account' %}active{% endif %}"
+            <a class="nav-link text-white-50 px-2 py-1 rounded {% if request.resolver_match.url_name == 'leaderboard' %}text-white fw-bold active-sport-link{% endif %}"
+               href="{% url 'leaderboard' %}">Leaderboard</a>
+          </li>
+        </ul>
+
+        <div class="d-flex align-items-center gap-2">
+          {% if user.is_authenticated %}
+            <a class="nav-link text-white-50 px-2 py-1 rounded d-flex align-items-center gap-1 {% if request.resolver_match.url_name == 'my_account' %}text-white fw-bold active-sport-link{% endif %}"
                href="{% url 'my_account' %}">
-              My Account
-              <span class="badge text-bg-success d-block predict-now-badge">Redeem Credits</span>
+              <span>My Account</span>
+              <span class="badge text-bg-success predict-now-badge">Redeem Credits</span>
             </a>
-          </li>
-          <li class="nav-item">
-            {# Django logout is POST-only so we use a small form, not a link. #}
-            <form method="post" action="{% url 'logout' %}" class="d-inline">
+            <form method="post" action="{% url 'logout' %}" class="d-inline ms-1">
               {% csrf_token %}
-              {# Filled by pwa.js so logging out stops this device's match alerts. #}
               <input type="hidden" name="push_endpoint" value="" data-push-endpoint>
-              <button type="submit" class="btn btn-outline-light btn-sm">Log out</button>
+              <button type="submit" class="btn btn-outline-light btn-sm rounded-pill px-3">Log out</button>
             </form>
-          </li>
-        {% else %}
-          <li class="nav-item">
-            <a class="nav-link" href="{% url 'login' %}">Log in</a>
-          </li>
-          <li class="nav-item">
-            <a class="btn btn-primary btn-sm" href="{% url 'register' %}">Register</a>
-          </li>
-        {% endif %}
-        {# Shown by pwa.js when this device can get match alerts but hasn't turned them on. #}
-        <li class="nav-item" data-push-item hidden>
-          <button type="button" class="btn btn-outline-light btn-sm" data-push-enable>&#128276; Match alerts</button>
-        </li>
-        {# Shown by pwa.js when the user blocked notifications: the site can't ask again, so it explains how. #}
-        <li class="nav-item" data-push-blocked-item hidden>
-          <button type="button" class="btn btn-outline-light btn-sm" data-push-blocked>&#128276; Alerts blocked</button>
-        </li>
-        {# Shown by pwa.js when the browser can install the app. #}
-        <li class="nav-item" data-pwa-install-item hidden>
-          <button type="button" class="btn btn-success btn-sm" data-pwa-install>Install app</button>
-        </li>
-      </ul>
+          {% endif %}
+          <span data-push-item hidden>
+            <button type="button" class="btn btn-outline-light btn-sm rounded-pill" data-push-enable>🔔 Alerts</button>
+          </span>
+          <span data-push-blocked-item hidden>
+            <button type="button" class="btn btn-outline-light btn-sm rounded-pill" data-push-blocked>🔔 Blocked</button>
+          </span>
+          <span data-pwa-install-item hidden>
+            <button type="button" class="btn btn-success btn-sm rounded-pill fw-semibold" data-pwa-install>Install App</button>
+          </span>
+        </div>
+      </div>
     </div>
-  </nav>
+  </header>
 
   <main class="container pb-5">
     {% if messages %}
       {% for message in messages %}
-        <div class="alert alert-{{ message.tags }} alert-dismissible fade show" role="alert">
+        <div class="alert alert-{{ message.tags }} alert-dismissible fade show rounded-3" role="alert">
           {{ message }}
           <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
         </div>
@@ -406,21 +528,67 @@
   </main>
 
   <footer class="container pb-4 small text-muted text-center">
-    <a class="link-secondary" href="{% url 'about' %}">About</a>
-    <span class="mx-1">·</span>
-    <a class="link-secondary" href="{% url 'contact' %}">Contact</a>
-    <span class="mx-1">·</span>
-    <a class="link-secondary" href="{% url 'how_it_works' %}">Rules &amp; How It Works</a>
-    <span class="mx-1">·</span>
-    <a class="link-secondary" href="{% url 'terms' %}">Terms and Conditions</a>
-    <span class="mx-1">·</span>
-    <a class="link-secondary" href="{% url 'privacy' %}">Privacy Policy</a>
+    <div class="d-flex flex-wrap justify-content-center gap-2 mb-2">
+      <a class="link-secondary text-decoration-none" href="{% url 'about' %}">About</a>
+      <span>·</span>
+      <a class="link-secondary text-decoration-none" href="{% url 'contact' %}">Contact</a>
+      <span>·</span>
+      <a class="link-secondary text-decoration-none" href="{% url 'how_it_works' %}">Rules &amp; How It Works</a>
+      <span>·</span>
+      <a class="link-secondary text-decoration-none" href="{% url 'terms' %}">Terms and Conditions</a>
+      <span>·</span>
+      <a class="link-secondary text-decoration-none" href="{% url 'privacy' %}">Privacy Policy</a>
+    </div>
     <p class="mt-2 mb-0 mx-auto" style="max-width: 46rem;">
       Winsports.cc is a 100% Free-to-Play sports prediction platform. No real money betting or wagering is permitted.
       Users must be 18+. Prizes are available to residents of India only, subject to the terms and state-specific exclusions in
       <a class="link-secondary" href="{% url 'terms' %}">T&amp;C</a>.
     </p>
   </footer>
+
+  <!-- Fixed Mobile Bottom Navigation Bar (Matching APK) -->
+  <nav class="mobile-bottom-nav d-lg-none" aria-label="Mobile Navigation">
+    <div class="mobile-nav-container">
+      <a href="{% url 'match_list' %}" class="mobile-nav-item {% if request.resolver_match.url_name in 'match_list sport_matches match_detail closed_matches' %}active{% endif %}">
+        <span class="mobile-nav-icon">⚽</span>
+        <span class="mobile-nav-label">Matches</span>
+      </a>
+      <a href="{% url 'analytics' %}" class="mobile-nav-item {% if request.resolver_match.url_name == 'analytics' %}active{% endif %}">
+        <span class="mobile-nav-icon">✨</span>
+        <span class="mobile-nav-label">Analytics</span>
+      </a>
+      <a href="{% url 'leaderboard' %}" class="mobile-nav-item {% if request.resolver_match.url_name == 'leaderboard' %}active{% endif %}">
+        <span class="mobile-nav-icon">🏆</span>
+        <span class="mobile-nav-label">Leaders</span>
+      </a>
+      {% if user.is_authenticated %}
+        <a href="{% url 'my_predictions' %}" class="mobile-nav-item {% if request.resolver_match.url_name == 'my_predictions' %}active{% endif %}">
+          <span class="mobile-nav-icon position-relative">
+            ✓
+            {% if open_prediction_count %}
+              <span class="mobile-nav-badge">{{ open_prediction_count }}</span>
+            {% endif %}
+          </span>
+          <span class="mobile-nav-label">My Picks</span>
+        </a>
+      {% endif %}
+      <a href="{% url 'how_it_works' %}" class="mobile-nav-item {% if request.resolver_match.url_name == 'how_it_works' %}active{% endif %}">
+        <span class="mobile-nav-icon">🛡️</span>
+        <span class="mobile-nav-label">Fair Play</span>
+      </a>
+      {% if user.is_authenticated %}
+        <a href="{% url 'my_account' %}" class="mobile-nav-item {% if request.resolver_match.url_name == 'my_account' %}active{% endif %}">
+          <span class="mobile-nav-icon">👤</span>
+          <span class="mobile-nav-label">My Account</span>
+        </a>
+      {% else %}
+        <a href="{% url 'login' %}" class="mobile-nav-item {% if request.resolver_match.url_name in 'login register' %}active{% endif %}">
+          <span class="mobile-nav-icon">👤</span>
+          <span class="mobile-nav-label">My Account</span>
+        </a>
+      {% endif %}
+    </div>
+  </nav>
 
   <div class="pwa-banner" id="pwa-banner" hidden>
     <img src="{% static 'predictions/icons/icon-192.png' %}" alt="">

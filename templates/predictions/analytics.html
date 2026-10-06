@@ -1,0 +1,187 @@
+{% extends "base.html" %}
+{% block title %}Performance Analytics{% endblock %}
+{% block content %}
+<div class="analytics-page">
+  <!-- Analytics Header -->
+  <div class="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center gap-2 mb-4">
+    <div>
+      <div class="d-flex align-items-center gap-2">
+        <h1 class="h3 mb-1 fw-bold text-dark">Performance Analytics</h1>
+        <span class="badge rounded-pill bg-success-subtle text-success border border-success-subtle px-2 py-1 small">
+          Live Data
+        </span>
+      </div>
+      <p class="text-muted small mb-0">Real-time accuracy &amp; sports discipline breakdown</p>
+    </div>
+    <div class="d-inline-flex align-items-center gap-2 bg-white px-3 py-2 rounded-pill border shadow-sm small text-secondary">
+      <span class="text-success fw-bold">🛡️</span>
+      <span class="fw-semibold">100% Verified Match Outcomes · Certified Fair Play</span>
+    </div>
+  </div>
+
+  {% if not user.is_authenticated %}
+    <div class="alert alert-success border-success-subtle bg-success-subtle text-dark d-flex flex-column flex-sm-row align-items-start align-items-sm-center justify-content-between gap-3 mb-4 rounded-3 p-3" role="status">
+      <div>
+        <strong class="d-block">Track Your Personal Prediction Statistics</strong>
+        <span class="small text-secondary">Log in or create a free account to track your win streaks, prediction accuracy, and points across all sports.</span>
+      </div>
+      <div class="d-flex gap-2 text-nowrap">
+        <a href="{% url 'login' %}?next={% url 'analytics' %}" class="btn btn-outline-success btn-sm">Log in</a>
+        <a href="{% url 'register' %}" class="btn btn-success btn-sm">Register Free</a>
+      </div>
+    </div>
+  {% endif %}
+
+  <!-- 3 Top Metric Cards -->
+  <div class="row g-3 mb-4">
+    <!-- Card 1: Prediction Points -->
+    <div class="col-12 col-md-4">
+      <div class="card h-100 border-0 shadow-sm rounded-4 p-3 bg-white metric-card">
+        <div class="d-flex align-items-center justify-content-between mb-2">
+          <span class="text-muted small fw-semibold text-uppercase tracking-wider">Prediction Points</span>
+          <div class="metric-icon-box bg-warning-subtle text-warning-emphasis">
+            🏆
+          </div>
+        </div>
+        <div class="h2 fw-bold text-dark mb-1">{{ total_points }} <span class="fs-6 fw-normal text-muted">pts</span></div>
+        <div class="small text-secondary d-flex align-items-center gap-1">
+          {% if monthly_points > 0 %}
+            <span class="text-success fw-semibold">↑ +{{ monthly_points }} pts</span> this month
+          {% elif monthly_points < 0 %}
+            <span class="text-danger fw-semibold">{{ monthly_points }} pts</span> this month
+          {% else %}
+            <span>0 pts this month</span>
+          {% endif %}
+          {% if monthly_rank %}
+            <span class="text-muted">· Rank #{{ monthly_rank }}</span>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+
+    <!-- Card 2: Streak -->
+    <div class="col-12 col-md-4">
+      <div class="card h-100 border-0 shadow-sm rounded-4 p-3 bg-white metric-card">
+        <div class="d-flex align-items-center justify-content-between mb-2">
+          <span class="text-muted small fw-semibold text-uppercase tracking-wider">Current Win Streak</span>
+          <div class="metric-icon-box bg-danger-subtle text-danger">
+            🔥
+          </div>
+        </div>
+        <div class="h2 fw-bold text-dark mb-1">
+          {{ current_streak }} <span class="fs-6 fw-normal text-muted">Win{{ current_streak|pluralize }}</span>
+        </div>
+        <div class="small text-secondary">
+          <span class="fw-semibold text-dark">Best Record:</span> {{ best_streak }} consecutive win{{ best_streak|pluralize }}
+        </div>
+      </div>
+    </div>
+
+    <!-- Card 3: Fair Play & Accuracy -->
+    <div class="col-12 col-md-4">
+      <div class="card h-100 border-0 shadow-sm rounded-4 p-3 bg-white metric-card">
+        <div class="d-flex align-items-center justify-content-between mb-2">
+          <span class="text-muted small fw-semibold text-uppercase tracking-wider">Prediction Accuracy</span>
+          <div class="metric-icon-box bg-success-subtle text-success">
+            🎯
+          </div>
+        </div>
+        <div class="h2 fw-bold text-dark mb-1">
+          {% if accuracy_pct is not None %}{{ accuracy_pct }}%{% else %}—{% endif %}
+        </div>
+        <div class="small text-secondary">
+          <span class="fw-semibold text-dark">{{ won_picks }} Won</span> of {{ total_decided }} Decided Picks
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Accuracy by Sport Discipline -->
+  <div class="card border-0 shadow-sm rounded-4 bg-white mb-4">
+    <div class="card-header bg-white border-0 pt-3 pb-0 px-4">
+      <div class="d-flex align-items-center justify-content-between">
+        <h2 class="h5 fw-bold text-dark mb-0">Accuracy by Sport Discipline</h2>
+        <span class="small text-muted">Skill-based performance</span>
+      </div>
+      <p class="small text-muted mb-0 mt-1">Breakdown across official sporting categories</p>
+    </div>
+    <div class="card-body p-4">
+      <div class="row g-4">
+        {% for sport in sport_stats %}
+          <div class="col-12 col-md-6">
+            <div class="p-3 rounded-3 border bg-light-subtle">
+              <div class="d-flex align-items-center justify-content-between mb-2">
+                <div class="d-flex align-items-center gap-2">
+                  <span class="fs-5">{{ sport.icon }}</span>
+                  <span class="fw-semibold text-dark">{{ sport.name }}</span>
+                </div>
+                <div>
+                  {% if sport.accuracy_pct is not None %}
+                    <span class="badge bg-success text-white px-2 py-1">{{ sport.accuracy_pct }}% Accuracy</span>
+                  {% else %}
+                    <span class="badge bg-secondary-subtle text-secondary px-2 py-1">No picks yet</span>
+                  {% endif %}
+                </div>
+              </div>
+              <div class="progress mb-2" style="height: 8px; border-radius: 999px; background-color: #e2e8f0;">
+                <div class="progress-bar bg-success" role="progressbar"
+                     style="width: {% if sport.accuracy_pct is not None %}{{ sport.accuracy_pct }}{% else %}0{% endif %}%; border-radius: 999px;"
+                     aria-valuenow="{% if sport.accuracy_pct is not None %}{{ sport.accuracy_pct }}{% else %}0{% endif %}"
+                     aria-valuemin="0" aria-valuemax="100">
+                </div>
+              </div>
+              <div class="d-flex justify-content-between align-items-center small text-muted">
+                <span>{{ sport.won_count }} won / {{ sport.decided_count }} decided picks</span>
+                <a href="{% url 'sport_matches' sport.slug %}" class="link-success text-decoration-none fw-semibold">
+                  Predict {{ sport.name }} &rarr;
+                </a>
+              </div>
+            </div>
+          </div>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+
+  <!-- Fair Play Platform Guarantee -->
+  <div class="card border-0 shadow-sm rounded-4 bg-white p-4">
+    <div class="d-flex align-items-start gap-3">
+      <div class="metric-icon-box bg-success-subtle text-success fs-4">
+        🛡️
+      </div>
+      <div>
+        <h3 class="h6 fw-bold text-dark mb-1">100% Free-to-Play Platform Integrity Guarantee</h3>
+        <p class="small text-secondary mb-2">
+          Every match outcome, score, and point adjustment on WinSports is scored with 100% transparent and verified official sporting records.
+          WinSports is strictly skill-based with zero financial wagering, zero betting, and zero entry fees.
+        </p>
+        <div class="d-flex flex-wrap gap-2">
+          <span class="badge bg-light text-secondary border">✓ No Deposits</span>
+          <span class="badge bg-light text-secondary border">✓ No Real Money Betting</span>
+          <span class="badge bg-light text-secondary border">✓ Certified Scoring Rules</span>
+          <a href="{% url 'how_it_works' %}" class="small link-success text-decoration-none fw-semibold ms-2 align-self-center">Learn how it works &rarr;</a>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<style>
+  .metric-card {
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
+  }
+  .metric-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.06) !important;
+  }
+  .metric-icon-box {
+    width: 42px;
+    height: 42px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 12px;
+    font-size: 1.25rem;
+  }
+</style>
+{% endblock %}

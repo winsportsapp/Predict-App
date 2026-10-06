@@ -762,6 +762,7 @@ SITEMAP_PAGES = (
     [("match_list", {})]
     + [("sport_matches", {"sport_slug": slug}) for slug in SPORT_SLUGS]
     + [
+        ("analytics", {}),
         ("leaderboard", {}),
         ("closed_matches", {}),
         ("how_it_works", {}),
@@ -855,3 +856,117 @@ def push_unsubscribe(request):
     if request.user.is_authenticated:
         PushSubscription.objects.filter(endpoint=endpoint, user=request.user).delete()
     return JsonResponse({"ok": True})
+
+
+SPORT_ICONS = {
+    "Football": "⚽",
+    "Cricket": "🏏",
+    "Tennis": "🎾",
+    "Badminton": "🏸",
+    "Hockey": "🏑",
+}
+
+
+def analytics_view(request):
+    """Performance Analytics screen matching APK visual style, but without graphs."""
+    user = request.user
+    if user.is_authenticated:
+        profile = getattr(user, "profile", None)
+        total_points = profile.points if profile else 0
+
+        monthly_points = 0
+        monthly_rank = None
+        for i, p in enumerate(_monthly_profiles(*_current_month()), start=1):
+            if p.user_id == user.id:
+                monthly_points = p.monthly_points
+                monthly_rank = i
+                break
+
+        predictions = (
+            Prediction.objects.filter(user=user)
+            .select_related("match", "match__sport")
+            .order_by("match__start_time")
+        )
+        total_picks = predictions.count()
+        decided_predictions = [p for p in predictions if p.match.is_scored]
+        total_decided = len(decided_predictions)
+        won_picks = sum(1 for p in decided_predictions if p.is_correct)
+        lost_picks = sum(1 for p in decided_predictions if not p.is_correct)
+        accuracy_pct = (
+            round((won_picks / total_decided) * 100) if total_decided > 0 else 0
+        )
+
+        # Win Streaks
+        current_streak = 0
+        for p in reversed(decided_predictions):
+            if p.is_correct:
+                current_streak += 1
+            else:
+                break
+
+        best_streak = 0
+        streak_counter = 0
+        for p in decided_predictions:
+            if p.is_correct:
+                streak_counter += 1
+                if streak_counter > best_streak:
+                    best_streak = streak_counter
+            else:
+                streak_counter = 0
+
+        sport_stats = []
+        for sport_name in SUPPORTED_SPORTS:
+            sport_decided = [
+                p for p in decided_predictions if p.match.sport.name == sport_name
+            ]
+            s_total = len(sport_decided)
+            s_won = sum(1 for p in sport_decided if p.is_correct)
+            s_pct = round((s_won / s_total) * 100) if s_total > 0 else None
+            sport_stats.append(
+                {
+                    "name": sport_name,
+                    "icon": SPORT_ICONS.get(sport_name, "🏆"),
+                    "slug": sport_name.lower(),
+                    "decided_count": s_total,
+                    "won_count": s_won,
+                    "accuracy_pct": s_pct,
+                }
+            )
+    else:
+        total_points = 0
+        monthly_points = 0
+        monthly_rank = None
+        total_picks = 0
+        total_decided = 0
+        won_picks = 0
+        lost_picks = 0
+        accuracy_pct = None
+        current_streak = 0
+        best_streak = 0
+        sport_stats = [
+            {
+                "name": sport_name,
+                "icon": SPORT_ICONS.get(sport_name, "🏆"),
+                "slug": sport_name.lower(),
+                "decided_count": 0,
+                "won_count": 0,
+                "accuracy_pct": None,
+            }
+            for sport_name in SUPPORTED_SPORTS
+        ]
+
+    context = {
+        "total_points": total_points,
+        "monthly_points": monthly_points,
+        "monthly_rank": monthly_rank,
+        "total_picks": total_picks,
+        "total_decided": total_decided,
+        "won_picks": won_picks,
+        "lost_picks": lost_picks,
+        "accuracy_pct": accuracy_pct,
+        "current_streak": current_streak,
+        "best_streak": best_streak,
+        "sport_stats": sport_stats,
+    }
+    return render(request, "predictions/analytics.html", context)
+
