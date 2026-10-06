@@ -329,6 +329,8 @@ class MatchAdmin(admin.ModelAdmin):
                 "status",
                 "winner",
                 "is_draw",
+                "team_a_score",
+                "team_b_score",
                 "suggested_result",
                 "is_published",
                 "is_scored",
@@ -391,8 +393,14 @@ class MatchAdmin(admin.ModelAdmin):
         """The result reported by the import (see sync_external_matches),
         waiting for an admin to confirm it or enter a different one."""
         if obj.suggested_is_draw:
-            return "Draw"
-        return str(obj.suggested_winner) if obj.suggested_winner_id else "-"
+            text = "Draw"
+        elif obj.suggested_winner_id:
+            text = str(obj.suggested_winner)
+        else:
+            return "-"
+        if obj.suggested_score_display:
+            return f"{text} ({obj.suggested_score_display})"
+        return text
 
     @staticmethod
     def _date_over_time(value):

@@ -56,7 +56,14 @@
             <td><div class="cell-wrap">{% team_flag p.match.team_a %}{{ p.match.team_a }} vs {% team_flag p.match.team_b %}{{ p.match.team_b }}</div></td>
             <td class="text-nowrap">{{ p.match.start_time|date:"N j, Y" }}</td>
             <td><div class="cell-wrap">{{ p.choice_name }}</div></td>
-            <td><div class="cell-wrap">{{ p.match.winner_name }}</div></td>
+            <td>
+              <div class="cell-wrap">
+                {{ p.match.winner_name }}
+                {% if p.match.score_display %}
+                  <span class="text-muted small ms-1">({{ p.match.score_display }})</span>
+                {% endif %}
+              </div>
+            </td>
             <td>
               {% if p.is_correct %}
                 <span class="badge text-bg-success">Hit</span>

@@ -22,7 +22,7 @@
             <span class="badge text-bg-danger">Cancelled</span>
             This match was cancelled &mdash; no result will be recorded.
           {% elif match.has_result %}
-            {% if match.is_draw %}Result{% else %}Winner{% endif %}: <strong>{{ match.winner_name }}</strong>
+            {% if match.is_draw %}Result{% else %}Winner{% endif %}: <strong>{{ match.winner_name }}</strong>{% if match.score_display %} <span class="text-muted small">({{ match.score_display }})</span>{% endif %}
             {% if match.is_scored %}<span class="badge text-bg-secondary">Scored</span>{% endif %}
           {% elif match.status == "awaiting_result" %}
             <span class="badge text-bg-info">Awaiting result</span>

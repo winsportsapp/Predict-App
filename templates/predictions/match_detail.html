@@ -55,7 +55,7 @@
 
 {% if match.is_scored %}
   <div class="card card-body mt-3">
-    <p class="mb-0">Result: <strong>{{ match.winner_name }}</strong></p>
+    <p class="mb-0">Result: <strong>{{ match.winner_name }}</strong>{% if match.score_display %} <span class="text-muted">({{ match.score_display }})</span>{% endif %}</p>
   </div>
 {% endif %}
 

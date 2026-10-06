@@ -34,6 +34,8 @@ class ExternalEvent:
     called_off: bool = False
     home_image: str = ""
     away_image: str = ""
+    home_score: str = ""
+    away_score: str = ""
     extra: dict = field(default_factory=dict)
 
 

@@ -209,6 +209,16 @@ class FlashLiveProvider(Provider):
         called_off = stage in CALLED_OFF_STAGES
         finished = str(raw.get("STAGE_TYPE") or "").upper() == "FINISHED"
 
+        home_score = ""
+        away_score = ""
+        if finished and not called_off:
+            hs = raw.get("HOME_SCORE_CURRENT")
+            aws = raw.get("AWAY_SCORE_CURRENT")
+            if hs is not None:
+                home_score = str(hs).strip()
+            if aws is not None:
+                away_score = str(aws).strip()
+
         return ExternalEvent(
             source=self.name,
             external_id=str(event_id),
@@ -223,6 +233,8 @@ class FlashLiveProvider(Provider):
             called_off=called_off,
             home_image=_first(raw.get("HOME_IMAGES")),
             away_image=_first(raw.get("AWAY_IMAGES")),
+            home_score=home_score,
+            away_score=away_score,
         )
 
 

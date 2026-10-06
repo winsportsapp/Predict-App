@@ -188,6 +188,18 @@ class Match(models.Model):
             "only). Leave Winner empty when this is ticked."
         ),
     )
+    team_a_score = models.CharField(
+        max_length=20,
+        blank=True,
+        default="",
+        help_text="Final score for Team A / Home (e.g. 2, 245/6).",
+    )
+    team_b_score = models.CharField(
+        max_length=20,
+        blank=True,
+        default="",
+        help_text="Final score for Team B / Away (e.g. 1, 210).",
+    )
     team_a_win_points = models.IntegerField(
         default=10,
         help_text="Points awarded to a user who picked Team A when Team A wins.",
@@ -233,6 +245,8 @@ class Match(models.Model):
         related_name="+",
     )
     suggested_is_draw = models.BooleanField(default=False)
+    suggested_team_a_score = models.CharField(max_length=20, blank=True, default="")
+    suggested_team_b_score = models.CharField(max_length=20, blank=True, default="")
     suggested_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
@@ -282,6 +296,19 @@ class Match(models.Model):
     def has_suggested_result(self):
         """True once the external source has reported a winner or a draw."""
         return self.suggested_winner_id is not None or self.suggested_is_draw
+
+    @property
+    def score_display(self):
+        """'2 - 1' or '245/6 - 210' if scores exist, else empty string."""
+        if self.team_a_score != "" or self.team_b_score != "":
+            return f"{self.team_a_score} - {self.team_b_score}"
+        return ""
+
+    @property
+    def suggested_score_display(self):
+        if self.suggested_team_a_score != "" or self.suggested_team_b_score != "":
+            return f"{self.suggested_team_a_score} - {self.suggested_team_b_score}"
+        return ""
 
     def winner_name(self):
         if self.is_draw:
