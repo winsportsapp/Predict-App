@@ -14,17 +14,19 @@
     <div class="d-flex align-items-center gap-2 overflow-auto py-1 px-1 sports-pill-scroller">
       {% for sport in nav_sports %}
         <a href="{% url 'sport_matches' sport.slug %}"
-           class="btn btn-sm text-nowrap rounded-pill sports-tab-pill {% if sport.slug == sport_slug %}active-pill{% else %}inactive-pill{% endif %}">
-          {% if sport.slug == 'football' %}⚽{% elif sport.slug == 'cricket' %}🏏{% elif sport.slug == 'tennis' %}🎾{% elif sport.slug == 'badminton' %}🏸{% elif sport.slug == 'hockey' %}🏑{% else %}🏆{% endif %}
-          <span class="ms-1">{{ sport.name }}</span>
+           class="btn btn-sm text-nowrap sports-tab-pill {% if sport.slug == sport_slug %}active-pill{% else %}inactive-pill{% endif %}">
+          <span class="pill-sport-name">
+            {% if sport.slug == 'football' %}⚽{% elif sport.slug == 'cricket' %}🏏{% elif sport.slug == 'tennis' %}🎾{% elif sport.slug == 'badminton' %}🏸{% elif sport.slug == 'hockey' %}🏑{% else %}🏆{% endif %}
+            <span class="ms-1">{{ sport.name }}</span>
+          </span>
           {% if sport.has_open %}
-            <span class="pill-dot ms-1"></span>
+            <span class="badge text-bg-success predict-pill-badge mt-1">Predict</span>
           {% endif %}
         </a>
       {% endfor %}
       <a href="{% url 'closed_matches' %}"
-         class="btn btn-sm text-nowrap rounded-pill sports-tab-pill inactive-pill">
-        🔒 Closed
+         class="btn btn-sm text-nowrap sports-tab-pill inactive-pill">
+        <span class="pill-sport-name">🔒 Closed</span>
       </a>
     </div>
   </div>
@@ -176,6 +178,9 @@
           {% if sport.slug != sport_slug %}
             <a href="{% url 'sport_matches' sport.slug %}" class="btn btn-outline-secondary btn-sm rounded-pill">
               {{ sport.name }}
+              {% if sport.has_open %}
+                <span class="badge text-bg-success ms-1 predict-pill-badge">Predict</span>
+              {% endif %}
             </a>
           {% endif %}
         {% endfor %}
@@ -197,10 +202,21 @@
     border-radius: 4px;
   }
   .sports-tab-pill {
-    padding: 0.4rem 0.9rem;
+    padding: 0.35rem 0.85rem;
     font-size: 0.82rem;
     font-weight: 600;
     transition: all 0.15s ease;
+    display: inline-flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    border-radius: 12px;
+    min-height: 48px;
+  }
+  .pill-sport-name {
+    display: inline-flex;
+    align-items: center;
+    line-height: 1.2;
   }
   .active-pill {
     background-color: #0B3D2E !important;
@@ -217,12 +233,22 @@
     background-color: #f1f5f9 !important;
     color: #0f172a !important;
   }
-  .pill-dot {
+  .predict-pill-badge {
+    font-size: 0.58rem;
+    font-weight: 700;
+    padding: 0.12rem 0.45rem;
+    border-radius: 999px;
+    letter-spacing: 0.03em;
+    line-height: 1;
     display: inline-block;
-    width: 6px;
-    height: 6px;
-    background-color: #22c55e;
-    border-radius: 50%;
+  }
+  .active-pill .predict-pill-badge {
+    background-color: #22c55e !important;
+    color: #ffffff !important;
+  }
+  .inactive-pill .predict-pill-badge {
+    background-color: #16a34a !important;
+    color: #ffffff !important;
   }
   .match-card {
     border: 1px solid #e2e8f0 !important;

@@ -457,11 +457,11 @@
         <ul class="nav align-items-center gap-1" id="sports-nav">
           {% for sport in nav_sports %}
             <li class="nav-item">
-              <a class="nav-link text-white-50 px-2 py-1 rounded {% if sport.slug == sport_slug %}text-white fw-bold active-sport-link{% endif %}"
+              <a class="nav-link text-white-50 px-2 py-1 rounded text-center lh-sm {% if sport.slug == sport_slug %}text-white fw-bold active-sport-link{% endif %}"
                  href="{% url 'sport_matches' sport.slug %}">
-                {{ sport.name }}
+                <span>{{ sport.name }}</span>
                 {% if sport.has_open %}
-                  <span class="badge text-bg-success predict-now-badge">Predict now</span>
+                  <span class="badge text-bg-success d-block predict-now-badge">Predict now</span>
                 {% endif %}
               </a>
             </li>
