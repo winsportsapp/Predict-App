@@ -9,8 +9,8 @@
   {% include "predictions/_home_intro.html" %}
 {% else %}
 <div class="matches-page">
-  <!-- Sports Horizontal Scrolling Pills Bar (APK Style) -->
-  <div class="sports-pill-wrapper mb-4">
+  <!-- Sports Horizontal Scrolling Pills Bar (APK Style - Mobile Only) -->
+  <div class="sports-pill-wrapper mb-4 d-lg-none">
     <div class="d-flex align-items-center gap-2 overflow-auto py-1 px-1 sports-pill-scroller">
       {% for sport in nav_sports %}
         <a href="{% url 'sport_matches' sport.slug %}"
