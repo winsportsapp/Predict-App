@@ -2179,6 +2179,10 @@ class CurrentMonthMedalEligibilityTests(TestCase):
         self.assertEqual(medals["third"], "bronze")
         self.assertIsNone(medals["fourth"])
 
+        # Medal winners are placed at ranks 1, 2, 3, followed by non-medalists by points
+        profile_names = [p.user.username for p in response.context["monthly_profiles"]]
+        self.assertEqual(profile_names, ["first", "second", "third", "casual", "fourth"])
+
 
 class UserPredictionCountAdminTests(TestCase):
     """Admin User Counts page counts this month's predictions by kickoff."""
@@ -2370,22 +2374,42 @@ class AllTimeMedalEligibilityTests(TestCase):
         }
 
     def test_top_scorer_below_minimum_is_skipped(self):
-        self._player("casual", points=500, predictions=99)
-        self._player("first", points=300, predictions=100)
-        self._player("second", points=200, predictions=120)
-        self._player("third", points=100, predictions=100)
+        self._player("casual", points=500, predictions=199)
+        self._player("first", points=300, predictions=200)
+        self._player("second", points=200, predictions=220)
+        self._player("third", points=100, predictions=200)
 
-        medals = self._medals()
+        response = self.client.get(reverse("leaderboard"))
+        all_time_profiles = response.context["all_time_profiles"]
+        medals = {p.user.username: p.medal for p in all_time_profiles}
 
         self.assertIsNone(medals["casual"])
         self.assertEqual(medals["first"], "gold")
         self.assertEqual(medals["second"], "silver")
         self.assertEqual(medals["third"], "bronze")
 
+        # Medal winners are placed at ranks 1, 2, 3, followed by non-medalists by points
+        profile_names = [p.user.username for p in all_time_profiles]
+        self.assertEqual(profile_names, ["first", "second", "third", "casual"])
+
     def test_note_is_shown_on_the_all_time_board(self):
         content = self.client.get(reverse("leaderboard")).content.decode()
         all_time = content[content.index('id="leaderboard-all-time"'):]
-        self.assertIn("Minimum of 100 Counts (Predictions)", all_time)
+        self.assertIn("Minimum of 200 Counts (Predictions)", all_time)
+
+    def test_note_is_shown_on_the_monthly_board(self):
+        content = self.client.get(reverse("leaderboard")).content.decode()
+        monthly = content[
+            content.index('id="leaderboard-monthly"'):content.index('id="leaderboard-all-time"')
+        ]
+        self.assertIn("Minimum of 200 Counts (Predictions)", monthly)
+
+    def test_how_it_works_page_mentions_200_predictions(self):
+        response = self.client.get(reverse("how_it_works"))
+        self.assertContains(
+            response,
+            "A minimum of 200 predictions is required to be eligible for a medal.",
+        )
 
     def test_monthly_board_comes_before_all_time(self):
         # Stacked on phones, the boards show in page order: Monthly first.
