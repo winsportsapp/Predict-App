@@ -300,9 +300,17 @@ def sync_results(provider, sport):
             event.result
         )
         match.suggested_is_draw = event.result == "draw"
+        match.suggested_team_a_score = event.home_score
+        match.suggested_team_b_score = event.away_score
         match.suggested_at = timezone.now()
         match.save(
-            update_fields=["suggested_winner", "suggested_is_draw", "suggested_at"]
+            update_fields=[
+                "suggested_winner",
+                "suggested_is_draw",
+                "suggested_team_a_score",
+                "suggested_team_b_score",
+                "suggested_at",
+            ]
         )
         summary["suggested"] += 1
 
@@ -325,6 +333,8 @@ def confirm_suggested_result(match):
         raise ValidationError("This match already has a result or is cancelled.")
     match.winner = match.suggested_winner
     match.is_draw = match.suggested_is_draw
+    match.team_a_score = match.suggested_team_a_score
+    match.team_b_score = match.suggested_team_b_score
     match.full_clean()
     match.save()  # moves the match to Finished
     score_match(match.pk)

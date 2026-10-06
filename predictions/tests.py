@@ -1437,6 +1437,18 @@ class MyPredictionsViewTests(TestCase):
         self.assertContains(response, "Miss")
         self.assertContains(response, "-5")
 
+    def test_decided_row_shows_score_when_present(self):
+        match = self._match("with-score")
+        match.team_a_score = "2"
+        match.team_b_score = "1"
+        match.save()
+        Prediction.objects.create(user=self.alice, match=match, choice="A")
+        self._score(match, "A")
+
+        self.client.login(username="alice", password="pass12345")
+        response = self.client.get(self.url)
+        self.assertContains(response, "(2 - 1)")
+
     def test_pending_and_decided_are_separated(self):
         pending_match = self._match("pending")
         decided_match = self._match("decided")
@@ -4843,6 +4855,8 @@ class ConfirmSuggestedResultsAdminTests(TestCase):
     def test_action_confirms_and_reports_failures(self):
         good = awaiting_external_match(external_id="e1")
         good.suggested_winner = good.team_b
+        good.suggested_team_a_score = "0"
+        good.suggested_team_b_score = "2"
         good.save()
         without = sport_match(
             "Football", "Leeds", "Everton", status=Match.Status.AWAITING_RESULT
@@ -4859,6 +4873,9 @@ class ConfirmSuggestedResultsAdminTests(TestCase):
 
         good.refresh_from_db()
         self.assertEqual(good.winner, good.team_b)
+        self.assertEqual(good.team_a_score, "0")
+        self.assertEqual(good.team_b_score, "2")
+        self.assertEqual(good.score_display, "0 - 2")
         self.assertTrue(good.is_scored)
         self.assertContains(response, "1 result(s) confirmed")
         self.assertContains(response, "no suggested result")
@@ -4876,12 +4893,14 @@ class ConfirmSuggestedResultsAdminTests(TestCase):
     def test_change_form_shows_suggested_result(self):
         match = awaiting_external_match()
         match.suggested_winner = match.team_a
+        match.suggested_team_a_score = "2"
+        match.suggested_team_b_score = "1"
         match.save()
         response = self.client.get(
             reverse("admin:predictions_match_change", args=[match.pk])
         )
         self.assertContains(response, "Suggested result")
-        self.assertContains(response, "Arsenal")
+        self.assertContains(response, "Arsenal (2 - 1)")
 
 
 def flashlive_response(data, status=200):
@@ -5071,6 +5090,8 @@ class FlashLiveProviderTests(SimpleTestCase):
 
         self.assertEqual(found["w"].result, "away")
         self.assertEqual(found["d"].result, "draw")
+        self.assertEqual(found["d"].home_score, "1")
+        self.assertEqual(found["d"].away_score, "1")
         self.assertTrue(found["p"].called_off)
         self.assertIsNone(found["p"].result)
         self.assertIsNone(found["live"].result)
@@ -5140,14 +5161,18 @@ class SyncExternalMatchesCommandTests(TestCase):
         self.assertIn("Dry run", output)
 
     def test_results_are_suggested(self):
-        awaiting_external_match()
+        m = awaiting_external_match()
         output = self._run(
-            FakeProvider(results={"e1": external_event(result="away")}),
+            FakeProvider(results={"e1": external_event(result="away", home_score="0", away_score="3")}),
             "--results",
             "--sport",
             "Football",
         )
         self.assertIn("Football results: 1 suggested", output)
+        m.refresh_from_db()
+        self.assertEqual(m.suggested_team_a_score, "0")
+        self.assertEqual(m.suggested_team_b_score, "3")
+        self.assertEqual(m.suggested_score_display, "0 - 3")
 
     def test_new_day_only_is_passed_to_the_provider(self):
         provider = FakeProvider([external_event()])
