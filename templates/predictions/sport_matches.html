@@ -196,6 +196,10 @@
 {% endif %}
 
 <style>
+  .sports-pill-scroller {
+    scroll-behavior: smooth;
+    -webkit-overflow-scrolling: touch;
+  }
   .sports-pill-scroller::-webkit-scrollbar {
     height: 4px;
   }
@@ -264,4 +268,28 @@
     box-shadow: 0 4px 14px rgba(0, 0, 0, 0.06) !important;
   }
 </style>
+
+<script>
+  (function () {
+    function centerActiveSportPill() {
+      var scroller = document.querySelector('.sports-pill-scroller');
+      if (!scroller) return;
+      var activePill = scroller.querySelector('.active-pill');
+      if (!activePill) return;
+
+      var scrollerWidth = scroller.clientWidth;
+      var pillLeft = activePill.offsetLeft;
+      var pillWidth = activePill.offsetWidth;
+      var scrollTarget = pillLeft - (scrollerWidth / 2) + (pillWidth / 2);
+
+      scroller.scrollLeft = Math.max(0, scrollTarget);
+    }
+
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', centerActiveSportPill);
+    } else {
+      centerActiveSportPill();
+    }
+  })();
+</script>
 {% endblock %}
