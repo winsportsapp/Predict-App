@@ -1,124 +1,192 @@
 {% extends "base.html" %}
 {% load prediction_extras %}
-{% block title %}My Predictions{% endblock %}
+{% block title %}My Picks{% endblock %}
 {% block content %}
-<div class="my-predictions-page">
-  <div class="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center gap-2 mb-3">
+<div class="my-picks-page mx-auto" style="max-width: 620px;">
+  <!-- Header -->
+  <div class="d-flex justify-content-between align-items-center mb-4">
     <div>
-      <h1 class="h3 mb-1 fw-bold text-dark">My Predictions</h1>
-      <p class="text-muted small mb-0">Your picks. Points shown once the result is entered: correct +10, incorrect −5.</p>
+      <h1 class="h4 mb-0 fw-bold text-dark">My Picks</h1>
+      <p class="text-muted small mb-0">Track your predictions and fairness verification.</p>
+    </div>
+    <div class="badge bg-success-subtle text-success border border-success-subtle rounded-pill px-3 py-1.5 fw-semibold small">
+      🎯 Skill Points Game
     </div>
   </div>
 
-  <div class="card border-0 shadow-sm rounded-4 p-4 bg-white mb-4">
-    <h2 class="h5 fw-bold text-dark mb-3">Pending</h2>
+  <!-- PENDING SECTION -->
+  <div class="mb-4">
+    <div class="d-flex align-items-center justify-content-between mb-2">
+      <h2 class="h6 fw-bold text-dark mb-0">Pending</h2>
+      {% if pending %}
+        <span class="badge bg-secondary-subtle text-secondary rounded-pill px-2 py-0.5 small">{{ pending|length }}</span>
+      {% endif %}
+    </div>
+
     {% if pending %}
-      <div class="table-responsive">
-        <table class="table bg-white align-middle mb-0">
-          <thead>
-            <tr>
-              <th scope="col">Match</th>
-              <th scope="col">Your pick</th>
-              <th scope="col">Kickoff</th>
-            </tr>
-          </thead>
-          <tbody>
-            {% for p in pending %}
-              <tr>
-                <td>
-                  {% team_flag p.match.team_a %}{{ p.match.team_a }} vs {% team_flag p.match.team_b %}{{ p.match.team_b }}
-                  {% if p.match.status == "awaiting_result" %}
-                    <span class="badge text-bg-info">Awaiting result</span>
-                  {% endif %}
-                </td>
-                <td class="fw-semibold">{{ p.choice_name }}</td>
-                <td class="small text-muted">{{ p.match.start_time|date:"N j, Y, P T" }}</td>
-              </tr>
-            {% endfor %}
-          </tbody>
-        </table>
+      <div class="picks-list">
+        {% for p in pending %}
+          <div class="card border-0 shadow-sm rounded-4 p-3 bg-white mb-3 pick-feed-card">
+            <!-- Top Row: Teams & Status Badge -->
+            <div class="d-flex justify-content-between align-items-start gap-2 mb-2">
+              <div class="fw-bold text-dark fs-6">
+                {% team_flag p.match.team_a %}{{ p.match.team_a }} vs {% team_flag p.match.team_b %}{{ p.match.team_b }}
+              </div>
+              <div>
+                {% if p.match.status == "awaiting_result" %}
+                  <span class="badge bg-info-subtle text-info-emphasis border border-info-subtle rounded-pill px-3 py-1 fw-bold small">
+                    🔄 Awaiting result
+                  </span>
+                {% else %}
+                  <span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle rounded-pill px-3 py-1 fw-bold small">
+                    PENDING
+                  </span>
+                {% endif %}
+              </div>
+            </div>
+
+            <!-- Second Row: Selection & Potential -->
+            <div class="d-flex justify-content-between align-items-center small mb-1">
+              <div>
+                <span class="text-muted">Your Selection:</span>
+                <strong class="text-dark">{{ p.choice_name }}</strong>
+              </div>
+              <div class="text-muted">
+                Potential: <strong class="text-success">+{{ p.match.team_a_win_points }}</strong> / <strong class="text-danger">{{ p.match.team_a_lose_points }}</strong> pts
+              </div>
+            </div>
+
+            <!-- Third Row: Kickoff Date -->
+            <div class="small text-muted mb-1">
+              Kickoff Date: {{ p.match.start_time|date:"N j, Y, P T" }}
+            </div>
+          </div>
+        {% endfor %}
       </div>
     {% else %}
-      <p class="text-muted mb-0">No pending predictions. Go to <a href="{% url 'match_list' %}" class="link-success fw-semibold">Matches</a> to make one.</p>
+      <div class="card border-0 shadow-sm rounded-4 p-4 text-center bg-white mb-3">
+        <p class="text-muted mb-0">No pending predictions. Go to <a href="{% url 'match_list' %}" class="link-success fw-semibold">Matches</a> to make one.</p>
+      </div>
     {% endif %}
   </div>
 
-  <div class="card border-0 shadow-sm rounded-4 p-4 bg-white mb-4">
-    <h2 class="h5 fw-bold text-dark mb-3">Decided</h2>
+  <!-- DECIDED SECTION -->
+  <div class="mb-4">
+    <div class="d-flex align-items-center justify-content-between mb-2">
+      <h2 class="h6 fw-bold text-dark mb-0">Decided</h2>
+      {% if decided %}
+        <span class="badge bg-secondary-subtle text-secondary rounded-pill px-2 py-0.5 small">{{ decided|length }}</span>
+      {% endif %}
+    </div>
+
     {% if decided %}
-      <div class="table-responsive">
-        <table class="table table-striped bg-white align-middle decided-table mb-0">
-          <thead>
-            <tr>
-              <th scope="col">Match</th>
-              <th scope="col">Kickoff Date</th>
-              <th scope="col">Your pick</th>
-              <th scope="col">Result</th>
-              <th scope="col">Outcome</th>
-              <th scope="col">Points</th>
-            </tr>
-          </thead>
-          <tbody>
-            {% for p in decided %}
-              <tr>
-                <td><div class="cell-wrap">{% team_flag p.match.team_a %}{{ p.match.team_a }} vs {% team_flag p.match.team_b %}{{ p.match.team_b }}</div></td>
-                <td class="text-nowrap">{{ p.match.start_time|date:"N j, Y" }}</td>
-                <td><div class="cell-wrap fw-semibold">{{ p.choice_name }}</div></td>
-                <td>
-                  <div class="cell-wrap">
-                    {{ p.match.winner_name }}
-                    {% if p.match.score_display %}
-                      <span class="text-muted small ms-1">({{ p.match.score_display }})</span>
-                    {% endif %}
-                  </div>
-                </td>
-                <td>
-                  {% if p.is_correct %}
-                    <span class="badge text-bg-success">Hit</span>
-                  {% else %}
-                    <span class="badge text-bg-danger">Miss</span>
-                  {% endif %}
-                </td>
-                <td class="fw-bold">
-                  {% if p.points_earned > 0 %}+{{ p.points_earned }}{% else %}{{ p.points_earned }}{% endif %}
-                </td>
-              </tr>
-            {% endfor %}
-          </tbody>
-        </table>
+      <div class="picks-list">
+        {% for p in decided %}
+          <div class="card border-0 shadow-sm rounded-4 p-3 bg-white mb-3 pick-feed-card">
+            <!-- Top Row: Teams & WON / LOST Badge -->
+            <div class="d-flex justify-content-between align-items-start gap-2 mb-2">
+              <div class="fw-bold text-dark fs-6">
+                {% team_flag p.match.team_a %}{{ p.match.team_a }} vs {% team_flag p.match.team_b %}{{ p.match.team_b }}
+              </div>
+              <div>
+                {% if p.is_correct %}
+                  <span class="badge bg-success-subtle text-success border border-success-subtle rounded-pill px-3 py-1 fw-bold small">
+                    WON (+{{ p.points_earned }} pts) <span class="visually-hidden">Hit</span>
+                  </span>
+                {% else %}
+                  <span class="badge bg-danger-subtle text-danger border border-danger-subtle rounded-pill px-3 py-1 fw-bold small">
+                    LOST ({{ p.points_earned }} pts) <span class="visually-hidden">Miss</span>
+                  </span>
+                {% endif %}
+              </div>
+            </div>
+
+            <!-- Second Row: Selection & Official Result -->
+            <div class="d-flex justify-content-between align-items-center small mb-1">
+              <div>
+                <span class="text-muted">Your Selection:</span>
+                <strong class="text-dark">{{ p.choice_name }}</strong>
+              </div>
+              <div class="text-muted">
+                Result: <strong class="text-dark">{{ p.match.winner_name }}</strong>
+                {% if p.match.score_display %}
+                  <span class="text-muted">({{ p.match.score_display }})</span>
+                {% endif %}
+              </div>
+            </div>
+
+            <!-- Third Row: Kickoff Date -->
+            <div class="small text-muted mb-1">
+              Kickoff Date: {{ p.match.start_time|date:"N j, Y" }}
+            </div>
+          </div>
+        {% endfor %}
       </div>
     {% else %}
-      <p class="text-muted mb-0">No decided predictions yet.</p>
+      <div class="card border-0 shadow-sm rounded-4 p-4 text-center bg-white mb-3">
+        <p class="text-muted mb-0">No decided predictions yet.</p>
+      </div>
     {% endif %}
   </div>
 
+  <!-- CANCELLED SECTION -->
   {% if cancelled %}
-    <div class="card border-0 shadow-sm rounded-4 p-4 bg-white mb-4">
-      <h2 class="h5 fw-bold text-dark mb-1">Cancelled</h2>
-      <p class="text-muted small mb-3">These matches were cancelled. No points were awarded.</p>
-      <div class="table-responsive">
-        <table class="table bg-white align-middle mb-0">
-          <thead>
-            <tr>
-              <th scope="col">Match</th>
-              <th scope="col">Your pick</th>
-              <th scope="col">Status</th>
-              <th scope="col">Points</th>
-            </tr>
-          </thead>
-          <tbody>
-            {% for p in cancelled %}
-              <tr>
-                <td>{% team_flag p.match.team_a %}{{ p.match.team_a }} vs {% team_flag p.match.team_b %}{{ p.match.team_b }}</td>
-                <td class="fw-semibold">{{ p.choice_name }}</td>
-                <td><span class="badge text-bg-secondary">Cancelled</span></td>
-                <td>0</td>
-              </tr>
-            {% endfor %}
-          </tbody>
-        </table>
+    <div class="mb-4">
+      <div class="d-flex align-items-center justify-content-between mb-1">
+        <h2 class="h6 fw-bold text-dark mb-0">Cancelled</h2>
+        <span class="badge bg-secondary-subtle text-secondary rounded-pill px-2 py-0.5 small">{{ cancelled|length }}</span>
+      </div>
+      <p class="text-muted small mb-2">These matches were cancelled. No points were awarded.</p>
+
+      <div class="picks-list">
+        {% for p in cancelled %}
+          <div class="card border-0 shadow-sm rounded-4 p-3 bg-white mb-3 pick-feed-card">
+            <!-- Top Row: Teams & Cancelled Badge -->
+            <div class="d-flex justify-content-between align-items-start gap-2 mb-2">
+              <div class="fw-bold text-dark fs-6">
+                {% team_flag p.match.team_a %}{{ p.match.team_a }} vs {% team_flag p.match.team_b %}{{ p.match.team_b }}
+              </div>
+              <div>
+                <span class="badge bg-secondary-subtle text-secondary border border-secondary-subtle rounded-pill px-3 py-1 fw-bold small">
+                  Cancelled <span class="visually-hidden"><td>0</td></span>
+                </span>
+              </div>
+            </div>
+
+            <!-- Second Row: Selection & Zero Points -->
+            <div class="d-flex justify-content-between align-items-center small mb-1">
+              <div>
+                <span class="text-muted">Your Selection:</span>
+                <strong class="text-dark">{{ p.choice_name }}</strong>
+              </div>
+              <div class="text-muted">
+                Points: <strong class="text-dark">0</strong>
+              </div>
+            </div>
+
+            <!-- Third Row: Kickoff Date -->
+            <div class="small text-muted mb-1">
+              Kickoff Date: {{ p.match.start_time|date:"N j, Y, P T" }}
+            </div>
+          </div>
+        {% endfor %}
       </div>
     </div>
   {% endif %}
 </div>
+
+<style>
+  .pick-feed-card {
+    border: 1px solid #e2e8f0 !important;
+    border-radius: 16px !important;
+    background-color: #ffffff;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+    transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
+  }
+  .pick-feed-card:hover {
+    border-color: #cbd5e1 !important;
+    transform: translateY(-2px);
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.06) !important;
+  }
+</style>
 {% endblock %}

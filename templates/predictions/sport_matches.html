@@ -45,7 +45,19 @@
     <div class="row g-3 mb-4">
       {% for match in open_matches %}
         <div class="col-12 match-card-col">
-          <div class="card border-0 shadow-sm rounded-4 p-3 bg-white match-card">
+          <div class="card shadow-sm rounded-4 p-3 bg-white match-card">
+            <!-- Predict the win subtitle -->
+            <div class="small fw-semibold text-start text-dark mb-1">Predict the win ( Select your Team / Player )</div>
+
+            <!-- Highlighted Event Name above Team Name -->
+            {% if match.event_name %}
+              <div class="text-start mb-2">
+                <span class="badge bg-success-subtle text-success border border-success-subtle rounded-pill px-2 py-1 small fw-bold">
+                  🏆 {{ match.event_name }}
+                </span>
+              </div>
+            {% endif %}
+
             <!-- Teams Headline (Left-aligned) -->
             <div class="text-start mb-1">
               <strong class="match-teams-title">
@@ -56,16 +68,10 @@
             </div>
 
             <!-- Kickoff & Deadline (Left-aligned, Kickoff directly above Deadline below teams) -->
-            <div class="small text-muted text-start mb-1 match-meta-info">
+            <div class="small text-muted text-start mb-2 match-meta-info">
               <div>Kickoff: {{ match.start_time|date:"N j, Y, P T" }}</div>
               <div>Deadline: {{ match.prediction_deadline|date:"N j, Y, P T" }}</div>
             </div>
-
-            <!-- Predict the win subtitle & Event Name -->
-            <div class="small fw-semibold text-start text-dark mb-1">Predict the win ( Select your Team / Player )</div>
-            {% if match.event_name %}
-              <div class="small text-muted text-start mb-2">{{ match.event_name }}</div>
-            {% endif %}
 
             <!-- Prediction Options / Buttons (pick-panel, fit in one row, reduced rectangle box length on desktop) -->
             <div class="pick-panel mt-2">
@@ -217,10 +223,15 @@
     border-radius: 50%;
   }
   .match-card {
-    transition: transform 0.15s ease, box-shadow 0.15s ease;
+    border: 1px solid #e2e8f0 !important;
+    border-radius: 16px !important;
+    background-color: #ffffff;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+    transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
   }
   .match-card:hover {
-    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.05) !important;
+    border-color: #cbd5e1 !important;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.06) !important;
   }
 </style>
 {% endblock %}
