@@ -46,8 +46,7 @@
       {% for match in open_matches %}
         <div class="col-12 match-card-col">
           <div class="card shadow-sm rounded-4 p-3 bg-white match-card">
-            <!-- Predict the win subtitle -->
-            <div class="small fw-semibold text-start text-dark mb-1">Predict the win ( Select your Team / Player )</div>
+            <span class="visually-hidden">Predict the win ( Select your Team / Player )</span>
 
             <!-- Highlighted Event Name above Team Name -->
             {% if match.event_name %}
@@ -72,6 +71,9 @@
               <div>Kickoff: {{ match.start_time|date:"N j, Y, P T" }}</div>
               <div>Deadline: {{ match.prediction_deadline|date:"N j, Y, P T" }}</div>
             </div>
+
+            <!-- Select your Team / Player (below deadline, above team name box) -->
+            <div class="small fw-semibold text-start text-dark mb-1">Select your Team / Player</div>
 
             <!-- Prediction Options / Buttons (pick-panel, fit in one row, reduced rectangle box length on desktop) -->
             <div class="pick-panel mt-2">

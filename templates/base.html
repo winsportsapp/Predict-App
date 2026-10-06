@@ -474,10 +474,6 @@
             <a class="nav-link text-white-50 px-2 py-1 rounded {% if request.resolver_match.url_name == 'analytics' %}text-white fw-bold active-sport-link{% endif %}"
                href="{% url 'analytics' %}">Analytics</a>
           </li>
-          <li class="nav-item">
-            <a class="nav-link text-white-50 px-2 py-1 rounded {% if request.resolver_match.url_name == 'leaderboard' %}text-white fw-bold active-sport-link{% endif %}"
-               href="{% url 'leaderboard' %}">Leaderboard</a>
-          </li>
           {% if user.is_authenticated %}
             <li class="nav-item">
               <a class="nav-link text-white-50 px-2 py-1 rounded {% if request.resolver_match.url_name == 'my_predictions' %}text-white fw-bold active-sport-link{% endif %}"
@@ -487,6 +483,10 @@
           <li class="nav-item">
             <a class="nav-link text-white-50 px-2 py-1 rounded {% if request.resolver_match.url_name == 'how_it_works' %}text-white fw-bold active-sport-link{% endif %}"
                href="{% url 'how_it_works' %}">Fair Play</a>
+          </li>
+          <li class="nav-item">
+            <a class="nav-link text-white-50 px-2 py-1 rounded {% if request.resolver_match.url_name == 'leaderboard' %}text-white fw-bold active-sport-link{% endif %}"
+               href="{% url 'leaderboard' %}">Leaderboard</a>
           </li>
         </ul>
 
