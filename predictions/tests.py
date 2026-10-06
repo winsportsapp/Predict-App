@@ -5677,7 +5677,7 @@ class CrawlerAndAdsFilesTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response["Content-Type"], "application/xml")
         body = response.content.decode()
-        for path in ("/", "/sport/cricket/", "/leaderboard/", "/how-it-works/",
+        for path in ("/", "/sport/cricket/", "/analytics/", "/leaderboard/", "/how-it-works/",
                      "/about/", "/contact/", "/terms/", "/privacy/"):
             self.assertIn("<loc>http://testserver%s</loc>" % path, body)
         self.assertNotIn("/account/", body)
@@ -5701,3 +5701,28 @@ class CrawlerAndAdsFilesTests(TestCase):
             ads.content.decode(),
             "google.com, pub-1234567890123456, DIRECT, f08c47fec0942fa0\n",
         )
+
+
+class AnalyticsViewTests(TestCase):
+    def setUp(self):
+        self.sport, _ = Sport.objects.get_or_create(name="Football")
+        self.user = User.objects.create_user(
+            username="alice", email="alice@example.com", password="password"
+        )
+        self.user.profile.points = 50
+        self.user.profile.save()
+
+    def test_analytics_guest_renders_ok(self):
+        response = self.client.get(reverse("analytics"))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Performance Analytics")
+        self.assertContains(response, "Accuracy by Sport Discipline")
+        self.assertEqual(response.context["total_points"], 0)
+
+    def test_analytics_authenticated_renders_user_stats(self):
+        self.client.force_login(self.user)
+        response = self.client.get(reverse("analytics"))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "50")
+        self.assertEqual(response.context["total_points"], 50)
+

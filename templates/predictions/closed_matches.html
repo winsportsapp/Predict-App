@@ -2,42 +2,86 @@
 {% load prediction_extras %}
 {% block title %}Closed Matches{% endblock %}
 {% block content %}
-<h1 class="h3 mb-2">Closed Matches</h1>
-<p class="text-muted">Matches that are finished, awaiting a result, cancelled, or past their prediction deadline, across Football, Cricket, Tennis and Badminton.</p>
-
-{% if closed_matches %}
-  <div class="list-group">
-    {% for match in closed_matches %}
-      <div class="list-group-item">
-        <div class="d-flex justify-content-between align-items-start gap-2 flex-wrap">
-          <strong><a href="{% url 'match_detail' match.pk %}">{% team_flag match.team_a %}{{ match.team_a }}</a> Vs <a href="{% url 'match_detail' match.pk %}">{% team_flag match.team_b %}{{ match.team_b }}</a></strong>
-          <span class="badge text-bg-light text-dark border">{{ match.sport }}</span>
-        </div>
-        {% if match.event_name %}
-          <div class="small text-muted">{{ match.event_name }}</div>
-        {% endif %}
-        <div class="small text-muted">Kickoff: {{ match.start_time|date:"N j, Y, P T" }} · Deadline: {{ match.prediction_deadline|date:"N j, Y, P T" }}</div>
-        <div class="small mt-1">
-          {% if match.status == "cancelled" %}
-            <span class="badge text-bg-danger">Cancelled</span>
-            This match was cancelled &mdash; no result will be recorded.
-          {% elif match.has_result %}
-            {% if match.is_draw %}Result{% else %}Winner{% endif %}: <strong>{{ match.winner_name }}</strong>{% if match.score_display %} <span class="text-muted small">({{ match.score_display }})</span>{% endif %}
-            {% if match.is_scored %}<span class="badge text-bg-secondary">Scored</span>{% endif %}
-          {% elif match.status == "awaiting_result" %}
-            <span class="badge text-bg-info">Awaiting result</span>
-            The result has not been entered yet.
-          {% else %}
-            Predictions locked. Winner not entered yet.
-          {% endif %}
-        </div>
-        {% if match.user_pick %}
-          <div class="small">Your pick: {{ match.user_pick.choice_name }}</div>
-        {% endif %}
-      </div>
-    {% endfor %}
+<div class="closed-matches-page">
+  <div class="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center gap-2 mb-4">
+    <div>
+      <h1 class="h3 mb-1 fw-bold text-dark">Closed Matches</h1>
+      <p class="text-muted small mb-0">Finished, awaiting results, or deadline passed matches across all sports.</p>
+    </div>
+    <div class="d-inline-flex align-items-center gap-1 bg-white px-3 py-1 rounded-pill border shadow-sm small text-muted">
+      <span>🔒</span>
+      <span class="fw-semibold">Prediction Window Closed</span>
+    </div>
   </div>
-{% else %}
-  <p class="text-muted">No closed matches yet.</p>
-{% endif %}
+
+  {% if closed_matches %}
+    <div class="row g-3 mb-4">
+      {% for match in closed_matches %}
+        <div class="col-12 col-md-6">
+          <div class="card border-0 shadow-sm rounded-4 p-3 bg-white h-100">
+            <div class="d-flex justify-content-between align-items-center mb-2">
+              <span class="badge bg-light text-secondary border rounded-pill px-2 py-1 small">
+                {{ match.sport }}
+              </span>
+              {% if match.status == "cancelled" %}
+                <span class="badge bg-danger rounded-pill px-2 py-1 small">Cancelled</span>
+              {% elif match.has_result %}
+                <span class="badge bg-dark rounded-pill px-2 py-1 small">Finished</span>
+              {% elif match.status == "awaiting_result" %}
+                <span class="badge bg-info-subtle text-info-emphasis border border-info-subtle rounded-pill px-2 py-1 small">Awaiting result</span>
+              {% else %}
+                <span class="badge bg-secondary-subtle text-secondary border rounded-pill px-2 py-1 small">Locked</span>
+              {% endif %}
+            </div>
+
+            <div class="fw-bold mb-1">
+              <a href="{% url 'match_detail' match.pk %}" class="match-title-link">
+                {% team_flag match.team_a %}{{ match.team_a }} vs {% team_flag match.team_b %}{{ match.team_b }}
+              </a>
+              {% if match.score_display %}
+                <span class="text-success small ms-1">({{ match.score_display }})</span>
+              {% endif %}
+            </div>
+
+            {% if match.event_name %}
+              <div class="small text-muted">{{ match.event_name }}</div>
+            {% endif %}
+
+            <div class="small text-muted mb-2">
+              Kickoff: {{ match.start_time|date:"N j, Y, P T" }}
+            </div>
+
+            <div class="p-2 rounded-3 bg-light-subtle border small mt-auto">
+              {% if match.status == "cancelled" %}
+                <span class="text-muted">Cancelled — no points awarded.</span>
+              {% elif match.has_result %}
+                <div class="d-flex justify-content-between align-items-center">
+                  <span>{% if match.is_draw %}Result{% else %}Winner{% endif %}: <strong class="text-dark">{{ match.winner_name }}</strong></span>
+                  {% if match.is_scored %}<span class="badge bg-success-subtle text-success border border-success-subtle rounded-pill">Scored</span>{% endif %}
+                </div>
+              {% elif match.status == "awaiting_result" %}
+                <span class="text-muted">Awaiting official verified outcome.</span>
+              {% else %}
+                <span class="text-muted">Predictions locked. Winner not entered yet.</span>
+              {% endif %}
+
+              {% if match.user_pick %}
+                <div class="mt-1 pt-1 border-top d-flex justify-content-between align-items-center">
+                  <span class="text-muted">Your pick:</span>
+                  <strong class="text-dark">{{ match.user_pick.choice_name }}</strong>
+                </div>
+              {% endif %}
+            </div>
+          </div>
+        </div>
+      {% endfor %}
+    </div>
+  {% else %}
+    <div class="card border-0 shadow-sm rounded-4 p-5 text-center bg-white my-3">
+      <div class="fs-1 mb-2">🏟️</div>
+      <h3 class="h5 fw-bold text-dark">No closed matches yet</h3>
+      <p class="text-muted small mb-0">Closed and finished matches will appear here once kickoff deadlines pass.</p>
+    </div>
+  {% endif %}
+</div>
 {% endblock %}

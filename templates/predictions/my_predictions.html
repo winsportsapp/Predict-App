@@ -1,112 +1,300 @@
 {% extends "base.html" %}
 {% load prediction_extras %}
-{% block title %}My Predictions{% endblock %}
+{% block title %}My Picks{% endblock %}
 {% block content %}
-<h1 class="h3 mb-2">My Predictions</h1>
-<p class="text-muted">Your picks. Points shown once the result is entered: correct +10, incorrect −5.</p>
-
-<h2 class="h5 mt-4">Pending</h2>
-{% if pending %}
-  <div class="table-responsive mb-4">
-    <table class="table bg-white align-middle">
-      <thead>
-        <tr>
-          <th scope="col">Match</th>
-          <th scope="col">Your pick</th>
-          <th scope="col">Kickoff</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for p in pending %}
-          <tr>
-            <td>
-              {% team_flag p.match.team_a %}{{ p.match.team_a }} vs {% team_flag p.match.team_b %}{{ p.match.team_b }}
-              {% if p.match.status == "awaiting_result" %}
-                <span class="badge text-bg-info">Awaiting result</span>
-              {% endif %}
-            </td>
-            <td>{{ p.choice_name }}</td>
-            <td class="small text-muted">{{ p.match.start_time|date:"N j, Y, P T" }}</td>
-          </tr>
-        {% endfor %}
-      </tbody>
-    </table>
+<div class="my-picks-page">
+  <!-- Header -->
+  <div class="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center gap-2 mb-4">
+    <div>
+      <div class="d-flex align-items-center gap-2">
+        <h1 class="h3 mb-0 fw-bold text-dark">My Picks</h1>
+        <span class="badge rounded-pill bg-success-subtle text-success border border-success-subtle px-2 py-1 small">
+          History
+        </span>
+      </div>
+      <p class="text-muted small mb-0 mt-1">Your active and settled match picks. Scored on official results.</p>
+    </div>
+    <div class="d-inline-flex align-items-center gap-2 bg-white px-3 py-2 rounded-pill border shadow-sm small text-secondary">
+      <span>🎯</span>
+      <span class="fw-semibold">Win: +10 pts · Miss: −5 pts</span>
+    </div>
   </div>
-{% else %}
-  <p class="text-muted">No pending predictions. Go to <a href="{% url 'match_list' %}">Matches</a> to make one.</p>
-{% endif %}
 
-<h2 class="h5 mt-4">Decided</h2>
-{% if decided %}
-  <div class="table-responsive">
-    <table class="table table-striped bg-white align-middle decided-table">
-      <thead>
-        <tr>
-          <th scope="col">Match</th>
-          <th scope="col">Kickoff Date</th>
-          <th scope="col">Your pick</th>
-          <th scope="col">Result</th>
-          <th scope="col">Outcome</th>
-          <th scope="col">Points</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for p in decided %}
-          <tr>
-            <td><div class="cell-wrap">{% team_flag p.match.team_a %}{{ p.match.team_a }} vs {% team_flag p.match.team_b %}{{ p.match.team_b }}</div></td>
-            <td class="text-nowrap">{{ p.match.start_time|date:"N j, Y" }}</td>
-            <td><div class="cell-wrap">{{ p.choice_name }}</div></td>
-            <td>
-              <div class="cell-wrap">
-                {{ p.match.winner_name }}
-                {% if p.match.score_display %}
-                  <span class="text-muted small ms-1">({{ p.match.score_display }})</span>
-                {% endif %}
+  <!-- Filter Tabs (APK Style) -->
+  <ul class="nav nav-pills gap-2 mb-4" id="picksTab" role="tablist">
+    <li class="nav-item" role="presentation">
+      <button class="nav-link active rounded-pill px-3 py-2 fw-semibold small" id="all-tab" data-bs-toggle="pill" data-bs-target="#tab-all" type="button" role="tab" aria-selected="true">
+        All Picks
+      </button>
+    </li>
+    <li class="nav-item" role="presentation">
+      <button class="nav-link rounded-pill px-3 py-2 fw-semibold small" id="pending-tab" data-bs-toggle="pill" data-bs-target="#tab-pending" type="button" role="tab" aria-selected="false">
+        Pending ({{ pending|length }})
+      </button>
+    </li>
+    <li class="nav-item" role="presentation">
+      <button class="nav-link rounded-pill px-3 py-2 fw-semibold small" id="settled-tab" data-bs-toggle="pill" data-bs-target="#tab-settled" type="button" role="tab" aria-selected="false">
+        Settled ({{ decided|length }})
+      </button>
+    </li>
+    {% if cancelled %}
+      <li class="nav-item" role="presentation">
+        <button class="nav-link rounded-pill px-3 py-2 fw-semibold small" id="cancelled-tab" data-bs-toggle="pill" data-bs-target="#tab-cancelled" type="button" role="tab" aria-selected="false">
+          Cancelled ({{ cancelled|length }})
+        </button>
+      </li>
+    {% endif %}
+  </ul>
+
+  <!-- Tab Content -->
+  <div class="tab-content" id="picksTabContent">
+    <!-- TAB 1: ALL PICKS -->
+    <div class="tab-pane fade show active" id="tab-all" role="tabpanel" aria-labelledby="all-tab">
+      <!-- Pending Section inside All -->
+      {% if pending %}
+        <div class="d-flex align-items-center gap-2 mb-3">
+          <span class="badge bg-warning text-dark rounded-pill px-2 py-1">Pending</span>
+          <h2 class="h5 mb-0 fw-bold text-dark">Active Predictions</h2>
+        </div>
+        <div class="row g-3 mb-4">
+          {% for p in pending %}
+            <div class="col-12 col-md-6">
+              <div class="card border-0 shadow-sm rounded-4 p-3 bg-white h-100 pick-history-card">
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                  <span class="badge bg-light text-secondary border rounded-pill px-2 py-1 small">
+                    {{ p.match.sport.name }}
+                  </span>
+                  {% if p.match.status == "awaiting_result" %}
+                    <span class="badge bg-info-subtle text-info-emphasis border border-info-subtle rounded-pill px-2 py-1 small">
+                      🔄 Awaiting result
+                    </span>
+                  {% else %}
+                    <span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle rounded-pill px-2 py-1 small">
+                      ⏳ Pending
+                    </span>
+                  {% endif %}
+                </div>
+                <div class="fw-bold mb-1">
+                  {% team_flag p.match.team_a %}{{ p.match.team_a }} vs {% team_flag p.match.team_b %}{{ p.match.team_b }}
+                </div>
+                <div class="small text-muted mb-2">
+                  Kickoff: {{ p.match.start_time|date:"N j, Y, P T" }}
+                </div>
+                <div class="p-2 rounded-3 bg-light-subtle border small d-flex justify-content-between align-items-center mt-auto">
+                  <span class="text-muted">Your Pick:</span>
+                  <span class="fw-bold text-dark">{{ p.choice_name }}</span>
+                </div>
               </div>
-            </td>
-            <td>
-              {% if p.is_correct %}
-                <span class="badge text-bg-success">Hit</span>
-              {% else %}
-                <span class="badge text-bg-danger">Miss</span>
-              {% endif %}
-            </td>
-            <td>
-              {% if p.points_earned > 0 %}+{{ p.points_earned }}{% else %}{{ p.points_earned }}{% endif %}
-            </td>
-          </tr>
-        {% endfor %}
-      </tbody>
-    </table>
-  </div>
-{% else %}
-  <p class="text-muted">No decided predictions yet.</p>
-{% endif %}
+            </div>
+          {% endfor %}
+        </div>
+      {% endif %}
 
-{% if cancelled %}
-  <h2 class="h5 mt-4">Cancelled</h2>
-  <p class="text-muted">These matches were cancelled. No points were awarded.</p>
-  <div class="table-responsive">
-    <table class="table bg-white align-middle">
-      <thead>
-        <tr>
-          <th scope="col">Match</th>
-          <th scope="col">Your pick</th>
-          <th scope="col">Status</th>
-          <th scope="col">Points</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for p in cancelled %}
-          <tr>
-            <td>{% team_flag p.match.team_a %}{{ p.match.team_a }} vs {% team_flag p.match.team_b %}{{ p.match.team_b }}</td>
-            <td>{{ p.choice_name }}</td>
-            <td><span class="badge text-bg-secondary">Cancelled</span></td>
-            <td>0</td>
-          </tr>
-        {% endfor %}
-      </tbody>
-    </table>
+      <!-- Decided Section inside All -->
+      {% if decided %}
+        <div class="d-flex align-items-center gap-2 mb-3">
+          <span class="badge bg-success text-white rounded-pill px-2 py-1">Settled</span>
+          <h2 class="h5 mb-0 fw-bold text-dark">Settled Predictions</h2>
+        </div>
+        <div class="row g-3 mb-4">
+          {% for p in decided %}
+            <div class="col-12 col-md-6">
+              <div class="card border-0 shadow-sm rounded-4 p-3 bg-white h-100 pick-history-card">
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                  <span class="badge bg-light text-secondary border rounded-pill px-2 py-1 small">
+                    {{ p.match.sport.name }}
+                  </span>
+                  {% if p.is_correct %}
+                    <span class="badge bg-success text-white rounded-pill px-2 py-1 small fw-bold">
+                      ✓ WON (+{{ p.points_earned }} pts)
+                    </span>
+                  {% else %}
+                    <span class="badge bg-danger text-white rounded-pill px-2 py-1 small fw-bold">
+                      ✗ LOST ({{ p.points_earned }} pts)
+                    </span>
+                  {% endif %}
+                </div>
+                <div class="fw-bold mb-1">
+                  {% team_flag p.match.team_a %}{{ p.match.team_a }} vs {% team_flag p.match.team_b %}{{ p.match.team_b }}
+                  {% if p.match.score_display %}
+                    <span class="text-success small ms-1">({{ p.match.score_display }})</span>
+                  {% endif %}
+                </div>
+                <div class="small text-muted mb-2">
+                  Date: {{ p.match.start_time|date:"N j, Y" }} · Winner: <strong class="text-dark">{{ p.match.winner_name }}</strong>
+                </div>
+                <div class="p-2 rounded-3 bg-light-subtle border small d-flex justify-content-between align-items-center mt-auto">
+                  <span class="text-muted">Your Pick: <strong class="text-dark">{{ p.choice_name }}</strong></span>
+                  <span class="fw-bold {% if p.points_earned > 0 %}text-success{% else %}text-danger{% endif %}">
+                    {% if p.points_earned > 0 %}+{{ p.points_earned }}{% else %}{{ p.points_earned }}{% endif %} pts
+                  </span>
+                </div>
+              </div>
+            </div>
+          {% endfor %}
+        </div>
+      {% endif %}
+
+      {% if not pending and not decided and not cancelled %}
+        <div class="card border-0 shadow-sm rounded-4 p-5 text-center bg-white my-3">
+          <div class="fs-1 mb-2">✨</div>
+          <h3 class="h5 fw-bold text-dark">No predictions made yet</h3>
+          <p class="text-muted small mb-3">Head over to the Matches arena to submit your first free picks.</p>
+          <div>
+            <a href="{% url 'match_list' %}" class="btn btn-success btn-sm rounded-pill px-4">Browse Matches</a>
+          </div>
+        </div>
+      {% endif %}
+    </div>
+
+    <!-- TAB 2: PENDING ONLY -->
+    <div class="tab-pane fade" id="tab-pending" role="tabpanel" aria-labelledby="pending-tab">
+      {% if pending %}
+        <div class="row g-3">
+          {% for p in pending %}
+            <div class="col-12 col-md-6">
+              <div class="card border-0 shadow-sm rounded-4 p-3 bg-white h-100 pick-history-card">
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                  <span class="badge bg-light text-secondary border rounded-pill px-2 py-1 small">
+                    {{ p.match.sport.name }}
+                  </span>
+                  {% if p.match.status == "awaiting_result" %}
+                    <span class="badge bg-info-subtle text-info-emphasis border border-info-subtle rounded-pill px-2 py-1 small">
+                      🔄 Awaiting result
+                    </span>
+                  {% else %}
+                    <span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle rounded-pill px-2 py-1 small">
+                      ⏳ Pending
+                    </span>
+                  {% endif %}
+                </div>
+                <div class="fw-bold mb-1">
+                  {% team_flag p.match.team_a %}{{ p.match.team_a }} vs {% team_flag p.match.team_b %}{{ p.match.team_b }}
+                </div>
+                <div class="small text-muted mb-2">
+                  Kickoff: {{ p.match.start_time|date:"N j, Y, P T" }}
+                </div>
+                <div class="p-2 rounded-3 bg-light-subtle border small d-flex justify-content-between align-items-center mt-auto">
+                  <span class="text-muted">Your Pick:</span>
+                  <span class="fw-bold text-dark">{{ p.choice_name }}</span>
+                </div>
+              </div>
+            </div>
+          {% endfor %}
+        </div>
+      {% else %}
+        <div class="card border-0 shadow-sm rounded-4 p-5 text-center bg-white my-3">
+          <div class="fs-1 mb-2">⏱️</div>
+          <h3 class="h5 fw-bold text-dark">No pending predictions</h3>
+          <p class="text-muted small mb-3">All your submitted picks have been settled. Make new picks today!</p>
+          <div>
+            <a href="{% url 'match_list' %}" class="btn btn-success btn-sm rounded-pill px-4">See Matches</a>
+          </div>
+        </div>
+      {% endif %}
+    </div>
+
+    <!-- TAB 3: SETTLED ONLY -->
+    <div class="tab-pane fade" id="tab-settled" role="tabpanel" aria-labelledby="settled-tab">
+      {% if decided %}
+        <div class="row g-3">
+          {% for p in decided %}
+            <div class="col-12 col-md-6">
+              <div class="card border-0 shadow-sm rounded-4 p-3 bg-white h-100 pick-history-card">
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                  <span class="badge bg-light text-secondary border rounded-pill px-2 py-1 small">
+                    {{ p.match.sport.name }}
+                  </span>
+                  {% if p.is_correct %}
+                    <span class="badge bg-success text-white rounded-pill px-2 py-1 small fw-bold">
+                      ✓ WON (+{{ p.points_earned }} pts)
+                    </span>
+                  {% else %}
+                    <span class="badge bg-danger text-white rounded-pill px-2 py-1 small fw-bold">
+                      ✗ LOST ({{ p.points_earned }} pts)
+                    </span>
+                  {% endif %}
+                </div>
+                <div class="fw-bold mb-1">
+                  {% team_flag p.match.team_a %}{{ p.match.team_a }} vs {% team_flag p.match.team_b %}{{ p.match.team_b }}
+                  {% if p.match.score_display %}
+                    <span class="text-success small ms-1">({{ p.match.score_display }})</span>
+                  {% endif %}
+                </div>
+                <div class="small text-muted mb-2">
+                  Date: {{ p.match.start_time|date:"N j, Y" }} · Winner: <strong class="text-dark">{{ p.match.winner_name }}</strong>
+                </div>
+                <div class="p-2 rounded-3 bg-light-subtle border small d-flex justify-content-between align-items-center mt-auto">
+                  <span class="text-muted">Your Pick: <strong class="text-dark">{{ p.choice_name }}</strong></span>
+                  <span class="fw-bold {% if p.points_earned > 0 %}text-success{% else %}text-danger{% endif %}">
+                    {% if p.points_earned > 0 %}+{{ p.points_earned }}{% else %}{{ p.points_earned }}{% endif %} pts
+                  </span>
+                </div>
+              </div>
+            </div>
+          {% endfor %}
+        </div>
+      {% else %}
+        <div class="card border-0 shadow-sm rounded-4 p-5 text-center bg-white my-3">
+          <div class="fs-1 mb-2">📊</div>
+          <h3 class="h5 fw-bold text-dark">No settled predictions yet</h3>
+          <p class="text-muted small mb-0">Matches are scored automatically once official match outcomes are verified.</p>
+        </div>
+      {% endif %}
+    </div>
+
+    <!-- TAB 4: CANCELLED -->
+    {% if cancelled %}
+      <div class="tab-pane fade" id="tab-cancelled" role="tabpanel" aria-labelledby="cancelled-tab">
+        <div class="row g-3">
+          {% for p in cancelled %}
+            <div class="col-12 col-md-6">
+              <div class="card border-0 shadow-sm rounded-4 p-3 bg-white h-100 pick-history-card">
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                  <span class="badge bg-light text-secondary border rounded-pill px-2 py-1 small">
+                    {{ p.match.sport.name }}
+                  </span>
+                  <span class="badge bg-secondary text-white rounded-pill px-2 py-1 small">
+                    Cancelled (0 pts)
+                  </span>
+                </div>
+                <div class="fw-bold mb-1">
+                  {% team_flag p.match.team_a %}{{ p.match.team_a }} vs {% team_flag p.match.team_b %}{{ p.match.team_b }}
+                </div>
+                <div class="small text-muted mb-2">
+                  Kickoff: {{ p.match.start_time|date:"N j, Y" }}
+                </div>
+                <div class="p-2 rounded-3 bg-light-subtle border small d-flex justify-content-between align-items-center mt-auto">
+                  <span class="text-muted">Your Pick:</span>
+                  <span class="fw-bold text-dark">{{ p.choice_name }}</span>
+                </div>
+              </div>
+            </div>
+          {% endfor %}
+        </div>
+      </div>
+    {% endif %}
   </div>
-{% endif %}
+</div>
+
+<style>
+  .pick-history-card {
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
+  }
+  .pick-history-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 16px rgba(0, 0, 0, 0.05) !important;
+  }
+  #picksTab .nav-link {
+    color: #475569;
+    background-color: #ffffff;
+    border: 1px solid #e2e8f0;
+  }
+  #picksTab .nav-link.active {
+    background-color: #0B3D2E !important;
+    color: #ffffff !important;
+    border-color: #0B3D2E !important;
+    box-shadow: 0 2px 6px rgba(11, 61, 46, 0.25);
+  }
+</style>
 {% endblock %}

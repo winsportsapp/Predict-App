@@ -13,6 +13,7 @@ urlpatterns = [
     path("predictions/mine/", views.my_predictions, name="my_predictions"),
     path("account/", views.my_account, name="my_account"),
     path("account/redeem/", views.redeem_credits_view, name="redeem_credits"),
+    path("analytics/", views.analytics_view, name="analytics"),
     path("leaderboard/", views.leaderboard, name="leaderboard"),
     # Old separate pages now live on the combined page; keep the URLs alive.
     path(
