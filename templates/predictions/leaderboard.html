@@ -22,7 +22,7 @@
         <noscript><button type="submit" class="btn btn-sm btn-outline-secondary">Go</button></noscript>
       </form>
     </div>
-    <p class="small text-muted mb-2">Minimum of 100 Counts (Predictions) required along with the higher points to be eligible for Medals</p>
+    <p class="small text-muted mb-2">Minimum of 200 Counts (Predictions) required along with the higher points to be eligible for Medals</p>
     <p class="small text-muted mb-2">
       Rankings are based only on prediction points. Referral credits do not affect points or rankings.
       <a href="{% url 'how_it_works' %}" class="link-secondary">How it works</a>
@@ -45,7 +45,7 @@
   <section class="col-12 col-lg-6" id="leaderboard-all-time" aria-labelledby="lb-all-time-heading">
     <h2 class="h3 mb-3">Leaderboard</h2>
     <h2 class="h5 mb-2" id="lb-all-time-heading">All-Time</h2>
-    <p class="small text-muted mb-2">Minimum of 100 Counts (Predictions) required along with the higher points to be eligible for Medals</p>
+    <p class="small text-muted mb-2">Minimum of 200 Counts (Predictions) required along with the higher points to be eligible for Medals</p>
     {% include "predictions/_leaderboard_table.html" with profiles=all_time_profiles is_monthly=False %}
   </section>
 </div>

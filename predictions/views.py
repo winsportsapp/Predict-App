@@ -388,7 +388,7 @@ def _monthly_profiles(year, month):
     return profiles
 
 
-MEDAL_MIN_PREDICTIONS = 100
+MEDAL_MIN_PREDICTIONS = 200
 MEDAL_ELIGIBILITY_FIRST_MONTH = (2026, 9)  # past months before this keep rank-only winners
 _MEDALS = ("gold", "silver", "bronze")
 
@@ -404,12 +404,21 @@ def _assign_medals_by_rank(profiles):
 def _assign_medals_by_eligibility(profiles, minimum, count_attr="monthly_predictions_count"):
     """Top 3 by position *among those with >= minimum predictions on this
     board* (read from `count_attr`) get gold/silver/bronze; a higher-ranked
-    but ineligible player is skipped, not just left medal-less in their slot."""
+    but ineligible player is skipped, not just left medal-less in their slot.
+
+    Medal winners are placed at the top (ranks 1, 2, 3), followed by all
+    remaining players in their original points-descending order.
+    """
     for profile in profiles:
         profile.medal = None
-    eligible = (p for p in profiles if getattr(p, count_attr) >= minimum)
+    eligible = [p for p in profiles if getattr(p, count_attr) >= minimum]
     for medal, profile in zip(_MEDALS, eligible):
         profile.medal = medal
+
+    medal_winners = [p for p in profiles if p.medal is not None]
+    non_medalists = [p for p in profiles if p.medal is None]
+    profiles[:] = medal_winners + non_medalists
+    return profiles
 
 
 def leaderboard(request):
@@ -430,7 +439,7 @@ def leaderboard(request):
 
     # Medals on both boards always need the prediction floor.
     all_time_profiles = list(_all_time_profiles())
-    _assign_medals_by_eligibility(
+    all_time_profiles = _assign_medals_by_eligibility(
         all_time_profiles, MEDAL_MIN_PREDICTIONS, count_attr="predictions_count"
     )
 
@@ -448,7 +457,9 @@ def leaderboard(request):
         monthly_profiles = winners[:3]
         _assign_medals_by_rank(monthly_profiles)
     else:
-        _assign_medals_by_eligibility(monthly_profiles, MEDAL_MIN_PREDICTIONS)
+        monthly_profiles = _assign_medals_by_eligibility(
+            monthly_profiles, MEDAL_MIN_PREDICTIONS
+        )
 
     months_with_activity = {
         (m.year, m.month)
