@@ -92,7 +92,7 @@
                               class="btn w-100 pick-btn {% if match.user_pick.choice == 'A' %}pick-btn-selected{% else %}pick-btn-unselected{% endif %} shadow-sm">
                         <div class="pick-team-name mb-1">{% team_flag match.team_a %}{{ match.team_a }}</div>
                         <div class="pick-points-line">If Win get: <strong{% if match.team_a_win_points < 0 %} class="pts-negative"{% endif %}>{{ match.team_a_win_points|signed_points }}</strong></div>
-                        <div class="pick-points-line">{% if match.allows_draw %}If Lose/Draw get{% else %}If Lose get{% endif %}: <strong{% if match.team_a_lose_points < 0 %} class="pts-negative"{% endif %}>{{ match.team_a_lose_points|signed_points }}</strong></div>
+                        <div class="pick-points-line">{% if match.allows_draw %}{% if match.sport.name == 'Football' or sport_slug == 'football' %}If not get{% else %}If Lose/Draw get{% endif %}{% else %}If Lose get{% endif %}: <strong{% if match.team_a_lose_points < 0 %} class="pts-negative"{% endif %}>{{ match.team_a_lose_points|signed_points }}</strong></div>
                         {% if match.user_pick.choice == 'A' %}
                           <div class="small mt-1"><span class="badge text-bg-success">Predicted</span></div>
                         {% endif %}
@@ -102,7 +102,7 @@
                     <div class="border rounded-3 p-2 h-100 bg-light-subtle">
                       <div class="pick-team-name mb-1">{% team_flag match.team_a %}{{ match.team_a }}</div>
                       <div class="pick-points-line text-muted">If Win get: <strong>{{ match.team_a_win_points|signed_points }}</strong></div>
-                      <div class="pick-points-line text-muted">{% if match.allows_draw %}If Lose/Draw get{% else %}If Lose get{% endif %}: <strong>{{ match.team_a_lose_points|signed_points }}</strong></div>
+                      <div class="pick-points-line text-muted">{% if match.allows_draw %}{% if match.sport.name == 'Football' or sport_slug == 'football' %}If not get{% else %}If Lose/Draw get{% endif %}{% else %}If Lose get{% endif %}: <strong>{{ match.team_a_lose_points|signed_points }}</strong></div>
                     </div>
                   {% endif %}
                 </div>
@@ -117,8 +117,8 @@
                         <button type="submit"
                                 class="btn w-100 pick-btn {% if match.user_pick.choice == 'D' %}pick-btn-selected{% else %}pick-btn-unselected{% endif %} shadow-sm">
                           <div class="pick-team-name mb-1">Draw</div>
-                          <div class="pick-points-line">If Win get: <strong{% if match.draw_win_points < 0 %} class="pts-negative"{% endif %}>{{ match.draw_win_points|signed_points }}</strong></div>
-                          <div class="pick-points-line">If Lose: <strong{% if match.draw_lose_points < 0 %} class="pts-negative"{% endif %}>{{ match.draw_lose_points|signed_points }}</strong></div>
+                          <div class="pick-points-line">{% if match.sport.name == 'Football' or sport_slug == 'football' %}If Draw get{% else %}If Win get{% endif %}: <strong{% if match.draw_win_points < 0 %} class="pts-negative"{% endif %}>{{ match.draw_win_points|signed_points }}</strong></div>
+                          <div class="pick-points-line">{% if match.sport.name == 'Football' or sport_slug == 'football' %}If not{% else %}If Lose{% endif %}: <strong{% if match.draw_lose_points < 0 %} class="pts-negative"{% endif %}>{{ match.draw_lose_points|signed_points }}</strong></div>
                           {% if match.user_pick.choice == 'D' %}
                             <div class="small mt-1"><span class="badge text-bg-success">Predicted</span></div>
                           {% endif %}
@@ -127,8 +127,8 @@
                     {% else %}
                       <div class="border rounded-3 p-2 h-100 bg-light-subtle">
                         <div class="pick-team-name mb-1">Draw</div>
-                        <div class="pick-points-line text-muted">If Win get: <strong>{{ match.draw_win_points|signed_points }}</strong></div>
-                        <div class="pick-points-line text-muted">If Lose: <strong>{{ match.draw_lose_points|signed_points }}</strong></div>
+                        <div class="pick-points-line text-muted">{% if match.sport.name == 'Football' or sport_slug == 'football' %}If Draw get{% else %}If Win get{% endif %}: <strong>{{ match.draw_win_points|signed_points }}</strong></div>
+                        <div class="pick-points-line text-muted">{% if match.sport.name == 'Football' or sport_slug == 'football' %}If not{% else %}If Lose{% endif %}: <strong>{{ match.draw_lose_points|signed_points }}</strong></div>
                       </div>
                     {% endif %}
                   </div>
@@ -144,7 +144,7 @@
                               class="btn w-100 pick-btn {% if match.user_pick.choice == 'B' %}pick-btn-selected{% else %}pick-btn-unselected{% endif %} shadow-sm">
                         <div class="pick-team-name mb-1">{% team_flag match.team_b %}{{ match.team_b }}</div>
                         <div class="pick-points-line">If Win get: <strong{% if match.team_b_win_points < 0 %} class="pts-negative"{% endif %}>{{ match.team_b_win_points|signed_points }}</strong></div>
-                        <div class="pick-points-line">{% if match.allows_draw %}If Lose/Draw get{% else %}If Lose get{% endif %}: <strong{% if match.team_b_lose_points < 0 %} class="pts-negative"{% endif %}>{{ match.team_b_lose_points|signed_points }}</strong></div>
+                        <div class="pick-points-line">{% if match.allows_draw %}{% if match.sport.name == 'Football' or sport_slug == 'football' %}If not get{% else %}If Lose/Draw get{% endif %}{% else %}If Lose get{% endif %}: <strong{% if match.team_b_lose_points < 0 %} class="pts-negative"{% endif %}>{{ match.team_b_lose_points|signed_points }}</strong></div>
                         {% if match.user_pick.choice == 'B' %}
                           <div class="small mt-1"><span class="badge text-bg-success">Predicted</span></div>
                         {% endif %}
@@ -154,7 +154,7 @@
                     <div class="border rounded-3 p-2 h-100 bg-light-subtle">
                       <div class="pick-team-name mb-1">{% team_flag match.team_b %}{{ match.team_b }}</div>
                       <div class="pick-points-line text-muted">If Win get: <strong>{{ match.team_b_win_points|signed_points }}</strong></div>
-                      <div class="pick-points-line text-muted">{% if match.allows_draw %}If Lose/Draw get{% else %}If Lose get{% endif %}: <strong>{{ match.team_b_lose_points|signed_points }}</strong></div>
+                      <div class="pick-points-line text-muted">{% if match.allows_draw %}{% if match.sport.name == 'Football' or sport_slug == 'football' %}If not get{% else %}If Lose/Draw get{% endif %}{% else %}If Lose get{% endif %}: <strong>{{ match.team_b_lose_points|signed_points }}</strong></div>
                     </div>
                   {% endif %}
                 </div>

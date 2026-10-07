@@ -3,14 +3,21 @@
 {% block content %}
 <div class="my-account-page">
   <!-- Page Header -->
-  <div class="d-flex justify-content-between align-items-center mb-4">
+  <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-4">
     <div>
       <h1 class="h3 mb-0 fw-bold text-dark">My Account</h1>
       <p class="text-muted small mb-0 mt-1">Manage your stats, referral link, credits, and profile location.</p>
     </div>
-    {% if user.has_usable_password %}
-      <a class="btn btn-outline-secondary btn-sm rounded-pill px-3" href="{% url 'password_change' %}">Change password</a>
-    {% endif %}
+    <div class="d-flex align-items-center gap-2">
+      {% if user.has_usable_password %}
+        <a class="btn btn-outline-secondary btn-sm rounded-pill px-3" href="{% url 'password_change' %}">Change password</a>
+      {% endif %}
+      <form method="post" action="{% url 'logout' %}" class="d-inline m-0">
+        {% csrf_token %}
+        <input type="hidden" name="push_endpoint" value="" data-push-endpoint>
+        <button type="submit" class="btn btn-outline-danger btn-sm rounded-pill px-3">Log out</button>
+      </form>
+    </div>
   </div>
 
   <!-- Performance Overview Cards -->

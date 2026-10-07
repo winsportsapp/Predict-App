@@ -28,7 +28,7 @@
         {% for p in pending %}
           <div class="card border-0 shadow-sm rounded-4 p-3 bg-white mb-3 pick-feed-card">
             <!-- Top Row: Teams & Status Badge -->
-            <div class="d-flex justify-content-between align-items-start gap-2 mb-2">
+            <div class="d-flex justify-content-between align-items-start gap-2 mb-1">
               <div class="fw-bold text-dark fs-6">
                 {% team_flag p.match.team_a %}{{ p.match.team_a }} vs {% team_flag p.match.team_b %}{{ p.match.team_b }}
               </div>
@@ -45,7 +45,12 @@
               </div>
             </div>
 
-            <!-- Second Row: Selection & Potential -->
+            <!-- Kickoff Date -->
+            <div class="small text-muted mb-2">
+              Kickoff Date: {{ p.match.start_time|date:"N j, Y, P T" }}
+            </div>
+
+            <!-- Selection & Potential -->
             <div class="d-flex justify-content-between align-items-center small mb-1">
               <div>
                 <span class="text-muted">Your Selection:</span>
@@ -54,11 +59,6 @@
               <div class="text-muted">
                 Potential: <strong class="text-success">+{{ p.match.team_a_win_points }}</strong> / <strong class="text-danger">{{ p.match.team_a_lose_points }}</strong> pts
               </div>
-            </div>
-
-            <!-- Third Row: Kickoff Date -->
-            <div class="small text-muted mb-1">
-              Kickoff Date: {{ p.match.start_time|date:"N j, Y, P T" }}
             </div>
           </div>
         {% endfor %}
@@ -84,7 +84,7 @@
         {% for p in decided %}
           <div class="card border-0 shadow-sm rounded-4 p-3 bg-white mb-3 pick-feed-card">
             <!-- Top Row: Teams & WON / LOST Badge -->
-            <div class="d-flex justify-content-between align-items-start gap-2 mb-2">
+            <div class="d-flex justify-content-between align-items-start gap-2 mb-1">
               <div class="fw-bold text-dark fs-6">
                 {% team_flag p.match.team_a %}{{ p.match.team_a }} vs {% team_flag p.match.team_b %}{{ p.match.team_b }}
               </div>
@@ -101,7 +101,12 @@
               </div>
             </div>
 
-            <!-- Second Row: Selection & Official Result -->
+            <!-- Kickoff Date -->
+            <div class="small text-muted mb-2">
+              Kickoff Date: {{ p.match.start_time|date:"N j, Y" }}
+            </div>
+
+            <!-- Selection & Official Result -->
             <div class="d-flex justify-content-between align-items-center small mb-1">
               <div>
                 <span class="text-muted">Your Selection:</span>
@@ -113,11 +118,6 @@
                   <span class="text-muted">({{ p.match.score_display }})</span>
                 {% endif %}
               </div>
-            </div>
-
-            <!-- Third Row: Kickoff Date -->
-            <div class="small text-muted mb-1">
-              Kickoff Date: {{ p.match.start_time|date:"N j, Y" }}
             </div>
           </div>
         {% endfor %}
@@ -142,7 +142,7 @@
         {% for p in cancelled %}
           <div class="card border-0 shadow-sm rounded-4 p-3 bg-white mb-3 pick-feed-card">
             <!-- Top Row: Teams & Cancelled Badge -->
-            <div class="d-flex justify-content-between align-items-start gap-2 mb-2">
+            <div class="d-flex justify-content-between align-items-start gap-2 mb-1">
               <div class="fw-bold text-dark fs-6">
                 {% team_flag p.match.team_a %}{{ p.match.team_a }} vs {% team_flag p.match.team_b %}{{ p.match.team_b }}
               </div>
@@ -153,7 +153,12 @@
               </div>
             </div>
 
-            <!-- Second Row: Selection & Zero Points -->
+            <!-- Kickoff Date -->
+            <div class="small text-muted mb-2">
+              Kickoff Date: {{ p.match.start_time|date:"N j, Y, P T" }}
+            </div>
+
+            <!-- Selection & Zero Points -->
             <div class="d-flex justify-content-between align-items-center small mb-1">
               <div>
                 <span class="text-muted">Your Selection:</span>
@@ -162,11 +167,6 @@
               <div class="text-muted">
                 Points: <strong class="text-dark">0</strong>
               </div>
-            </div>
-
-            <!-- Third Row: Kickoff Date -->
-            <div class="small text-muted mb-1">
-              Kickoff Date: {{ p.match.start_time|date:"N j, Y, P T" }}
             </div>
           </div>
         {% endfor %}

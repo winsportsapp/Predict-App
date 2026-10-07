@@ -892,9 +892,23 @@ def analytics_view(request):
         total_decided = len(decided_predictions)
         won_picks = sum(1 for p in decided_predictions if p.is_correct)
         lost_picks = sum(1 for p in decided_predictions if not p.is_correct)
+        pending_picks = total_picks - total_decided
         accuracy_pct = (
             round((won_picks / total_decided) * 100) if total_decided > 0 else 0
         )
+        won_ratio_pct = (
+            round((won_picks / total_picks) * 100) if total_picks > 0 else 0
+        )
+        lost_ratio_pct = (
+            round((lost_picks / total_picks) * 100) if total_picks > 0 else 0
+        )
+        pending_ratio_pct = (
+            max(0, 100 - won_ratio_pct - lost_ratio_pct)
+            if pending_picks > 0
+            else 0
+        )
+        gradient_won_end = won_ratio_pct
+        gradient_lost_end = won_ratio_pct + lost_ratio_pct
 
         # Win Streaks
         current_streak = 0
@@ -940,7 +954,13 @@ def analytics_view(request):
         total_decided = 0
         won_picks = 0
         lost_picks = 0
+        pending_picks = 0
         accuracy_pct = None
+        won_ratio_pct = 0
+        lost_ratio_pct = 0
+        pending_ratio_pct = 0
+        gradient_won_end = 0
+        gradient_lost_end = 0
         current_streak = 0
         best_streak = 0
         sport_stats = [
@@ -963,7 +983,13 @@ def analytics_view(request):
         "total_decided": total_decided,
         "won_picks": won_picks,
         "lost_picks": lost_picks,
+        "pending_picks": pending_picks,
         "accuracy_pct": accuracy_pct,
+        "won_ratio_pct": won_ratio_pct,
+        "lost_ratio_pct": lost_ratio_pct,
+        "pending_ratio_pct": pending_ratio_pct,
+        "gradient_won_end": gradient_won_end,
+        "gradient_lost_end": gradient_lost_end,
         "current_streak": current_streak,
         "best_streak": best_streak,
         "sport_stats": sport_stats,

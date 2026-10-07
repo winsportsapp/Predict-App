@@ -610,6 +610,39 @@ class AccountTests(TestCase):
         response = self.client.get(reverse("logout"))
         self.assertEqual(response.status_code, 405)
 
+    def test_my_account_contains_logout_and_username_in_header(self):
+        user = make_user("alice", password="StrongPass123")
+        self.client.login(username="alice", password="StrongPass123")
+        response = self.client.get(reverse("my_account"))
+        self.assertEqual(response.status_code, 200)
+        # Header has username to the left of the points pill
+        self.assertContains(response, 'class="header-username')
+        self.assertContains(response, 'alice')
+        # Page header has Log out button near Change password
+        self.assertContains(response, "Change password")
+        self.assertContains(response, "Log out")
+        self.assertContains(response, f'action="{reverse("logout")}"')
+
+    def test_my_predictions_kickoff_date_precedes_selection(self):
+        user = make_user("bob", password="StrongPass123")
+        self.client.login(username="bob", password="StrongPass123")
+        match = sport_match("Football", "Team Alpha", "Team Beta")
+        Prediction.objects.create(user=user, match=match, choice="A")
+
+        response = self.client.get(reverse("my_predictions"))
+        self.assertEqual(response.status_code, 200)
+        content = response.content.decode("utf-8")
+        self.assertIn("Kickoff Date:", content)
+        self.assertIn("Your Selection:", content)
+        kickoff_pos = content.index("Kickoff Date:")
+        selection_pos = content.index("Your Selection:")
+        self.assertLess(
+            kickoff_pos,
+            selection_pos,
+            "Kickoff Date must come before Your Selection",
+        )
+
+
 
 class TermsAndPrivacyTests(TestCase):
     def test_terms_page_renders(self):
@@ -2430,6 +2463,18 @@ class AllTimeMedalEligibilityTests(TestCase):
             content.index('id="leaderboard-monthly"'), content.index('id="leaderboard-all-time"')
         )
 
+    def test_mobile_leaderboard_has_hash_header_and_player_state_classes(self):
+        user = make_user("aarav_sharma", password="pass12345")
+        Profile.objects.filter(user=user).update(points=100, state="Maharashtra", country="India")
+        response = self.client.get(reverse("leaderboard"))
+        self.assertContains(response, '<span class="d-md-none">#</span>')
+        self.assertContains(response, '<span class="d-none d-md-inline">Rank</span>')
+        self.assertContains(response, 'class="d-md-none lb-player-name"')
+        self.assertContains(response, 'class="d-md-none lb-state-name"')
+        self.assertContains(response, 'aarav_sharma')
+        self.assertContains(response, 'Maharashtra')
+        self.assertContains(response, 'class="team-flag"')
+
 
 def sport_match(sport_name, team_a_name="Team A", team_b_name="Team B", **kwargs):
     """A future_match() pinned to one of the four seeded public sports."""
@@ -2525,7 +2570,7 @@ class SportMatchesViewTests(TestCase):
 
         self.assertContains(response, "Predicted")
         self.assertContains(response, "If Win get:")
-        self.assertContains(response, "If Lose/Draw get:")
+        self.assertContains(response, "If not get:")
 
     def test_open_match_shows_predict_the_win_label(self):
         sport_match("Cricket", "CA cta", "CB cta")
@@ -2580,7 +2625,7 @@ class SportMatchesViewTests(TestCase):
 
         self.assertNotContains(response, "<form")
         self.assertContains(response, "If Win get:")
-        self.assertContains(response, "If Lose/Draw get:")
+        self.assertContains(response, "If not get:")
 
     def test_guest_sees_login_to_predict_and_not_the_predict_link(self):
         match = sport_match("Football", "FA guest", "FB guest")
@@ -4185,18 +4230,24 @@ class AdminMenuOrderTests(TestCase):
 
 
 class LoseDrawLabelTests(TestCase):
-    """Team boxes say "If Lose/Draw get" only where a draw is possible."""
+    """Team boxes say "If not get" for Football and "If Lose/Draw get" for other draw sports."""
 
     def _page(self, sport_name):
         sport_match(sport_name, "TA", "TB")
         return self.client.get(reverse("sport_matches", args=[sport_name.lower()]))
 
     def test_draw_sports_use_lose_draw_label(self):
-        for sport_name in ("Football", "Cricket", "Hockey"):
+        for sport_name in ("Cricket", "Hockey"):
             with self.subTest(sport=sport_name):
                 response = self._page(sport_name)
                 self.assertContains(response, "If Lose/Draw get:")
                 self.assertNotContains(response, "If Lose get:")
+
+    def test_football_uses_if_not_get_label(self):
+        response = self._page("Football")
+        self.assertContains(response, "If not get:")
+        self.assertNotContains(response, "If Lose/Draw get:")
+        self.assertNotContains(response, "If Lose get:")
 
     def test_sports_without_draws_keep_lose_label(self):
         for sport_name in ("Tennis", "Badminton"):
@@ -4260,9 +4311,21 @@ class MatchTitleAndPointsMarkupTests(TestCase):
                 # Logged-in pick boxes show negative points in red.
                 neg = ' class="pts-negative"' if logged_in else ""
                 self.assertContains(response, "If Win get: <strong>+10</strong>")
-                self.assertContains(response, f"If Lose/Draw get: <strong{neg}>-5</strong>")
+                self.assertContains(response, f"If not get: <strong{neg}>-5</strong>")
                 self.assertContains(response, "If Draw get: <strong>+7</strong>")
-                self.assertContains(response, f"If Win/Lose get: <strong{neg}>-2</strong>")
+                self.assertContains(response, f"If not: <strong{neg}>-2</strong>")
+
+    def test_cricket_draw_boxes_retain_win_lose_labels(self):
+        sport_match(
+            "Cricket",
+            draw_win_points=7,
+            draw_lose_points=-2,
+        )
+        response = self.client.get(reverse("sport_matches", args=["cricket"]))
+        self.assertContains(response, "If Win get: <strong>+7</strong>")
+        self.assertContains(response, "If Lose: <strong>-2</strong>")
+        self.assertNotContains(response, "If Draw get:")
+        self.assertNotContains(response, "If not:")
 
 
 class ReferralCodeGenerationTests(TestCase):
@@ -5717,7 +5780,13 @@ class AnalyticsViewTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Performance Analytics")
         self.assertContains(response, "Accuracy by Sport Discipline")
+        self.assertContains(response, "Prediction Accuracy Ratio")
+        self.assertContains(response, "Distribution of won, lost, and currently active picks")
         self.assertEqual(response.context["total_points"], 0)
+        self.assertEqual(response.context["pending_picks"], 0)
+        self.assertEqual(response.context["won_ratio_pct"], 0)
+        self.assertEqual(response.context["lost_ratio_pct"], 0)
+        self.assertEqual(response.context["pending_ratio_pct"], 0)
 
     def test_analytics_authenticated_renders_user_stats(self):
         self.client.force_login(self.user)
@@ -5725,4 +5794,48 @@ class AnalyticsViewTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "50")
         self.assertEqual(response.context["total_points"], 50)
+
+    def test_prediction_accuracy_ratio_with_picks(self):
+        self.client.force_login(self.user)
+        # 1 won match
+        m1 = sport_match("Football", "T1", "T2")
+        m1.is_scored = True
+        m1.winner = m1.team_a
+        m1.save()
+        Prediction.objects.create(user=self.user, match=m1, choice="A")
+
+        # 1 lost match
+        m2 = sport_match("Football", "T3", "T4")
+        m2.is_scored = True
+        m2.winner = m2.team_b
+        m2.save()
+        Prediction.objects.create(user=self.user, match=m2, choice="A")
+
+        # 1 pending match (scheduled, unscored)
+        m3 = sport_match("Football", "T5", "T6")
+        Prediction.objects.create(user=self.user, match=m3, choice="A")
+
+        response = self.client.get(reverse("analytics"))
+        self.assertEqual(response.status_code, 200)
+
+        # 1 won, 1 lost, 1 pending => total 3 picks, 2 decided
+        self.assertEqual(response.context["total_picks"], 3)
+        self.assertEqual(response.context["total_decided"], 2)
+        self.assertEqual(response.context["won_picks"], 1)
+        self.assertEqual(response.context["lost_picks"], 1)
+        self.assertEqual(response.context["pending_picks"], 1)
+        self.assertEqual(response.context["accuracy_pct"], 50)
+        self.assertEqual(response.context["won_ratio_pct"], 33)
+        self.assertEqual(response.context["lost_ratio_pct"], 33)
+        self.assertEqual(response.context["pending_ratio_pct"], 34)
+
+        # HTML content
+        self.assertContains(response, "Prediction Accuracy Ratio")
+        self.assertContains(response, "50%")
+        self.assertContains(response, "Won")
+        self.assertContains(response, "Lost")
+        self.assertContains(response, "Pending")
+        self.assertContains(response, "(1)")
+        self.assertContains(response, "33%")
+        self.assertContains(response, "34%")
 

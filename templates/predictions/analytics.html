@@ -96,6 +96,46 @@
     </div>
   </div>
 
+  <!-- Prediction Accuracy Ratio Card -->
+  <div class="card border-0 shadow-sm rounded-4 bg-white mb-4 p-4">
+    <div class="mb-3">
+      <h2 class="h5 fw-bold text-dark mb-1">Prediction Accuracy Ratio</h2>
+      <p class="small text-muted mb-0">Distribution of won, lost, and currently active picks</p>
+    </div>
+
+    <div class="d-flex flex-column flex-sm-row align-items-center justify-content-start gap-4 pt-1">
+      <!-- Donut Ring Chart -->
+      <div class="accuracy-donut" style="background: {% if total_picks > 0 %}conic-gradient(#22c55e 0% {{ gradient_won_end }}%, #ef4444 {{ gradient_won_end }}% {{ gradient_lost_end }}%, #eab308 {{ gradient_lost_end }}% 100%){% else %}#e2e8f0{% endif %};">
+        <div class="accuracy-donut-hole">
+          <span class="accuracy-donut-val">{% if accuracy_pct is not None %}{{ accuracy_pct }}%{% else %}0%{% endif %}</span>
+          <span class="accuracy-donut-lbl">Accuracy</span>
+        </div>
+      </div>
+
+      <!-- Legend / Distribution Stats -->
+      <div class="accuracy-legend d-flex flex-column gap-2 ms-sm-3">
+        <div class="d-flex align-items-center gap-2">
+          <span class="legend-indicator" style="background-color: #22c55e;"></span>
+          <span class="fw-semibold text-dark">Won</span>
+          <span class="text-muted small">({{ won_picks }})</span>
+          <span class="fw-bold text-dark ms-auto ps-3">{{ won_ratio_pct }}%</span>
+        </div>
+        <div class="d-flex align-items-center gap-2">
+          <span class="legend-indicator" style="background-color: #ef4444;"></span>
+          <span class="fw-semibold text-dark">Lost</span>
+          <span class="text-muted small">({{ lost_picks }})</span>
+          <span class="fw-bold text-dark ms-auto ps-3">{{ lost_ratio_pct }}%</span>
+        </div>
+        <div class="d-flex align-items-center gap-2">
+          <span class="legend-indicator" style="background-color: #eab308;"></span>
+          <span class="fw-semibold text-dark">Pending</span>
+          <span class="text-muted small">({{ pending_picks }})</span>
+          <span class="fw-bold text-dark ms-auto ps-3">{{ pending_ratio_pct }}%</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- Accuracy by Sport Discipline -->
   <div class="card border-0 shadow-sm rounded-4 bg-white mb-4">
     <div class="card-header bg-white border-0 pt-3 pb-0 px-4">
@@ -182,6 +222,50 @@
     justify-content: center;
     border-radius: 12px;
     font-size: 1.25rem;
+  }
+  .accuracy-donut {
+    width: 140px;
+    height: 140px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    flex-shrink: 0;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+  }
+  .accuracy-donut-hole {
+    width: 96px;
+    height: 96px;
+    border-radius: 50%;
+    background: #ffffff;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+  }
+  .accuracy-donut-val {
+    font-size: 1.45rem;
+    font-weight: 800;
+    color: #0f172a;
+    line-height: 1.1;
+  }
+  .accuracy-donut-lbl {
+    font-size: 0.72rem;
+    font-weight: 600;
+    color: #64748b;
+    margin-top: 1px;
+  }
+  .legend-indicator {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    display: inline-block;
+    flex-shrink: 0;
+  }
+  .accuracy-legend {
+    min-width: 180px;
   }
 </style>
 {% endblock %}

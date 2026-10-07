@@ -263,30 +263,85 @@
     }
     @media (max-width: 767.98px) {
       .leaderboard-table {
-        font-size: .875rem;
+        font-size: .62rem;
+      }
+      .leaderboard-table th {
+        font-size: .62rem;
+        font-weight: 700;
+        color: #334155;
+        padding-top: 0.4rem;
+        padding-bottom: 0.4rem;
+      }
+      .leaderboard-table td {
+        font-size: .62rem;
+        padding-top: 0.4rem;
+        padding-bottom: 0.4rem;
+      }
+      .leaderboard-table .lb-player-name {
+        font-size: 0.62rem;
+        font-weight: 600;
+        color: #0f172a;
+        line-height: 1.2;
+      }
+      .leaderboard-table .lb-state-name {
+        font-size: 0.58rem;
+        color: #64748b;
+        line-height: 1.2;
+      }
+      .leaderboard-table .team-flag {
+        display: inline-block;
+        height: 11px;
+        width: 15px;
+        margin-right: 3px;
+        vertical-align: -1px;
+        border-radius: 2px;
       }
       .leaderboard-table .lb-country {
         display: none;
       }
       .leaderboard-table th:first-child,
       .leaderboard-table td:first-child {
-        width: 2.5rem;
+        width: 1.65rem;
+        padding-left: 0.25rem;
+        padding-right: 0.25rem;
+        text-align: center;
       }
       .leaderboard-table th:nth-child(2),
       .leaderboard-table td:nth-child(2) {
         width: auto;
+        padding-left: 0.25rem;
+        padding-right: 0.25rem;
       }
       .leaderboard-table th:nth-child(3),
       .leaderboard-table td:nth-child(3) {
-        width: 4.25rem;
+        width: 5.25rem;
+        padding-left: 0.25rem;
+        padding-right: 0.25rem;
       }
       .leaderboard-table th:nth-child(5),
       .leaderboard-table td:nth-child(5) {
-        width: 3.25rem;
+        width: 2.5rem;
+        padding-left: 0.25rem;
+        padding-right: 0.25rem;
+        text-align: right;
       }
-      .leaderboard-table th:last-child,
+      .leaderboard-table th:last-child {
+        width: 3.25rem;
+        padding-left: 0.25rem;
+        padding-right: 18px;
+        text-align: right;
+      }
       .leaderboard-table td:last-child {
-        width: 4.5rem;
+        width: 3.25rem;
+        padding-left: 0.25rem;
+        padding-right: 18px;
+        text-align: right;
+        font-weight: 700;
+      }
+      .leaderboard-table td:last-child .medal-icon {
+        width: 14px;
+        height: 14px;
+        right: 2px;
       }
     }
     @media (max-width: 575.98px) {
@@ -437,6 +492,9 @@
 
       <div class="d-flex align-items-center gap-2">
         {% if user.is_authenticated %}
+          <span class="header-username text-white fw-semibold small text-truncate {% if request.resolver_match.url_name == 'my_account' %}d-inline{% else %}d-none d-lg-inline{% endif %}"
+                style="max-width: 120px;"
+                title="{{ user.username }}">{{ user.username }}</span>
           <div class="points-pill d-flex align-items-center gap-1 px-3 py-1 rounded-pill text-white shadow-sm">
             <span>🏆</span>
             <span class="fw-bold">{{ user_points }}</span>
