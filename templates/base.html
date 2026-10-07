@@ -208,58 +208,76 @@
     .leaderboard-table {
       table-layout: fixed;
       width: 100%;
+      font-size: 0.8rem;
     }
     .leaderboard-table th,
     .leaderboard-table td {
       white-space: nowrap;
     }
+    .leaderboard-table th {
+      font-size: 0.78rem;
+      font-weight: 700;
+      color: #475569;
+      padding-top: 0.45rem;
+      padding-bottom: 0.45rem;
+    }
+    .leaderboard-table td {
+      font-size: 0.8rem;
+      padding-top: 0.45rem;
+      padding-bottom: 0.45rem;
+    }
     .leaderboard-table th:first-child,
     .leaderboard-table td:first-child {
       width: 2.25rem;
-    }
-    .leaderboard-table th:last-child,
-    .leaderboard-table td:last-child {
-      width: 5.5rem;
-    }
-    .leaderboard-table .lb-cell {
-      overflow: hidden;
-      text-overflow: ellipsis;
+      text-align: center;
     }
     .leaderboard-table th:nth-child(2),
     .leaderboard-table td:nth-child(2) {
-      width: 6.5rem;
+      width: auto;
     }
     .leaderboard-table th:nth-child(3),
     .leaderboard-table td:nth-child(3) {
-      width: 7.25rem;
+      width: 6.75rem;
     }
     .leaderboard-table th:nth-child(4),
     .leaderboard-table td:nth-child(4) {
-      width: 5rem;
+      width: 5.25rem;
     }
     .leaderboard-table th:nth-child(5),
     .leaderboard-table td:nth-child(5) {
       width: 3.5rem;
-    }
-    .leaderboard-table th:nth-last-child(2),
-    .leaderboard-table td:nth-last-child(2) {
       text-align: right;
     }
     .leaderboard-table th:last-child {
+      width: 4.75rem;
       text-align: right;
-      padding-right: 34px;
+      padding-right: 28px;
     }
     .leaderboard-table td:last-child {
+      width: 4.75rem;
       text-align: right;
       position: relative;
-      padding-right: 34px;
+      padding-right: 28px;
+      font-weight: 600;
     }
     .leaderboard-table td:last-child .medal-icon {
       position: absolute;
-      right: 8px;
+      right: 6px;
       top: 50%;
       transform: translateY(-50%);
       margin-left: 0;
+      width: 20px;
+      height: 20px;
+    }
+    .leaderboard-table .team-flag {
+      height: 14px;
+      width: 19px;
+      margin-right: 5px;
+      vertical-align: -1px;
+    }
+    .leaderboard-table .lb-cell {
+      overflow: hidden;
+      text-overflow: ellipsis;
     }
     @media (max-width: 767.98px) {
       .leaderboard-table {
@@ -548,10 +566,10 @@
 
         <div class="d-flex align-items-center gap-2">
           {% if user.is_authenticated %}
-            <a class="nav-link text-white-50 px-2 py-1 rounded d-flex align-items-center gap-1 {% if request.resolver_match.url_name == 'my_account' %}text-white fw-bold active-sport-link{% endif %}"
+            <a class="nav-link text-white-50 px-2 py-0.5 rounded d-flex flex-column align-items-center justify-content-center text-center lh-sm {% if request.resolver_match.url_name == 'my_account' %}text-white fw-bold active-sport-link{% endif %}"
                href="{% url 'my_account' %}">
               <span>My Account</span>
-              <span class="badge text-bg-success predict-now-badge">Redeem Credits</span>
+              <span class="badge text-bg-success predict-now-badge mt-1" style="font-size: 0.58rem;">Redeem Credits</span>
             </a>
             <form method="post" action="{% url 'logout' %}" class="d-inline ms-1">
               {% csrf_token %}
