@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block full_title %}{% block title %}Predict{% endblock %} · WinSports{% endblock %}</title>
   <meta name="description" content="{% block meta_description %}WinSports is a 100% free sports prediction game. Predict football, cricket, tennis, badminton and hockey matches, climb the monthly leaderboard and win gift vouchers. No betting, no entry fees.{% endblock %}">
+  <link rel="canonical" href="{% block canonical_url %}https://winsports.cc{{ request.path }}{% endblock %}">
   {% if adsense_client_id %}
     <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client={{ adsense_client_id }}" crossorigin="anonymous"></script>
   {% endif %}
