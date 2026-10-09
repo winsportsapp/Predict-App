@@ -297,7 +297,7 @@
         padding-bottom: 0.4rem;
       }
       .leaderboard-table .lb-player-name {
-        font-size: 0.62rem;
+        font-size: 0.72rem;
         font-weight: 600;
         color: #0f172a;
         line-height: 1.2;
@@ -511,7 +511,7 @@
 
       <div class="d-flex align-items-center gap-2">
         {% if user.is_authenticated %}
-          <span class="header-username text-white fw-semibold small text-truncate {% if request.resolver_match.url_name == 'my_account' %}d-inline{% else %}d-none d-lg-inline{% endif %}"
+          <span class="header-username text-white fw-semibold small text-truncate d-inline-block"
                 style="max-width: 120px;"
                 title="{{ user.username }}">{{ user.username }}</span>
           <div class="points-pill d-flex align-items-center gap-1 px-3 py-1 rounded-pill text-white shadow-sm">
@@ -533,12 +533,10 @@
       <div class="container d-flex align-items-center justify-content-between">
         <ul class="nav align-items-center gap-1" id="sports-nav">
           <li class="nav-item">
-            <a class="nav-link text-white-50 px-2 py-1 rounded {% if request.resolver_match.url_name in 'match_list sport_matches match_detail' %}text-white fw-bold active-sport-link{% endif %}"
+            <a class="nav-link text-white-50 px-2 py-0.5 rounded d-flex flex-column align-items-center justify-content-center text-center lh-sm {% if request.resolver_match.url_name in 'match_list sport_matches match_detail' %}text-white fw-bold active-sport-link{% endif %}"
                href="{% url 'match_list' %}">
-              Matches
-              {% if open_prediction_count %}
-                <span class="badge text-bg-success predict-now-badge ms-1">{{ open_prediction_count }}</span>
-              {% endif %}
+              <span>Matches</span>
+              <span class="badge text-bg-success predict-now-badge mt-1" style="font-size: 0.58rem;">Predict</span>
             </a>
           </li>
           <li class="nav-item">
@@ -675,6 +673,43 @@
     </div>
     <button type="button" class="btn btn-success btn-sm" data-pwa-install>Install</button>
     <button type="button" class="btn-close btn-close-white" aria-label="Close" data-pwa-dismiss></button>
+  </div>
+
+  <!-- "Keep winsports.cc close" Install App Modal -->
+  <div class="modal fade" id="pwa-install-modal" tabindex="-1" aria-labelledby="pwa-install-title" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered" style="max-width: 440px;">
+      <div class="modal-content border-0 shadow-lg p-3 p-sm-4" style="border-radius: 28px; background-color: #ffffff;">
+        <div class="d-flex justify-content-between align-items-start mb-3">
+          <img src="{% static 'predictions/icons/icon-192.png' %}" alt="WinSports App Logo"
+               style="width: 58px; height: 58px; border-radius: 16px; object-fit: cover;" class="shadow-sm">
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close" data-pwa-modal-dismiss></button>
+        </div>
+
+        <h2 class="h4 fw-bold mb-2" id="pwa-install-title" style="color: #0B3D2E; letter-spacing: -0.02em;">
+          Keep winsports.cc close
+        </h2>
+        <p class="text-secondary mb-3" style="font-size: 0.95rem; line-height: 1.5;">
+          Add winsports.cc to your home screen for quick access to your sports predictions and leaderboard.
+        </p>
+        <p class="text-muted small mb-4" style="font-size: 0.85rem; line-height: 1.5;">
+          In Chrome or Edge, use the install icon in the address bar or the browser menu’s Install app option. In Safari on Mac, choose File &rarr; Add to Dock. On phones, use your browser’s Add to Home Screen option.
+        </p>
+
+        <div class="d-flex flex-wrap gap-2 pt-1">
+          <button type="button" class="btn text-white fw-bold px-4 py-2.5 flex-grow-1"
+                  data-pwa-modal-install
+                  style="background-color: #0B3D2E; border-radius: 14px; min-height: 46px; border: none;">
+            Install winsports.cc
+          </button>
+          <button type="button" class="btn fw-bold px-4 py-2.5"
+                  data-pwa-modal-dismiss
+                  data-bs-dismiss="modal"
+                  style="border: 2px solid #0B3D2E; color: #0B3D2E; border-radius: 14px; min-height: 46px; background: transparent;">
+            Not now
+          </button>
+        </div>
+      </div>
+    </div>
   </div>
 
   {# iPhone/iPad browsers have no install prompt; this shows the manual steps. #}

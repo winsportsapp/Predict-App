@@ -5,28 +5,34 @@
     <div class="row g-2 mb-3 podium-row">
       {% for p in profiles|slice:":3" %}
         <div class="col-4">
-          <div class="card h-100 text-center p-2 podium-card shadow-sm {% if p.medal == 'gold' %}podium-gold{% elif p.medal == 'silver' %}podium-silver{% elif p.medal == 'bronze' %}podium-bronze{% else %}podium-standard{% endif %}">
-            <div class="podium-badge mb-1">
+          <div class="card h-100 text-center podium-card shadow-sm {% if p.medal == 'gold' %}podium-gold{% elif p.medal == 'silver' %}podium-silver{% elif p.medal == 'bronze' %}podium-bronze{% else %}podium-standard{% endif %}">
+            <div class="podium-badge">
               {% if p.medal == "gold" %}
                 <img src="{% static 'predictions/medals/gold.svg' %}" alt="Gold" class="podium-medal-icon">
-                <span class="d-block fw-bold text-warning-emphasis" style="font-size: 0.72rem;">1st Place</span>
+                <span class="d-block fw-bold text-warning-emphasis" style="font-size: 0.70rem;">1st Place</span>
               {% elif p.medal == "silver" %}
                 <img src="{% static 'predictions/medals/silver.svg' %}" alt="Silver" class="podium-medal-icon">
-                <span class="d-block fw-bold text-secondary" style="font-size: 0.72rem;">2nd Place</span>
+                <span class="d-block fw-bold text-secondary" style="font-size: 0.70rem;">2nd Place</span>
               {% elif p.medal == "bronze" %}
                 <img src="{% static 'predictions/medals/bronze.svg' %}" alt="Bronze" class="podium-medal-icon">
-                <span class="d-block fw-bold text-warning-emphasis" style="font-size: 0.72rem;">3rd Place</span>
+                <span class="d-block fw-bold text-warning-emphasis" style="font-size: 0.70rem;">3rd Place</span>
               {% else %}
-                <span class="badge rounded-pill bg-light text-secondary border fw-bold" style="font-size: 0.68rem;">#{{ forloop.counter }}</span>
+                <span class="badge rounded-pill bg-light text-secondary border fw-bold" style="font-size: 0.65rem;">#{{ forloop.counter }}</span>
               {% endif %}
             </div>
-            <div class="podium-player fw-bold text-truncate mb-1" title="{{ p.user.username }}">
-              {% country_flag p.country %}<span class="small">{{ p.user.username }}</span>
+            <div class="podium-player fw-bold" title="{{ p.user.username }}">
+              {% country_flag p.country as flag_img %}
+              {% if flag_img %}
+                <div class="podium-flag">{{ flag_img }}</div>
+              {% endif %}
+              <div class="podium-player-name text-truncate">
+                <span class="small">{{ p.user.username }}</span>
+              </div>
             </div>
-            <div class="podium-points fw-bold text-success" style="font-size: 0.85rem;">
-              {% if is_monthly %}{{ p.monthly_points }}{% else %}{{ p.points }}{% endif %} <span class="text-muted" style="font-size: 0.65rem;">pts</span>
+            <div class="podium-points fw-bold text-success" style="font-size: 0.82rem;">
+              {% if is_monthly %}{{ p.monthly_points }}{% else %}{{ p.points }}{% endif %} <span class="text-muted" style="font-size: 0.62rem;">pts</span>
             </div>
-            <div class="text-muted" style="font-size: 0.68rem;">
+            <div class="text-muted" style="font-size: 0.65rem;">
               {% if is_monthly %}{{ p.monthly_predictions_count }}{% else %}{{ p.predictions_count }}{% endif %} Picks
             </div>
           </div>
@@ -83,6 +89,7 @@
 <style>
   .podium-card {
     border-radius: 12px;
+    padding: 6px 4px;
     transition: transform 0.15s ease;
   }
   .podium-gold {
@@ -98,7 +105,33 @@
     background: linear-gradient(180deg, #fffbeb 0%, #ffffff 100%);
   }
   .podium-medal-icon {
-    width: 28px;
-    height: 28px;
+    width: 22px;
+    height: 22px;
+  }
+  .podium-badge {
+    margin-bottom: 2px;
+    line-height: 1.2;
+  }
+  .podium-flag {
+    line-height: 1;
+    margin-bottom: 2px;
+  }
+  .podium-card .team-flag {
+    margin: 0 auto;
+    display: inline-block;
+    height: 11px;
+    width: 15px;
+    border-radius: 2px;
+  }
+  .podium-player {
+    margin-bottom: 2px;
+    line-height: 1.2;
+  }
+  .podium-player-name {
+    line-height: 1.2;
+  }
+  .podium-points {
+    line-height: 1.2;
+    margin-bottom: 1px;
   }
 </style>

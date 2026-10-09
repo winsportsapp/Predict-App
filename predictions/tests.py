@@ -623,6 +623,15 @@ class AccountTests(TestCase):
         self.assertContains(response, "Log out")
         self.assertContains(response, f'action="{reverse("logout")}"')
 
+    def test_header_username_appears_on_all_pages_for_authenticated_user(self):
+        user = make_user("alice", password="StrongPass123")
+        self.client.login(username="alice", password="StrongPass123")
+        for url_name in ("my_account", "match_list", "leaderboard", "my_predictions"):
+            response = self.client.get(reverse(url_name))
+            self.assertEqual(response.status_code, 200)
+            self.assertContains(response, 'class="header-username')
+            self.assertContains(response, 'alice')
+
     def test_my_predictions_kickoff_date_precedes_selection(self):
         user = make_user("bob", password="StrongPass123")
         self.client.login(username="bob", password="StrongPass123")

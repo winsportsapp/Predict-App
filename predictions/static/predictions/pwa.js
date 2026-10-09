@@ -1,5 +1,5 @@
 // Installable app: registers the service worker and drives the "Install app"
-// menu item and the dismissible phone banner (see templates/base.html).
+// menu item, phone banner, and install popup modal (see templates/base.html).
 (function () {
   var script = document.currentScript;
   if ("serviceWorker" in navigator && script && script.dataset.swUrl) {
@@ -13,6 +13,7 @@
   if (standalone) return;  // already running as the installed app
 
   var DISMISS_KEY = "pwaBannerDismissedAt";
+  var MODAL_DISMISS_KEY = "pwaInstallModalDismissedAt";
   var DISMISS_DAYS = 30;
   var isIos = /iphone|ipad|ipod/i.test(navigator.userAgent) ||
     (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
@@ -27,8 +28,43 @@
     }
   }
 
+  function modalDismissedRecently() {
+    try {
+      if (localStorage.getItem("pwaInstalled") === "true") return true;
+      var at = Number(localStorage.getItem(MODAL_DISMISS_KEY));
+      return at && Date.now() - at < DISMISS_DAYS * 24 * 60 * 60 * 1000;
+    } catch (e) {
+      return false;
+    }
+  }
+
   function banner() {
     return document.getElementById("pwa-banner");
+  }
+
+  function installModal() {
+    return document.getElementById("pwa-install-modal");
+  }
+
+  function showInstallModal() {
+    if (modalDismissedRecently() || standalone) return;
+    var modalEl = installModal();
+    if (!modalEl) return;
+    function tryShow() {
+      if (window.bootstrap && bootstrap.Modal) {
+        var modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+        modal.show();
+      }
+    }
+    setTimeout(tryShow, 1200);
+  }
+
+  function hideInstallModal() {
+    var modalEl = installModal();
+    if (modalEl && window.bootstrap) {
+      var modal = bootstrap.Modal.getInstance(modalEl);
+      if (modal) modal.hide();
+    }
   }
 
   function showInstall() {
@@ -51,17 +87,34 @@
       el.hidden = true;
     });
     hideBanner();
+    hideInstallModal();
   }
 
   function install() {
+    hideInstallModal();
     if (deferredPrompt) {
       deferredPrompt.prompt();
-      // The prompt can only be used once; the browser fires
-      // beforeinstallprompt again later if the user said no.
-      deferredPrompt.userChoice.then(hideInstall);
+      deferredPrompt.userChoice.then(function (choice) {
+        if (choice.outcome === "accepted") {
+          try { localStorage.setItem("pwaInstalled", "true"); } catch (e) {}
+        }
+        hideInstall();
+      });
       deferredPrompt = null;
     } else if (isIos && window.bootstrap) {
-      bootstrap.Modal.getOrCreateInstance(document.getElementById("pwa-ios-modal")).show();
+      var iosModal = document.getElementById("pwa-ios-modal");
+      if (iosModal) {
+        bootstrap.Modal.getOrCreateInstance(iosModal).show();
+      }
+    }
+  }
+
+  // Trigger auto-display on page open for phones and desktop
+  if (!standalone && !modalDismissedRecently()) {
+    if (document.readyState === "complete") {
+      showInstallModal();
+    } else {
+      window.addEventListener("load", showInstallModal);
     }
   }
 
@@ -72,16 +125,26 @@
     deferredPrompt = event;
     showInstall();
   });
-  window.addEventListener("appinstalled", hideInstall);
+  window.addEventListener("appinstalled", function () {
+    try { localStorage.setItem("pwaInstalled", "true"); } catch (e) {}
+    hideInstall();
+  });
 
   document.addEventListener("click", function (event) {
     if (event.target.closest("[data-pwa-install]")) {
+      install();
+    } else if (event.target.closest("[data-pwa-modal-install]")) {
       install();
     } else if (event.target.closest("[data-pwa-dismiss]")) {
       try {
         localStorage.setItem(DISMISS_KEY, String(Date.now()));
       } catch (e) {}
       hideBanner();
+    } else if (event.target.closest("[data-pwa-modal-dismiss]")) {
+      try {
+        localStorage.setItem(MODAL_DISMISS_KEY, String(Date.now()));
+      } catch (e) {}
+      hideInstallModal();
     }
   });
 
