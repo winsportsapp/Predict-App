@@ -36,6 +36,9 @@ class ExternalEvent:
     away_image: str = ""
     home_score: str = ""
     away_score: str = ""
+    home_odds: float | None = None
+    away_odds: float | None = None
+    draw_odds: float | None = None
     extra: dict = field(default_factory=dict)
 
 
@@ -47,12 +50,21 @@ class Provider:
     def supports(self, sport_name):
         raise NotImplementedError
 
-    def fetch_fixtures(self, sport_name, days_ahead, new_day_only=False):
+    def fetch_fixtures(self, sport_name, days_ahead, new_day_only=False, with_odds=False):
         """Upcoming events for `sport_name`, as a list of ExternalEvent.
 
         new_day_only: only the day `days_ahead` days from today, for daily
         runs whose earlier days were already imported."""
         raise NotImplementedError
+
+    def fetch_odds(self, sport_name, indent_days=0):
+        """{external_id: (home_odds, away_odds, draw_odds)} for events on indent_days.
+        Default implementation returns empty dict."""
+        return {}
+
+    def fetch_event_odds(self, external_id):
+        """(home_odds, away_odds, draw_odds) for a single event, or None."""
+        return None
 
     def fetch_results(self, sport_name, kickoffs):
         """{external_id: ExternalEvent} for as many of `kickoffs`

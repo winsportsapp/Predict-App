@@ -10,7 +10,7 @@ from django.template.loader import render_to_string
 from django.utils import timezone
 from django.utils.text import slugify
 
-from .constants import SUPPORTED_SPORTS
+from .constants import DRAW_SPORTS, SUPPORTED_SPORTS
 from .models import (
     CreditLedger,
     Match,
@@ -29,6 +29,102 @@ from .models import (
 # each match's own team_a/team_b win/lose point fields instead.
 POINTS_CORRECT = 10
 POINTS_WRONG = -5
+
+
+def calculate_points_from_odd(odd):
+    """Calculate integer (win_points, lose_points) from a decimal odd.
+
+    Formula:
+      win_points = round(100 - (100 / odd))
+      lose_points = win_points - 100
+
+    Examples:
+      odd = 3.0 -> win = 67, lose = -33
+      odd = 2.0 -> win = 50, lose = -50
+      odd = 1.5 -> win = 33, lose = -67
+
+    Falls back to (POINTS_CORRECT, POINTS_WRONG) if odd is missing or <= 1.0.
+    """
+    if odd is None:
+        return POINTS_CORRECT, POINTS_WRONG
+    try:
+        val = float(odd)
+    except (ValueError, TypeError):
+        return POINTS_CORRECT, POINTS_WRONG
+    if val <= 1.0:
+        return POINTS_CORRECT, POINTS_WRONG
+
+    win = int(round(100.0 - (100.0 / val)))
+    lose = win - 100
+    return win, lose
+
+
+def calculate_match_points(odds_a=None, odds_b=None, odds_draw=None, allows_draw=False):
+    """Return dict of the 6 point fields computed from odds."""
+    a_win, a_lose = (
+        calculate_points_from_odd(odds_a) if odds_a else (POINTS_CORRECT, POINTS_WRONG)
+    )
+    b_win, b_lose = (
+        calculate_points_from_odd(odds_b) if odds_b else (POINTS_CORRECT, POINTS_WRONG)
+    )
+
+    if allows_draw:
+        if odds_draw:
+            d_win, d_lose = calculate_points_from_odd(odds_draw)
+        else:
+            d_win, d_lose = POINTS_CORRECT, POINTS_WRONG
+    else:
+        # Sports without draw (Tennis, Badminton) set both to 0 to hide draw pick
+        d_win, d_lose = 0, 0
+
+    return {
+        "team_a_win_points": a_win,
+        "team_a_lose_points": a_lose,
+        "team_b_win_points": b_win,
+        "team_b_lose_points": b_lose,
+        "draw_win_points": d_win,
+        "draw_lose_points": d_lose,
+    }
+
+
+def apply_odds_and_points(match, odds_a=None, odds_b=None, odds_draw=None, save=True):
+    """Update match with odds and calculate points fields accordingly."""
+    allows_draw = match.sport.name in DRAW_SPORTS
+    if odds_a is not None:
+        match.team_a_odds = odds_a
+    if odds_b is not None:
+        match.team_b_odds = odds_b
+    if allows_draw:
+        if odds_draw is not None:
+            match.draw_odds = odds_draw
+    else:
+        match.draw_odds = None
+
+    points = calculate_match_points(
+        match.team_a_odds,
+        match.team_b_odds,
+        match.draw_odds,
+        allows_draw=allows_draw,
+    )
+    for field_name, value in points.items():
+        setattr(match, field_name, value)
+
+    if save:
+        match.save(
+            update_fields=[
+                "team_a_odds",
+                "team_b_odds",
+                "draw_odds",
+                "team_a_win_points",
+                "team_a_lose_points",
+                "team_b_win_points",
+                "team_b_lose_points",
+                "draw_win_points",
+                "draw_lose_points",
+            ]
+        )
+    return match
+
 
 
 def open_matches(user=None):
@@ -187,7 +283,12 @@ def _resolve_team(provider, sport, name, image_url, summary, download_images):
 
 
 def import_fixtures(
-    provider, sport, days_ahead=7, download_images=True, new_day_only=False
+    provider,
+    sport,
+    days_ahead=7,
+    download_images=True,
+    new_day_only=False,
+    with_odds=True,
 ):
     """Create (unpublished) matches for `sport`'s upcoming fixtures from
     `provider`, and follow kickoff-time changes of matches already imported.
@@ -196,12 +297,27 @@ def import_fixtures(
     matches start unpublished, so an admin reviews them and publishes with
     the "Publish selected matches" action. Returns a summary dict.
     """
-    summary = {"created": 0, "updated": 0, "skipped": 0, "new_teams": [], "called_off": []}
+    summary = {
+        "created": 0,
+        "updated": 0,
+        "skipped": 0,
+        "new_teams": [],
+        "called_off": [],
+        "odds_filled": 0,
+    }
     now = timezone.now()
+    allows_draw = sport.name in DRAW_SPORTS
 
-    for event in provider.fetch_fixtures(
-        sport.name, days_ahead, new_day_only=new_day_only
-    ):
+    try:
+        events = provider.fetch_fixtures(
+            sport.name, days_ahead, new_day_only=new_day_only, with_odds=with_odds
+        )
+    except TypeError:
+        events = provider.fetch_fixtures(
+            sport.name, days_ahead, new_day_only=new_day_only
+        )
+
+    for event in events:
         match = Match.objects.filter(
             external_source=event.source, external_id=event.external_id
         ).first()
@@ -219,6 +335,15 @@ def import_fixtures(
             if team_a == team_b:
                 summary["skipped"] += 1
                 continue
+
+            points = calculate_match_points(
+                event.home_odds,
+                event.away_odds,
+                event.draw_odds,
+                allows_draw=allows_draw,
+            )
+            has_odds = bool(event.home_odds or event.away_odds or event.draw_odds)
+
             Match.objects.create(
                 sport=sport,
                 event_name=event.event_name,
@@ -229,23 +354,62 @@ def import_fixtures(
                 is_published=False,
                 external_source=event.source,
                 external_id=event.external_id,
+                team_a_odds=event.home_odds,
+                team_b_odds=event.away_odds,
+                draw_odds=event.draw_odds if allows_draw else None,
+                **points,
             )
             summary["created"] += 1
+            if has_odds:
+                summary["odds_filled"] += 1
             continue
 
         if event.called_off:
             summary["called_off"].append(str(match))
-        elif (
-            match.status == Match.Status.SCHEDULED
-            and not match.has_result
-            and match.start_time != event.start_time
-        ):
-            # Kickoff moved: keep the admin's deadline offset from kickoff.
-            offset = match.start_time - match.prediction_deadline
-            match.start_time = event.start_time
-            match.prediction_deadline = event.start_time - offset
-            match.save(update_fields=["start_time", "prediction_deadline"])
-            summary["updated"] += 1
+        else:
+            updated_fields = []
+            if (
+                match.status == Match.Status.SCHEDULED
+                and not match.has_result
+                and match.start_time != event.start_time
+            ):
+                # Kickoff moved: keep the admin's deadline offset from kickoff.
+                offset = match.start_time - match.prediction_deadline
+                match.start_time = event.start_time
+                match.prediction_deadline = event.start_time - offset
+                updated_fields.extend(["start_time", "prediction_deadline"])
+
+            # If match is unpublished and doesn't have odds yet, but event now has odds:
+            if (
+                not match.is_published
+                and not match.has_result
+                and (event.home_odds or event.away_odds)
+                and not match.team_a_odds
+                and not match.team_b_odds
+            ):
+                apply_odds_and_points(
+                    match,
+                    event.home_odds,
+                    event.away_odds,
+                    event.draw_odds,
+                    save=False,
+                )
+                updated_fields.extend([
+                    "team_a_odds",
+                    "team_b_odds",
+                    "draw_odds",
+                    "team_a_win_points",
+                    "team_a_lose_points",
+                    "team_b_win_points",
+                    "team_b_lose_points",
+                    "draw_win_points",
+                    "draw_lose_points",
+                ])
+                summary["odds_filled"] += 1
+
+            if updated_fields:
+                match.save(update_fields=list(set(updated_fields)))
+                summary["updated"] += 1
 
     return summary
 

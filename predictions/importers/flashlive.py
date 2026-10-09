@@ -104,7 +104,7 @@ class FlashLiveProvider(Provider):
     def supports(self, sport_name):
         return sport_name in self.sport_ids
 
-    def fetch_fixtures(self, sport_name, days_ahead, new_day_only=False):
+    def fetch_fixtures(self, sport_name, days_ahead, new_day_only=False, with_odds=False):
         teams = self.teams.get(sport_name.lower(), set())
         if not (self.tournaments or teams):
             # Without a filter this would import every match in the world.
@@ -115,6 +115,7 @@ class FlashLiveProvider(Provider):
         days = [last_day] if new_day_only else range(0, last_day + 1)
         events = []
         for day in days:
+            odds_map = self.fetch_odds(sport_name, day) if with_odds else {}
             for group in self._list_events(sport_name, day):
                 keys = _tournament_keys(group)
                 if _matches_any(keys, self.exclude_tournaments):
@@ -125,8 +126,83 @@ class FlashLiveProvider(Provider):
                         continue
                     event = self._to_event(sport_name, group, raw)
                     if event:
+                        if event.external_id in odds_map:
+                            h, a, d = odds_map[event.external_id]
+                            if h is not None:
+                                event.home_odds = h
+                            if a is not None:
+                                event.away_odds = a
+                            if d is not None:
+                                event.draw_odds = d
                         events.append(event)
         return events
+
+    def fetch_odds(self, sport_name, indent_days=0):
+        """{external_id: (home_odds, away_odds, draw_odds)} for events on indent_days.
+        1 request per sport per day."""
+        if sport_name not in self.sport_ids:
+            return {}
+        try:
+            data = self._get(
+                "/events/list-main-odds",
+                {
+                    "sport_id": self.sport_ids[sport_name],
+                    "indent_days": indent_days,
+                    "locale": LOCALE,
+                    "timezone": self.utc_offset,
+                },
+            )
+        except ProviderError as exc:
+            logger.debug(
+                "FlashLive list-main-odds not available for %s day %s: %s",
+                sport_name,
+                indent_days,
+                exc,
+            )
+            return {}
+
+        results = {}
+        events_list = []
+        if isinstance(data, dict):
+            events_list = data.get("events") or data.get("EVENTS") or []
+        elif isinstance(data, list):
+            for item in data:
+                if isinstance(item, dict):
+                    if "EVENTS" in item:
+                        events_list.extend(item.get("EVENTS") or [])
+                    elif "events" in item:
+                        events_list.extend(item.get("events") or [])
+                    else:
+                        events_list.append(item)
+
+        for event in events_list:
+            if not isinstance(event, dict):
+                continue
+            eid = event.get("EVENT_ID") or event.get("event_id") or event.get("ID")
+            if not eid:
+                continue
+            odds_obj = event.get("ODDS") or event.get("odds") or event
+            home, away, draw = _extract_odds_tuple(odds_obj)
+            if home is not None or away is not None or draw is not None:
+                results[str(eid)] = (home, away, draw)
+        return results
+
+    def fetch_event_odds(self, external_id):
+        """(home_odds, away_odds, draw_odds) for a single event ID, or None."""
+        try:
+            data = self._get("/events/odds", {"event_id": external_id, "locale": LOCALE})
+        except ProviderError:
+            try:
+                data = self._get("/events/live-odds", {"event_id": external_id, "locale": LOCALE})
+            except ProviderError:
+                return None
+
+        if isinstance(data, dict):
+            odds_obj = data.get("ODDS") or data.get("odds") or data
+            home, away, draw = _extract_odds_tuple(odds_obj)
+            if home is not None or away is not None or draw is not None:
+                return home, away, draw
+        return None
 
     def fetch_results(self, sport_name, kickoffs):
         # One request per kickoff day covers every match that day, so only
@@ -219,6 +295,11 @@ class FlashLiveProvider(Provider):
             if aws is not None:
                 away_score = str(aws).strip()
 
+        odds_obj = raw.get("ODDS") or raw.get("odds")
+        home_odds, away_odds, draw_odds = (
+            _extract_odds_tuple(odds_obj) if odds_obj else (None, None, None)
+        )
+
         return ExternalEvent(
             source=self.name,
             external_id=str(event_id),
@@ -235,6 +316,9 @@ class FlashLiveProvider(Provider):
             away_image=_first(raw.get("AWAY_IMAGES")),
             home_score=home_score,
             away_score=away_score,
+            home_odds=home_odds,
+            away_odds=away_odds,
+            draw_odds=draw_odds,
         )
 
 
@@ -303,3 +387,63 @@ def _result(sport_name, raw):
     if away > home:
         return "away"
     return "draw"
+
+
+def _safe_float(v):
+    try:
+        if v is None:
+            return None
+        val = float(str(v).strip())
+        return round(val, 2) if val > 0 else None
+    except (ValueError, TypeError):
+        return None
+
+
+def _extract_odds_tuple(odds_obj):
+    """Given an odds object/dict, returns (home_odds, away_odds, draw_odds)."""
+    if not isinstance(odds_obj, dict):
+        return None, None, None
+
+    main = odds_obj.get("main") or odds_obj.get("MAIN") or odds_obj
+    if isinstance(main, list):
+        home, draw, away = None, None, None
+        for item in main:
+            if isinstance(item, dict):
+                c = str(
+                    item.get("choice") or item.get("type") or item.get("name") or ""
+                ).upper()
+                v = _safe_float(item.get("value") or item.get("odd") or item.get("odds"))
+                if c in ("1", "HOME"):
+                    home = v
+                elif c in ("X", "DRAW"):
+                    draw = v
+                elif c in ("2", "AWAY"):
+                    away = v
+        return home, away, draw
+
+    if isinstance(main, dict):
+        home = _safe_float(
+            main.get("home")
+            or main.get("HOME")
+            or main.get("1")
+            or odds_obj.get("HOME_ODD")
+            or odds_obj.get("ODD_1")
+        )
+        draw = _safe_float(
+            main.get("draw")
+            or main.get("DRAW")
+            or main.get("X")
+            or odds_obj.get("DRAW_ODD")
+            or odds_obj.get("ODD_X")
+        )
+        away = _safe_float(
+            main.get("away")
+            or main.get("AWAY")
+            or main.get("2")
+            or odds_obj.get("AWAY_ODD")
+            or odds_obj.get("ODD_2")
+        )
+        return home, away, draw
+
+    return None, None, None
+

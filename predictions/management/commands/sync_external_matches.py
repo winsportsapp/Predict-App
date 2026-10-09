@@ -26,6 +26,11 @@ class Command(BaseCommand):
             help="Fetch only the day --days-ahead from today (1 request per sport). "
             "For daily scheduled runs.",
         )
+        parser.add_argument(
+            "--no-odds",
+            action="store_true",
+            help="Do not fetch odds when importing fixtures (enabled by default).",
+        )
         parser.add_argument("--dry-run", action="store_true", help="Show what would change, then roll back.")
         parser.add_argument("--list-sports", action="store_true", help="Print FlashLive's sport IDs and exit.")
         parser.add_argument(
@@ -89,6 +94,7 @@ class Command(BaseCommand):
                                 days_ahead=options["days_ahead"],
                                 download_images=not options["dry_run"],
                                 new_day_only=options["new_day_only"],
+                                with_odds=not options["no_odds"],
                             ),
                         )
                     if options["results"]:
@@ -111,9 +117,11 @@ class Command(BaseCommand):
         self.stdout.write(f"API requests used this run: {used}")
 
     def _report_fixtures(self, sport, summary):
+        odds_count = summary.get("odds_filled", 0)
+        odds_info = f", {odds_count} odds & points filled" if odds_count else ""
         self.stdout.write(
             f"{sport.name} fixtures: {summary['created']} created, "
-            f"{summary['updated']} kickoff times updated, "
+            f"{summary['updated']} kickoff times updated{odds_info}, "
             f"{summary['skipped']} skipped"
         )
         for name in summary["new_teams"]:

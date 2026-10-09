@@ -24,13 +24,19 @@ from .models import (
     UserPredictionCount,
     VoucherRedemption,
 )
+from .importers.registry import get_providers, provider_for
 from .services import (
+    apply_odds_and_points,
     confirm_suggested_result,
     fulfill_redemption,
     reject_redemption,
     score_match,
     sync_match_statuses,
 )
+
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 @admin.register(Sport)
@@ -250,6 +256,7 @@ class MatchAdmin(admin.ModelAdmin):
         "prediction_deadline_display",
         "winner",
         "is_draw",
+        "odds_display",
         "suggested_result",
         "is_published",
         "is_scored",
@@ -268,7 +275,12 @@ class MatchAdmin(admin.ModelAdmin):
     # sport/team_a/team_b/winner are plain dropdowns (not autocomplete) so
     # they can be filtered by sport; see MatchAdminForm.
     date_hierarchy = "start_time"
-    actions = ("publish_matches", "unpublish_matches", "confirm_suggested_results")
+    actions = (
+        "publish_matches",
+        "unpublish_matches",
+        "confirm_suggested_results",
+        "fetch_odds_and_calculate_points",
+    )
     change_list_template = "admin/predictions/match/change_list.html"
 
     def changelist_view(self, request, extra_context=None):
@@ -340,8 +352,11 @@ class MatchAdmin(admin.ModelAdmin):
             "fields": ("external_source", "external_id", "suggested_at"),
             "classes": ("collapse",),
         }),
-        ("Points", {
+        ("Odds & Points", {
             "fields": (
+                "team_a_odds",
+                "team_b_odds",
+                "draw_odds",
                 "team_a_win_points",
                 "team_a_lose_points",
                 "team_b_win_points",
@@ -350,14 +365,14 @@ class MatchAdmin(admin.ModelAdmin):
                 "draw_lose_points",
             ),
             "description": (
-                "Points awarded for a correct/incorrect pick. Defaults: win 10, lose -5. "
+                "Flashscore decimal odds automatically calculate Win and Lose points: "
+                "Win = round(100 - (100 / odd)), Lose = Win - 100. "
+                "Entering or modifying odds automatically fills the points. "
+                "Defaults if no odds: win 10, lose -5. "
                 "The Draw points apply only to Football, Cricket and Hockey. "
                 "Enter 0 in both Draw fields if the match cannot end in a draw: "
                 "the Draw box is then hidden and users pick only Team A or Team B. "
-                "For Tennis, Badminton and Cricket, entering Team A win points fills the other "
-                "fields (100-point split); all stay editable. "
-                "For Football, entering a win points field fills its lose points "
-                "as win - 100 (e.g. 60 gives -40); still editable."
+                "All fields stay fully editable."
             ),
         }),
     )
@@ -446,6 +461,68 @@ class MatchAdmin(admin.ModelAdmin):
             )
         for error in failed:
             self.message_user(request, error, messages.ERROR)
+
+    @admin.action(description="Fetch Flashscore odds & calculate points")
+    def fetch_odds_and_calculate_points(self, request, queryset):
+        providers = get_providers()
+        updated_count = 0
+        recalculated_count = 0
+        failed_count = 0
+
+        for match in queryset.select_related("sport"):
+            provider = provider_for(match.sport.name, providers)
+            odds_fetched = False
+            if match.external_id and provider:
+                try:
+                    odds = provider.fetch_event_odds(match.external_id)
+                    if odds and (
+                        odds[0] is not None or odds[1] is not None or odds[2] is not None
+                    ):
+                        home_odds, away_odds, draw_odds = odds
+                        apply_odds_and_points(
+                            match, home_odds, away_odds, draw_odds, save=True
+                        )
+                        updated_count += 1
+                        odds_fetched = True
+                except Exception as exc:
+                    logger.warning("Failed fetching odds for match %s: %s", match.pk, exc)
+
+            if not odds_fetched:
+                if (
+                    match.team_a_odds is not None
+                    or match.team_b_odds is not None
+                    or match.draw_odds is not None
+                ):
+                    apply_odds_and_points(
+                        match,
+                        match.team_a_odds,
+                        match.team_b_odds,
+                        match.draw_odds,
+                        save=True,
+                    )
+                    recalculated_count += 1
+                else:
+                    failed_count += 1
+
+        msg_parts = []
+        if updated_count:
+            msg_parts.append(
+                f"{updated_count} match(es) updated with live Flashscore odds."
+            )
+        if recalculated_count:
+            msg_parts.append(
+                f"{recalculated_count} match(es) recalculated from stored odds."
+            )
+        if failed_count:
+            msg_parts.append(f"{failed_count} match(es) had no odds available.")
+
+        if msg_parts:
+            level = (
+                messages.SUCCESS
+                if (updated_count or recalculated_count)
+                else messages.WARNING
+            )
+            self.message_user(request, " ".join(msg_parts), level)
 
     def save_model(self, request, obj, form, change):
         super().save_model(request, obj, form, change)

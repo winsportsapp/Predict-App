@@ -4681,8 +4681,9 @@ class FakeProvider(Provider):
     def supports(self, sport_name):
         return True
 
-    def fetch_fixtures(self, sport_name, days_ahead, new_day_only=False):
+    def fetch_fixtures(self, sport_name, days_ahead, new_day_only=False, **kwargs):
         self.new_day_only = new_day_only
+        self.with_odds = kwargs.get("with_odds", False)
         return [e for e in self.fixtures if e.sport == sport_name]
 
     def fetch_results(self, sport_name, kickoffs):
@@ -5846,4 +5847,136 @@ class AnalyticsViewTests(TestCase):
         self.assertContains(response, "(1)")
         self.assertContains(response, "33%")
         self.assertContains(response, "34%")
+
+
+class OddsAndPointsTests(TestCase):
+    def test_calculate_points_from_odd_formula(self):
+        from predictions.services import calculate_points_from_odd
+
+        # odd = 3 -> win = round(100 - (100/3)) = 67, lose = 67 - 100 = -33
+        win, lose = calculate_points_from_odd(3.0)
+        self.assertEqual(win, 67)
+        self.assertEqual(lose, -33)
+
+        # odd = 2 -> win = 50, lose = -50
+        win, lose = calculate_points_from_odd(2.0)
+        self.assertEqual(win, 50)
+        self.assertEqual(lose, -50)
+
+        # odd = 1.5 -> win = round(100 - 66.666) = 33, lose = -67
+        win, lose = calculate_points_from_odd(1.5)
+        self.assertEqual(win, 33)
+        self.assertEqual(lose, -67)
+
+        # odd = 4.0 -> win = round(100 - 25) = 75, lose = -25
+        win, lose = calculate_points_from_odd(4.0)
+        self.assertEqual(win, 75)
+        self.assertEqual(lose, -25)
+
+        # invalid/missing odds fallback to default (10, -5)
+        self.assertEqual(calculate_points_from_odd(None), (10, -5))
+        self.assertEqual(calculate_points_from_odd(1.0), (10, -5))
+        self.assertEqual(calculate_points_from_odd(0.5), (10, -5))
+        self.assertEqual(calculate_points_from_odd("invalid"), (10, -5))
+
+    def test_calculate_match_points_football_with_draw(self):
+        from predictions.services import calculate_match_points
+
+        # home=3.0, away=2.0, draw=3.0, allows_draw=True
+        pts = calculate_match_points(odds_a=3.0, odds_b=2.0, odds_draw=3.0, allows_draw=True)
+        self.assertEqual(pts["team_a_win_points"], 67)
+        self.assertEqual(pts["team_a_lose_points"], -33)
+        self.assertEqual(pts["team_b_win_points"], 50)
+        self.assertEqual(pts["team_b_lose_points"], -50)
+        self.assertEqual(pts["draw_win_points"], 67)
+        self.assertEqual(pts["draw_lose_points"], -33)
+
+    def test_calculate_match_points_tennis_no_draw(self):
+        from predictions.services import calculate_match_points
+
+        pts = calculate_match_points(odds_a=1.5, odds_b=2.5, odds_draw=None, allows_draw=False)
+        self.assertEqual(pts["team_a_win_points"], 33)
+        self.assertEqual(pts["team_a_lose_points"], -67)
+        self.assertEqual(pts["team_b_win_points"], 60)
+        self.assertEqual(pts["team_b_lose_points"], -40)
+        self.assertEqual(pts["draw_win_points"], 0)
+        self.assertEqual(pts["draw_lose_points"], 0)
+
+    def test_apply_odds_and_points_to_match(self):
+        from predictions.services import apply_odds_and_points
+
+        m = sport_match("Football", "Team Alpha", "Team Beta")
+        apply_odds_and_points(m, odds_a=3.0, odds_b=2.0, odds_draw=4.0, save=True)
+        m.refresh_from_db()
+
+        self.assertEqual(float(m.team_a_odds), 3.0)
+        self.assertEqual(float(m.team_b_odds), 2.0)
+        self.assertEqual(float(m.draw_odds), 4.0)
+        self.assertEqual(m.team_a_win_points, 67)
+        self.assertEqual(m.team_a_lose_points, -33)
+        self.assertEqual(m.team_b_win_points, 50)
+        self.assertEqual(m.team_b_lose_points, -50)
+        self.assertEqual(m.draw_win_points, 75)
+        self.assertEqual(m.draw_lose_points, -25)
+        self.assertEqual(m.odds_display, "A: 3.00 | D: 4.00 | B: 2.00")
+
+    def test_admin_fetch_odds_and_calculate_points_action(self):
+        from django.contrib.admin.sites import AdminSite
+        from predictions.admin import MatchAdmin
+        from predictions.services import apply_odds_and_points
+
+        m = sport_match("Tennis", "Player 1", "Player 2")
+        m.team_a_odds = 2.0
+        m.team_b_odds = 2.0
+        m.save()
+
+        site = AdminSite()
+        admin = MatchAdmin(Match, site)
+        request = mock.Mock()
+
+        admin.fetch_odds_and_calculate_points(request, Match.objects.filter(pk=m.pk))
+        m.refresh_from_db()
+        self.assertEqual(m.team_a_win_points, 50)
+        self.assertEqual(m.team_a_lose_points, -50)
+        self.assertEqual(m.draw_win_points, 0)
+        self.assertEqual(m.draw_lose_points, 0)
+
+    def test_import_fixtures_with_odds(self):
+        from predictions.importers.base import ExternalEvent
+        from predictions.services import import_fixtures
+
+        sport = Sport.objects.get(name="Football")
+        event = ExternalEvent(
+            source="test_provider",
+            external_id="event-12345",
+            sport="Football",
+            event_name="Premier League",
+            home="Arsenal",
+            away="Chelsea",
+            start_time=timezone.now() + timedelta(days=2),
+            home_odds=3.0,
+            away_odds=2.0,
+            draw_odds=3.5,
+        )
+
+        provider = mock.Mock()
+        provider.name = "test_provider"
+        provider.fetch_fixtures.return_value = [event]
+        provider.fetch_image.return_value = None
+
+        summary = import_fixtures(provider, sport, with_odds=True)
+        self.assertEqual(summary["created"], 1)
+        self.assertEqual(summary["odds_filled"], 1)
+
+        match = Match.objects.get(external_source="test_provider", external_id="event-12345")
+        self.assertEqual(float(match.team_a_odds), 3.0)
+        self.assertEqual(float(match.team_b_odds), 2.0)
+        self.assertEqual(float(match.draw_odds), 3.5)
+        self.assertEqual(match.team_a_win_points, 67)
+        self.assertEqual(match.team_a_lose_points, -33)
+        self.assertEqual(match.team_b_win_points, 50)
+        self.assertEqual(match.team_b_lose_points, -50)
+        self.assertEqual(match.draw_win_points, 71)
+        self.assertEqual(match.draw_lose_points, -29)
+
 

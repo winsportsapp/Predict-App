@@ -200,6 +200,27 @@ class Match(models.Model):
         default="",
         help_text="Final score for Team B / Away (e.g. 1, 210).",
     )
+    team_a_odds = models.DecimalField(
+        max_digits=6,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        help_text="Flashscore decimal odds for Team A (Home).",
+    )
+    team_b_odds = models.DecimalField(
+        max_digits=6,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        help_text="Flashscore decimal odds for Team B (Away).",
+    )
+    draw_odds = models.DecimalField(
+        max_digits=6,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        help_text="Flashscore decimal odds for Draw.",
+    )
     team_a_win_points = models.IntegerField(
         default=10,
         help_text="Points awarded to a user who picked Team A when Team A wins.",
@@ -296,6 +317,18 @@ class Match(models.Model):
     def has_suggested_result(self):
         """True once the external source has reported a winner or a draw."""
         return self.suggested_winner_id is not None or self.suggested_is_draw
+
+    @property
+    def odds_display(self):
+        """Compact string of decimal odds: A: 1.80 | D: 3.40 | B: 4.50."""
+        parts = []
+        if self.team_a_odds:
+            parts.append(f"A: {self.team_a_odds}")
+        if self.draw_odds and self.sport.name in DRAW_SPORTS:
+            parts.append(f"D: {self.draw_odds}")
+        if self.team_b_odds:
+            parts.append(f"B: {self.team_b_odds}")
+        return " | ".join(parts) if parts else "-"
 
     @property
     def score_display(self):
