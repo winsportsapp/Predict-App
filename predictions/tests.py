@@ -5979,4 +5979,113 @@ class OddsAndPointsTests(TestCase):
         self.assertEqual(match.draw_win_points, 71)
         self.assertEqual(match.draw_lose_points, -29)
 
+    def test_extract_odds_tuple_flashlive_3way_football(self):
+        from predictions.importers.flashlive import _extract_odds_tuple
+
+        raw_odds = [
+            {"ODD_CELL_FIRST": {"MOVE": "u", "VALUE": 1.85}},
+            {"ODD_CELL_SECOND": {"MOVE": "d", "VALUE": 3.85}},
+            {"ODD_CELL_THIRD": {"MOVE": "d", "VALUE": 3.7}},
+        ]
+        home, away, draw = _extract_odds_tuple(raw_odds)
+        self.assertEqual(home, 1.85)
+        self.assertEqual(away, 3.7)
+        self.assertEqual(draw, 3.85)
+
+    def test_extract_odds_tuple_flashlive_2way_tennis(self):
+        from predictions.importers.flashlive import _extract_odds_tuple
+
+        raw_odds = [
+            {"ODD_CELL_SECOND": {"MOVE": "d", "VALUE": 2.12}},
+            {"ODD_CELL_THIRD": {"MOVE": "u", "VALUE": 1.68}},
+        ]
+        home, away, draw = _extract_odds_tuple(raw_odds)
+        self.assertEqual(home, 2.12)
+        self.assertEqual(away, 1.68)
+        self.assertIsNone(draw)
+
+    def test_fetch_event_odds_nested_market_list(self):
+        from predictions.importers.flashlive import FlashLiveProvider
+
+        provider = FlashLiveProvider(api_key="test-key")
+        mock_response = [
+            {
+                "BETTING_TYPE": "*1X2",
+                "PERIODS": [
+                    {
+                        "OBN": "HOME_DRAW_AWAY-FULL_TIME",
+                        "ODDS_STAGE": "*Full Time",
+                        "GROUPS": [
+                            {
+                                "MARKETS": [
+                                    {
+                                        "BOOKMAKER_NAME": "bet365",
+                                        "ODD_CELL_FIRST": {"VALUE": 1.76},
+                                        "ODD_CELL_SECOND": {"VALUE": 3.9},
+                                        "ODD_CELL_THIRD": {"VALUE": 4.2},
+                                    }
+                                ]
+                            }
+                        ],
+                    }
+                ],
+            }
+        ]
+        with mock.patch.object(provider, "_get", return_value=mock_response):
+            odds = provider.fetch_event_odds("event-test-123")
+            self.assertEqual(odds, (1.76, 4.2, 3.9))
+
+    def test_fetch_odds_method_with_provider(self):
+        from predictions.importers.flashlive import FlashLiveProvider
+
+        provider = FlashLiveProvider(api_key="test-key")
+        mock_response = [
+            {
+                "EVENT_ID": "evt-1",
+                "ODDS": [
+                    {"ODD_CELL_FIRST": {"VALUE": 1.5}},
+                    {"ODD_CELL_SECOND": {"VALUE": 4.0}},
+                    {"ODD_CELL_THIRD": {"VALUE": 6.0}},
+                ],
+            },
+            {
+                "EVENT_ID": "evt-2",
+                "ODDS": [
+                    {"ODD_CELL_SECOND": {"VALUE": 2.2}},
+                    {"ODD_CELL_THIRD": {"VALUE": 1.6}},
+                ],
+            },
+        ]
+        with mock.patch.object(provider, "_get", return_value=mock_response):
+            odds_map = provider.fetch_odds("Football", indent_days=0)
+            self.assertEqual(odds_map["evt-1"], (1.5, 6.0, 4.0))
+            self.assertEqual(odds_map["evt-2"], (2.2, 1.6, None))
+
+    def test_fetch_matches_odds_groups_by_day_bulk(self):
+        from predictions.importers.flashlive import FlashLiveProvider
+
+        provider = FlashLiveProvider(api_key="test-key")
+        m1 = sport_match("Football", "Team 1", "Team 2")
+        m1.external_id = "ext-1"
+        m1.save()
+        m2 = sport_match("Football", "Team 3", "Team 4")
+        m2.external_id = "ext-2"
+        m2.save()
+
+        with mock.patch.object(
+            provider,
+            "fetch_odds",
+            return_value={"ext-1": (1.8, 3.5, 3.2), "ext-2": (2.0, 3.0, 3.5)},
+        ) as mock_fetch_odds, mock.patch.object(
+            provider, "fetch_event_odds"
+        ) as mock_fetch_event_odds:
+            res = provider.fetch_matches_odds([m1, m2])
+            # Only 1 bulk fetch_odds call was made for both matches
+            mock_fetch_odds.assert_called_once()
+            # Individual fetch_event_odds was never called
+            mock_fetch_event_odds.assert_not_called()
+            self.assertEqual(res[m1.pk], (1.8, 3.5, 3.2))
+            self.assertEqual(res[m2.pk], (2.0, 3.0, 3.5))
+
+
 

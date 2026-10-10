@@ -469,45 +469,59 @@ class MatchAdmin(admin.ModelAdmin):
         recalculated_count = 0
         failed_count = 0
 
+        # Group matches by provider for bulk efficiency
+        by_provider = {}
         for match in queryset.select_related("sport"):
             provider = provider_for(match.sport.name, providers)
-            odds_fetched = False
-            if match.external_id and provider:
-                try:
-                    odds = provider.fetch_event_odds(match.external_id)
-                    if odds and (
-                        odds[0] is not None or odds[1] is not None or odds[2] is not None
-                    ):
-                        home_odds, away_odds, draw_odds = odds
-                        apply_odds_and_points(
-                            match, home_odds, away_odds, draw_odds, save=True
-                        )
-                        updated_count += 1
-                        odds_fetched = True
-                except Exception as exc:
-                    logger.warning("Failed fetching odds for match %s: %s", match.pk, exc)
+            if provider and match.external_id:
+                by_provider.setdefault(provider, []).append(match)
+            else:
+                by_provider.setdefault(None, []).append(match)
 
-            if not odds_fetched:
-                if (
-                    match.team_a_odds is not None
-                    or match.team_b_odds is not None
-                    or match.draw_odds is not None
-                ):
-                    apply_odds_and_points(
-                        match,
-                        match.team_a_odds,
-                        match.team_b_odds,
-                        match.draw_odds,
-                        save=True,
-                    )
-                    recalculated_count += 1
-                else:
-                    failed_count += 1
+        fetched_map = {}
+        initial_requests = sum(getattr(p, "requests_made", 0) for p in providers)
+        for provider, matches in by_provider.items():
+            if provider and matches:
+                try:
+                    fetched_map.update(provider.fetch_matches_odds(matches))
+                except Exception as exc:
+                    logger.warning("Failed bulk fetching odds: %s", exc)
+
+        for match in queryset.select_related("sport"):
+            if match.pk in fetched_map:
+                home_odds, away_odds, draw_odds = fetched_map[match.pk]
+                apply_odds_and_points(
+                    match, home_odds, away_odds, draw_odds, save=True
+                )
+                updated_count += 1
+            elif (
+                match.team_a_odds is not None
+                or match.team_b_odds is not None
+                or match.draw_odds is not None
+            ):
+                apply_odds_and_points(
+                    match,
+                    match.team_a_odds,
+                    match.team_b_odds,
+                    match.draw_odds,
+                    save=True,
+                )
+                recalculated_count += 1
+            else:
+                failed_count += 1
+
+        final_requests = sum(getattr(p, "requests_made", 0) for p in providers)
+        requests_used = final_requests - initial_requests
 
         msg_parts = []
         if updated_count:
+            req_info = (
+                f" (used {requests_used} API request{'s' if requests_used != 1 else ''})"
+                if requests_used > 0
+                else ""
+            )
             msg_parts.append(
-                f"{updated_count} match(es) updated with live Flashscore odds."
+                f"{updated_count} match(es) updated with live Flashscore odds{req_info}."
             )
         if recalculated_count:
             msg_parts.append(

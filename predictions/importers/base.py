@@ -66,6 +66,17 @@ class Provider:
         """(home_odds, away_odds, draw_odds) for a single event, or None."""
         return None
 
+    def fetch_matches_odds(self, matches):
+        """{match.pk: (home_odds, away_odds, draw_odds)} for an iterable of matches."""
+        results = {}
+        for match in matches:
+            ext_id = getattr(match, "external_id", "")
+            if ext_id:
+                odds = self.fetch_event_odds(ext_id)
+                if odds and (odds[0] is not None or odds[1] is not None or odds[2] is not None):
+                    results[match.pk] = odds
+        return results
+
     def fetch_results(self, sport_name, kickoffs):
         """{external_id: ExternalEvent} for as many of `kickoffs`
         ({external_id: start_time}) as the source knows about. Events

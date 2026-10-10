@@ -197,12 +197,72 @@ class FlashLiveProvider(Provider):
             except ProviderError:
                 return None
 
+        if isinstance(data, list):
+            for bet in data:
+                if not isinstance(bet, dict):
+                    continue
+                bet_type = str(bet.get("BETTING_TYPE") or "").upper()
+                if "1X2" in bet_type or "HOME/AWAY" in bet_type:
+                    for period in bet.get("PERIODS") or []:
+                        obn = str(period.get("OBN") or "").upper()
+                        stage = str(period.get("ODDS_STAGE") or "").upper()
+                        if "FULL_TIME" in obn or "*MATCH" in stage or "*FULL TIME" in stage:
+                            for group in period.get("GROUPS") or []:
+                                for market in group.get("MARKETS") or []:
+                                    home, away, draw = _extract_odds_tuple(market)
+                                    if home is not None or away is not None:
+                                        return home, away, draw
+
         if isinstance(data, dict):
             odds_obj = data.get("ODDS") or data.get("odds") or data
             home, away, draw = _extract_odds_tuple(odds_obj)
             if home is not None or away is not None or draw is not None:
                 return home, away, draw
         return None
+
+    def fetch_matches_odds(self, matches):
+        """Given an iterable of Match objects, return {match.pk: (home, away, draw)}.
+
+        Optimized for API quota: groups matches by (sport_name, day) and uses
+        bulk /events/list-main-odds (1 request per sport per day) rather than
+        making 1 individual request per match. Falls back to fetch_event_odds
+        only for events not found in the bulk day map.
+        """
+        results = {}
+        today = datetime.now(self.local_tz).date()
+
+        by_day = {}
+        for m in matches:
+            ext_id = getattr(m, "external_id", "")
+            if not ext_id or not getattr(m, "sport", None):
+                continue
+            sport_name = m.sport.name
+            if not self.supports(sport_name):
+                continue
+            start = m.start_time
+            indent = (
+                (start.astimezone(self.local_tz).date() - today).days
+                if start
+                else -999
+            )
+            by_day.setdefault((sport_name, indent), []).append(m)
+
+        for (sport_name, indent_days), match_list in by_day.items():
+            if 0 <= indent_days <= MAX_INDENT_DAYS:
+                bulk_map = self.fetch_odds(sport_name, indent_days)
+                for m in match_list:
+                    if m.external_id in bulk_map:
+                        results[m.pk] = bulk_map[m.external_id]
+
+            for m in match_list:
+                if m.pk not in results:
+                    odds = self.fetch_event_odds(m.external_id)
+                    if odds and (
+                        odds[0] is not None or odds[1] is not None or odds[2] is not None
+                    ):
+                        results[m.pk] = odds
+
+        return results
 
     def fetch_results(self, sport_name, kickoffs):
         # One request per kickoff day covers every match that day, so only
@@ -400,14 +460,38 @@ def _safe_float(v):
 
 
 def _extract_odds_tuple(odds_obj):
-    """Given an odds object/dict, returns (home_odds, away_odds, draw_odds)."""
-    if not isinstance(odds_obj, dict):
+    """Given an odds object/dict/list, returns (home_odds, away_odds, draw_odds)."""
+    if odds_obj is None:
         return None, None, None
 
-    main = odds_obj.get("main") or odds_obj.get("MAIN") or odds_obj
-    if isinstance(main, list):
+    # Handle FlashLive list of cell objects: [{'ODD_CELL_FIRST': ...}, ...]
+    if isinstance(odds_obj, list):
+        cells = {}
+        for item in odds_obj:
+            if isinstance(item, dict):
+                for k, v in item.items():
+                    if k.startswith("ODD_CELL_"):
+                        val = v.get("VALUE") if isinstance(v, dict) else v
+                        cells[k] = _safe_float(val)
+        if cells:
+            first = cells.get("ODD_CELL_FIRST")
+            second = cells.get("ODD_CELL_SECOND")
+            third = cells.get("ODD_CELL_THIRD")
+            # 3-way market (Football: 1=First, X=Second, 2=Third)
+            if first is not None and second is not None and third is not None:
+                return first, third, second
+            # 2-way market (Tennis/Cricket/Badminton: 1=Second, 2=Third)
+            if second is not None and third is not None:
+                return second, third, None
+            if first is not None and second is not None:
+                return first, second, None
+            if first is not None and third is not None:
+                return first, third, None
+
+        # Check for legacy list format: [{'choice': '1', 'value': ...}, ...]
         home, draw, away = None, None, None
-        for item in main:
+        has_legacy = False
+        for item in odds_obj:
             if isinstance(item, dict):
                 c = str(
                     item.get("choice") or item.get("type") or item.get("name") or ""
@@ -415,11 +499,48 @@ def _extract_odds_tuple(odds_obj):
                 v = _safe_float(item.get("value") or item.get("odd") or item.get("odds"))
                 if c in ("1", "HOME"):
                     home = v
+                    has_legacy = True
                 elif c in ("X", "DRAW"):
                     draw = v
+                    has_legacy = True
                 elif c in ("2", "AWAY"):
                     away = v
-        return home, away, draw
+                    has_legacy = True
+        if has_legacy:
+            return home, away, draw
+        return None, None, None
+
+    if not isinstance(odds_obj, dict):
+        return None, None, None
+
+    # Check if odds_obj has ODD_CELL_* directly (e.g. market dict from /events/odds)
+    first = odds_obj.get("ODD_CELL_FIRST")
+    second = odds_obj.get("ODD_CELL_SECOND")
+    third = odds_obj.get("ODD_CELL_THIRD")
+    if first is not None or second is not None or third is not None:
+        c1 = _safe_float(first.get("VALUE") if isinstance(first, dict) else first)
+        c2 = _safe_float(second.get("VALUE") if isinstance(second, dict) else second)
+        c3 = _safe_float(third.get("VALUE") if isinstance(third, dict) else third)
+        if c1 is not None and c2 is not None and c3 is not None:
+            return c1, c3, c2
+        if c2 is not None and c3 is not None:
+            return c2, c3, None
+        if c1 is not None and c2 is not None:
+            return c1, c2, None
+        if c1 is not None and c3 is not None:
+            return c1, c3, None
+
+    # If odds_obj has an inner ODDS list/dict
+    if "ODDS" in odds_obj or "odds" in odds_obj:
+        inner = odds_obj.get("ODDS") or odds_obj.get("odds")
+        if inner and inner is not odds_obj:
+            res = _extract_odds_tuple(inner)
+            if res != (None, None, None):
+                return res
+
+    main = odds_obj.get("main") or odds_obj.get("MAIN") or odds_obj
+    if isinstance(main, list):
+        return _extract_odds_tuple(main)
 
     if isinstance(main, dict):
         home = _safe_float(
