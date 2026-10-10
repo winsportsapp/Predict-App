@@ -280,6 +280,9 @@ FLASHLIVE_SPORT_IDS = env.dict('FLASHLIVE_SPORT_IDS', default={})
 # Whole hours from UTC that "today"/"tomorrow" are counted in for the import
 # (FlashLive takes no half hours). 5 = a day runs 00:30 to 00:30 IST.
 FLASHLIVE_UTC_OFFSET = env.int('FLASHLIVE_UTC_OFFSET', default=5)
+# Sports to temporarily disable from syncing fixtures/results to save API
+# credits (e.g. "Hockey,Badminton,Tennis"). Case-insensitive, comma-separated.
+FLASHLIVE_DISABLED_SPORTS = env.list('FLASHLIVE_DISABLED_SPORTS', default=[])
 
 
 # App notifications (predictions/push.py): when matches are published, users

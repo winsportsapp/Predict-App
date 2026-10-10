@@ -89,6 +89,11 @@ class UserPredictionCount(Profile):
 
 class Sport(models.Model):
     name = models.CharField(max_length=80, unique=True)
+    is_active = models.BooleanField(
+        default=True,
+        verbose_name="Active for sync",
+        help_text="Uncheck to pause checking fixtures and results from Flashscore (saves API credits).",
+    )
 
     class Meta:
         ordering = ["name"]

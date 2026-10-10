@@ -38,7 +38,7 @@ without a key, emails are printed to the console.
 
 To stay strictly within the 500 RapidAPI requests/month limit (~16 requests/day), match synchronization runs on the following schedule:
 
-### Server Timezone: UTC (Default on AWS, DigitalOcean, Heroku)
+### Server Timezone: UTC (Default on Railway, AWS, DigitalOcean, Heroku)
 ```cron
 # 1. Daily Fixtures & Odds (Runs once daily at 05:00 IST / 23:30 UTC):
 30 23 * * * cd /path/to/project && /path/to/venv/bin/python manage.py sync_external_matches --fixtures --new-day-only

@@ -5296,6 +5296,40 @@ class SyncExternalMatchesCommandTests(TestCase):
             with self.assertRaises(CommandError):
                 call_command("sync_external_matches", "--results")
 
+    def test_inactive_sport_is_skipped_by_default(self):
+        sport = Sport.objects.get(name="Football")
+        sport.is_active = False
+        sport.save()
+
+        provider = FakeProvider([external_event()])
+        output = self._run(provider, "--fixtures")
+        self.assertFalse(Match.objects.filter(external_id="e1").exists())
+        self.assertNotIn("Football fixtures:", output)
+
+    def test_inactive_sport_warns_when_explicitly_requested(self):
+        sport = Sport.objects.get(name="Football")
+        sport.is_active = False
+        sport.save()
+
+        provider = FakeProvider([external_event()])
+        output = self._run(provider, "--fixtures", "--sport", "Football")
+        self.assertIn("Football: sync is paused in admin (is_active=False)", output)
+        self.assertFalse(Match.objects.filter(external_id="e1").exists())
+
+    def test_inactive_sport_can_be_forced(self):
+        sport = Sport.objects.get(name="Football")
+        sport.is_active = False
+        sport.save()
+
+        provider = FakeProvider([external_event()])
+        output = self._run(provider, "--fixtures", "--sport", "Football", "--force")
+        self.assertTrue(Match.objects.filter(external_id="e1").exists())
+
+    def test_sport_admin_has_is_active_editable(self):
+        from predictions.admin import SportAdmin
+        self.assertIn("is_active", SportAdmin.list_display)
+        self.assertIn("is_active", SportAdmin.list_editable)
+
 
 def google_id_token(**overrides):
     claims = {

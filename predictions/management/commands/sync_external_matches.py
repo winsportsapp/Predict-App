@@ -40,6 +40,11 @@ class Command(BaseCommand):
             "--day, for FLASHLIVE_TOURNAMENTS. 1 request.",
         )
         parser.add_argument("--day", type=int, default=0, help="Day for --list-tournaments (0 = today).")
+        parser.add_argument(
+            "--force",
+            action="store_true",
+            help="Sync even if the sport is paused in the admin (is_active=False).",
+        )
 
     def handle(self, *args, **options):
         if options["list_sports"]:
@@ -77,10 +82,20 @@ class Command(BaseCommand):
             sports = sports.filter(name__iexact=options["sport"])
             if not sports:
                 raise CommandError(f"Unknown sport: {options['sport']}")
+        elif not options["force"]:
+            sports = sports.filter(is_active=True)
 
         failed = False
         with transaction.atomic():
             for sport in sports:
+                if not sport.is_active and not options["force"]:
+                    self.stdout.write(
+                        self.style.WARNING(
+                            f"{sport.name}: sync is paused in admin (is_active=False). "
+                            "Pass --force to sync anyway."
+                        )
+                    )
+                    continue
                 provider = provider_for(sport.name, providers)
                 if provider is None:
                     continue

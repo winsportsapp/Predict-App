@@ -41,7 +41,8 @@ logger = logging.getLogger(__name__)
 
 @admin.register(Sport)
 class SportAdmin(admin.ModelAdmin):
-    list_display = ("name",)
+    list_display = ("name", "is_active")
+    list_editable = ("is_active",)
     search_fields = ("name",)
 
 
