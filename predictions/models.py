@@ -516,6 +516,28 @@ class Prediction(models.Model):
             else POINTS_WRONG
         )
 
+    @property
+    def potential_win_points(self):
+        """Points the user will receive if their prediction is correct."""
+        if self.choice == self.Side.A:
+            return self.match.team_a_win_points
+        if self.choice == self.Side.B:
+            return self.match.team_b_win_points
+        if self.choice == self.Side.DRAW:
+            return self.match.draw_win_points
+        return 0
+
+    @property
+    def potential_lose_points(self):
+        """Points the user will receive if their prediction is incorrect."""
+        if self.choice == self.Side.A:
+            return self.match.team_a_lose_points
+        if self.choice == self.Side.B:
+            return self.match.team_b_lose_points
+        if self.choice == self.Side.DRAW:
+            return self.match.draw_lose_points
+        return 0
+
 
 class ScoreAdjustment(models.Model):
     """One net point change applied to a user's Profile by score_match().

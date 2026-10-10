@@ -651,6 +651,52 @@ class AccountTests(TestCase):
             "Kickoff Date must come before Your Selection",
         )
 
+    def test_prediction_potential_points_properties(self):
+        user = make_user("tester_points", password="StrongPass123")
+        match = sport_match("Football", "Team Alpha", "Team Beta")
+        match.team_a_win_points = 25
+        match.team_a_lose_points = -10
+        match.team_b_win_points = 60
+        match.team_b_lose_points = -25
+        match.draw_win_points = 45
+        match.draw_lose_points = -15
+        match.save()
+
+        p_a = Prediction(user=user, match=match, choice="A")
+        self.assertEqual(p_a.potential_win_points, 25)
+        self.assertEqual(p_a.potential_lose_points, -10)
+
+        p_b = Prediction(user=user, match=match, choice="B")
+        self.assertEqual(p_b.potential_win_points, 60)
+        self.assertEqual(p_b.potential_lose_points, -25)
+
+        p_d = Prediction(user=user, match=match, choice="D")
+        self.assertEqual(p_d.potential_win_points, 45)
+        self.assertEqual(p_d.potential_lose_points, -15)
+
+    def test_my_predictions_shows_correct_potential_points_for_choice_b_and_draw(self):
+        user = make_user("picker_bob", password="StrongPass123")
+        self.client.login(username="picker_bob", password="StrongPass123")
+        match = sport_match("Football", "Team Alpha", "Team Beta")
+        match.team_a_win_points = 20
+        match.team_a_lose_points = -8
+        match.team_b_win_points = 70
+        match.team_b_lose_points = -28
+        match.save()
+
+        # User picks Team B
+        Prediction.objects.create(user=user, match=match, choice="B")
+
+        response = self.client.get(reverse("my_predictions"))
+        self.assertEqual(response.status_code, 200)
+        content = response.content.decode("utf-8")
+        self.assertIn("Potential:", content)
+        # It must show +70 / -28 pts for Team B, NOT Team A's +20 / -8 pts
+        self.assertIn("+70", content)
+        self.assertIn("-28", content)
+        self.assertIn("Potential: <strong class=\"text-success\">+70</strong> / <strong class=\"text-danger\">-28</strong> pts", content)
+        self.assertNotIn("+20</strong> / <strong class=\"text-danger\">-8", content)
+
 
 
 class TermsAndPrivacyTests(TestCase):

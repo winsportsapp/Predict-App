@@ -57,7 +57,7 @@
                 <strong class="text-dark">{{ p.choice_name }}</strong>
               </div>
               <div class="text-muted">
-                Potential: <strong class="text-success">+{{ p.match.team_a_win_points }}</strong> / <strong class="text-danger">{{ p.match.team_a_lose_points }}</strong> pts
+                Potential: <strong class="text-success">{{ p.potential_win_points|signed_points }}</strong> / <strong class="text-danger">{{ p.potential_lose_points|signed_points }}</strong> pts
               </div>
             </div>
           </div>
