@@ -348,12 +348,18 @@ class FlashLiveProvider(Provider):
         home_score = ""
         away_score = ""
         if finished and not called_off:
-            hs = raw.get("HOME_SCORE_CURRENT")
-            aws = raw.get("AWAY_SCORE_CURRENT")
-            if hs is not None:
-                home_score = str(hs).strip()
-            if aws is not None:
-                away_score = str(aws).strip()
+            if sport_name in ("Tennis", "Badminton"):
+                h_sets, a_sets = _count_sets(raw)
+                if h_sets > 0 or a_sets > 0:
+                    home_score = str(h_sets)
+                    away_score = str(a_sets)
+            if not home_score and not away_score:
+                hs = raw.get("HOME_SCORE_CURRENT")
+                aws = raw.get("AWAY_SCORE_CURRENT")
+                if hs is not None:
+                    home_score = str(hs).strip()
+                if aws is not None:
+                    away_score = str(aws).strip()
 
         odds_obj = raw.get("ODDS") or raw.get("odds")
         home_odds, away_odds, draw_odds = (
@@ -426,17 +432,58 @@ def _first(images):
     return ""
 
 
+def _count_sets(raw):
+    """Count sets won by home and away from HOME_SCORE_PART_X / AWAY_SCORE_PART_X."""
+    home_sets, away_sets = 0, 0
+    for i in range(1, 6):
+        hp = raw.get(f"HOME_SCORE_PART_{i}")
+        ap = raw.get(f"AWAY_SCORE_PART_{i}")
+        if hp is not None and ap is not None:
+            try:
+                hp_val, ap_val = int(hp), int(ap)
+                if hp_val > ap_val:
+                    home_sets += 1
+                elif ap_val > hp_val:
+                    away_sets += 1
+            except (TypeError, ValueError):
+                pass
+    return home_sets, away_sets
+
+
+RETIREMENT_KEYWORDS = ("RETIRED", "RET.", "WALKOVER", "W.O.")
+
+
 def _result(sport_name, raw):
     """'home', 'away', 'draw' or None for a finished event."""
-    winner = str(raw.get("WINNER", "")).strip()
-    if winner == "1":
+    from ..constants import DRAW_SPORTS
+
+    stage = str(raw.get("STAGE") or "").upper()
+    is_retired = any(kw in stage for kw in RETIREMENT_KEYWORDS)
+
+    winner = str(raw.get("WINNER", "")).strip().lower()
+    if winner in ("1", "home"):
         return "home"
-    if winner == "2":
+    if winner in ("2", "away"):
         return "away"
+
+    # If a player retired or walked over and FlashLive did not provide an explicit
+    # WINNER, do NOT guess from partial sets/games (the retiring player may have won set 1).
+    if is_retired:
+        return None
+
     # A cricket score ("245/6") says nothing reliable about the winner or a
     # draw, so leave it for the admin to enter by hand.
     if sport_name == "Cricket":
         return None
+
+    # For set-based sports (Tennis, Badminton), check individual set/game scores (PART_1 .. PART_5)
+    if sport_name in ("Tennis", "Badminton"):
+        home_sets, away_sets = _count_sets(raw)
+        if home_sets > away_sets:
+            return "home"
+        if away_sets > home_sets:
+            return "away"
+
     try:
         home = int(raw.get("HOME_SCORE_CURRENT"))
         away = int(raw.get("AWAY_SCORE_CURRENT"))
@@ -446,7 +493,12 @@ def _result(sport_name, raw):
         return "home"
     if away > home:
         return "away"
-    return "draw"
+
+    # Only sports that permit a draw can return 'draw'
+    if sport_name in DRAW_SPORTS:
+        return "draw"
+
+    return None
 
 
 def _safe_float(v):

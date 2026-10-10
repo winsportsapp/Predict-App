@@ -4910,6 +4910,21 @@ class SyncResultsTests(TestCase):
         self.assertTrue(match.suggested_is_draw)
         self.assertIsNone(match.suggested_winner)
 
+    def test_draw_is_not_suggested_for_non_draw_sports(self):
+        tennis = Sport.objects.get(name="Tennis")
+        match = sport_match(
+            "Tennis", "Player One", "Player Two",
+            status=Match.Status.AWAITING_RESULT,
+            external_source="fake", external_id="t_draw",
+        )
+        sync_results(
+            FakeProvider(results={"t_draw": external_event("t_draw", result="draw")}),
+            tennis,
+        )
+        match.refresh_from_db()
+        self.assertFalse(match.suggested_is_draw)
+        self.assertIsNone(match.suggested_winner)
+
     def test_unfinished_and_future_matches_get_no_suggestion(self):
         awaiting_external_match()
         sport_match(
@@ -5251,6 +5266,108 @@ class FlashLiveProviderTests(SimpleTestCase):
         self.assertIsNone(
             provider.fetch_results("Cricket", {"c": timezone.now()})["c"].result
         )
+
+    def test_tennis_and_badminton_set_scores_determine_winner(self):
+        now = timezone.now()
+        # Tennis: Home won sets 1 & 3 (6-3, 3-6, 7-5)
+        provider, _ = self._provider([
+            flashlive_response([flashlive_group([
+                flashlive_event(
+                    "t1", STAGE_TYPE="FINISHED",
+                    HOME_SCORE_PART_1="6", AWAY_SCORE_PART_1="3",
+                    HOME_SCORE_PART_2="3", AWAY_SCORE_PART_2="6",
+                    HOME_SCORE_PART_3="7", AWAY_SCORE_PART_3="5",
+                ),
+            ])]),
+        ])
+        res_t = provider.fetch_results("Tennis", {"t1": now})
+        self.assertEqual(res_t["t1"].result, "home")
+        self.assertEqual(res_t["t1"].home_score, "2")
+        self.assertEqual(res_t["t1"].away_score, "1")
+
+        # Tennis 2-0 match (like Bu Y. vs Ruud C. where Away won 0-2 and CURRENT was 0-0):
+        provider, _ = self._provider([
+            flashlive_response([flashlive_group([
+                flashlive_event(
+                    "t2", STAGE_TYPE="FINISHED",
+                    HOME_SCORE_CURRENT="0", AWAY_SCORE_CURRENT="0",
+                    HOME_SCORE_PART_1="4", AWAY_SCORE_PART_1="6",
+                    HOME_SCORE_PART_2="4", AWAY_SCORE_PART_2="6",
+                ),
+            ])]),
+        ])
+        res_t2 = provider.fetch_results("Tennis", {"t2": now})
+        self.assertEqual(res_t2["t2"].result, "away")
+        self.assertEqual(res_t2["t2"].home_score, "0")
+        self.assertEqual(res_t2["t2"].away_score, "2")
+
+        # Badminton: Away won games 2 & 3
+        provider, _ = self._provider([
+            flashlive_response([flashlive_group([
+                flashlive_event(
+                    "b1", STAGE_TYPE="FINISHED",
+                    HOME_SCORE_PART_1="21", AWAY_SCORE_PART_1="15",
+                    HOME_SCORE_PART_2="18", AWAY_SCORE_PART_2="21",
+                    HOME_SCORE_PART_3="19", AWAY_SCORE_PART_3="21",
+                ),
+            ])]),
+        ])
+        res_b = provider.fetch_results("Badminton", {"b1": now})
+        self.assertEqual(res_b["b1"].result, "away")
+
+    def test_non_draw_sports_never_return_draw(self):
+        now = timezone.now()
+        provider, _ = self._provider([
+            flashlive_response([flashlive_group([
+                flashlive_event(
+                    "td", STAGE_TYPE="FINISHED",
+                    HOME_SCORE_CURRENT="1", AWAY_SCORE_CURRENT="1",
+                ),
+                flashlive_event(
+                    "bd", STAGE_TYPE="FINISHED",
+                    HOME_SCORE_CURRENT="1", AWAY_SCORE_CURRENT="1",
+                ),
+            ])]),
+        ])
+        found_t = provider.fetch_results("Tennis", {"td": now})
+        self.assertIsNone(found_t["td"].result)
+
+        provider, _ = self._provider([
+            flashlive_response([flashlive_group([
+                flashlive_event(
+                    "bd", STAGE_TYPE="FINISHED",
+                    HOME_SCORE_CURRENT="1", AWAY_SCORE_CURRENT="1",
+                ),
+            ])]),
+        ])
+        found_b = provider.fetch_results("Badminton", {"bd": now})
+        self.assertIsNone(found_b["bd"].result)
+
+    def test_retirement_and_walkover_handling(self):
+        now = timezone.now()
+        # Player A won set 1 but retired; no WINNER given -> returns None (no false home win)
+        provider, _ = self._provider([
+            flashlive_response([flashlive_group([
+                flashlive_event(
+                    "ret1", STAGE_TYPE="FINISHED", STAGE="RETIRED",
+                    HOME_SCORE_PART_1="6", AWAY_SCORE_PART_1="2",
+                ),
+            ])]),
+        ])
+        res1 = provider.fetch_results("Tennis", {"ret1": now})
+        self.assertIsNone(res1["ret1"].result)
+
+        # Player A retired, and FlashLive explicitly provided WINNER=2 (opponent wins)
+        provider, _ = self._provider([
+            flashlive_response([flashlive_group([
+                flashlive_event(
+                    "ret2", STAGE_TYPE="FINISHED", STAGE="RETIRED", WINNER=2,
+                    HOME_SCORE_PART_1="6", AWAY_SCORE_PART_1="2",
+                ),
+            ])]),
+        ])
+        res2 = provider.fetch_results("Tennis", {"ret2": now})
+        self.assertEqual(res2["ret2"].result, "away")
 
     def test_http_error_raises_provider_error(self):
         provider, _ = self._provider([flashlive_response([], status=429)])

@@ -529,7 +529,7 @@ def sync_results(provider, sport):
         match.suggested_winner = {"home": match.team_a, "away": match.team_b}.get(
             event.result
         )
-        match.suggested_is_draw = event.result == "draw"
+        match.suggested_is_draw = event.result == "draw" and sport.name in DRAW_SPORTS
         match.suggested_team_a_score = event.home_score
         match.suggested_team_b_score = event.away_score
         match.suggested_at = timezone.now()
