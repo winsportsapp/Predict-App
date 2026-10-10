@@ -3111,17 +3111,42 @@ class MatchAdminActionTests(TestCase):
         self.assertCountEqual(ids, [tennis.pk, badminton.pk, cricket.pk])
         self.assertNotIn(football.pk, ids)
 
-    def test_lose_from_win_autofill_applies_only_to_football(self):
+    def test_lose_from_win_autofill_applies_to_football_and_hockey(self):
         football, _ = Sport.objects.get_or_create(name="Football")
+        hockey, _ = Sport.objects.get_or_create(name="Hockey")
         tennis, _ = Sport.objects.get_or_create(name="Tennis")
         cricket, _ = Sport.objects.get_or_create(name="Cricket")
         response = self.client.get(reverse("admin:predictions_match_add"))
         widget = response.context["adminform"].form.fields["sport"].widget
         widget = getattr(widget, "widget", widget)
         ids = json.loads(widget.attrs["data-lose-from-win-sports"])
-        self.assertEqual(ids, [football.pk])
+        self.assertCountEqual(ids, [football.pk, hockey.pk])
         self.assertNotIn(tennis.pk, ids)
         self.assertNotIn(cricket.pk, ids)
+
+    def test_admin_fieldsets_order_for_football_and_hockey(self):
+        from predictions.admin import ODDS_POINTS_FIELDS_3WAY
+        football_match = sport_match("Football", "FA", "FB")
+        hockey_match = sport_match("Hockey", "HA", "HB")
+        for m in (football_match, hockey_match):
+            resp = self.client.get(reverse("admin:predictions_match_change", args=[m.pk]))
+            self.assertEqual(resp.status_code, 200)
+            adminform = resp.context["adminform"]
+            odds_points_fieldset = [fs for fs in adminform.fieldsets if fs[0] == "Odds & Points"][0]
+            field_names = [f for f in odds_points_fieldset[1]["fields"]]
+            self.assertEqual(tuple(field_names), ODDS_POINTS_FIELDS_3WAY)
+
+    def test_admin_fieldsets_order_for_other_sports(self):
+        from predictions.admin import ODDS_POINTS_FIELDS_DEFAULT
+        tennis_match = sport_match("Tennis", "TA", "TB")
+        cricket_match = sport_match("Cricket", "CA", "CB")
+        for m in (tennis_match, cricket_match):
+            resp = self.client.get(reverse("admin:predictions_match_change", args=[m.pk]))
+            self.assertEqual(resp.status_code, 200)
+            adminform = resp.context["adminform"]
+            odds_points_fieldset = [fs for fs in adminform.fieldsets if fs[0] == "Odds & Points"][0]
+            field_names = [f for f in odds_points_fieldset[1]["fields"]]
+            self.assertEqual(tuple(field_names), ODDS_POINTS_FIELDS_DEFAULT)
 
     def test_add_form_exposes_all_four_points_fields(self):
         response = self.client.get(reverse("admin:predictions_match_add"))

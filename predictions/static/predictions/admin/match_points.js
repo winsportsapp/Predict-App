@@ -87,13 +87,58 @@
       }
     }
 
+    var ORDER_3WAY = [
+      "field-team_a_odds",
+      "field-draw_odds",
+      "field-team_b_odds",
+      "field-team_a_win_points",
+      "field-team_a_lose_points",
+      "field-draw_win_points",
+      "field-draw_lose_points",
+      "field-team_b_win_points",
+      "field-team_b_lose_points"
+    ];
+
+    var ORDER_DEFAULT = [
+      "field-team_a_odds",
+      "field-team_b_odds",
+      "field-draw_odds",
+      "field-team_a_win_points",
+      "field-team_a_lose_points",
+      "field-team_b_win_points",
+      "field-team_b_lose_points",
+      "field-draw_win_points",
+      "field-draw_lose_points"
+    ];
+
+    function reorderOddsAndPointsFields() {
+      var isDrawSport = (loseFromWinSports.indexOf(sportSelect.value) !== -1);
+      var order = isDrawSport ? ORDER_3WAY : ORDER_DEFAULT;
+      var firstRow = document.querySelector(".form-row.field-team_a_odds");
+      if (!firstRow || !firstRow.parentNode) {
+        return;
+      }
+      var container = firstRow.parentNode;
+      order.forEach(function (className) {
+        var row = container.querySelector(".form-row." + className);
+        if (row) {
+          container.appendChild(row);
+        }
+      });
+    }
+
     [aOdds, bOdds, drawOdds].forEach(function (inp) {
       if (inp) {
         inp.addEventListener("input", recalculateFromOdds);
       }
     });
 
-    sportSelect.addEventListener("change", recalculateFromOdds);
+    sportSelect.addEventListener("change", function () {
+      reorderOddsAndPointsFields();
+      recalculateFromOdds();
+    });
+
+    reorderOddsAndPointsFields();
 
     // Manual typing into Team A win points for 2-way sports
     aWin.addEventListener("input", function () {

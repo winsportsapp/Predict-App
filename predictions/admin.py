@@ -233,6 +233,31 @@ class AddedByFilter(admin.SimpleListFilter):
         return queryset
 
 
+ODDS_POINTS_FIELDS_DEFAULT = (
+    "team_a_odds",
+    "team_b_odds",
+    "draw_odds",
+    "team_a_win_points",
+    "team_a_lose_points",
+    "team_b_win_points",
+    "team_b_lose_points",
+    "draw_win_points",
+    "draw_lose_points",
+)
+
+ODDS_POINTS_FIELDS_3WAY = (
+    "team_a_odds",
+    "draw_odds",
+    "team_b_odds",
+    "team_a_win_points",
+    "team_a_lose_points",
+    "draw_win_points",
+    "draw_lose_points",
+    "team_b_win_points",
+    "team_b_lose_points",
+)
+
+
 @admin.register(Match)
 class MatchAdmin(admin.ModelAdmin):
     form = MatchAdminForm
@@ -353,17 +378,7 @@ class MatchAdmin(admin.ModelAdmin):
             "classes": ("collapse",),
         }),
         ("Odds & Points", {
-            "fields": (
-                "team_a_odds",
-                "team_b_odds",
-                "draw_odds",
-                "team_a_win_points",
-                "team_a_lose_points",
-                "team_b_win_points",
-                "team_b_lose_points",
-                "draw_win_points",
-                "draw_lose_points",
-            ),
+            "fields": ODDS_POINTS_FIELDS_DEFAULT,
             "description": (
                 "Flashscore decimal odds automatically calculate Win and Lose points: "
                 "Win = round(100 - (100 / odd)), Lose = Win - 100. "
@@ -376,6 +391,31 @@ class MatchAdmin(admin.ModelAdmin):
             ),
         }),
     )
+
+    def get_fieldsets(self, request, obj=None):
+        sport_name = None
+        if obj and obj.sport:
+            sport_name = obj.sport.name
+        elif "sport" in request.GET:
+            try:
+                sport_name = Sport.objects.filter(pk=request.GET["sport"]).values_list("name", flat=True).first()
+            except (ValueError, TypeError):
+                pass
+
+        odds_points_fields = (
+            ODDS_POINTS_FIELDS_3WAY
+            if sport_name in LOSE_FROM_WIN_SPORTS
+            else ODDS_POINTS_FIELDS_DEFAULT
+        )
+
+        fieldsets = list(super().get_fieldsets(request, obj=obj))
+        new_fieldsets = []
+        for name, opts in fieldsets:
+            if name == "Odds & Points":
+                opts = dict(opts)
+                opts["fields"] = odds_points_fields
+            new_fieldsets.append((name, opts))
+        return new_fieldsets
 
     def get_queryset(self, request):
         # Past-deadline Scheduled matches show as Awaiting result here too.
