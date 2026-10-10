@@ -1,12 +1,11 @@
-// Match admin: for Tennis, Badminton and Cricket, typing Team A win points fills the
-// other points fields as a 100-point split. Example: A win 60 gives
-// A lose -40, B win 40, B lose -60, Draw win 0 and Draw lose 0.
-// The sport ids are embedded on the Sport <select> as
-// data-autofill-points-sports (see MatchAdminForm in predictions/admin.py).
-// For Football (data-lose-from-win-sports), each win points field fills its
-// own lose points as win - 100: Team A, Team B and Draw.
-// Only typing into a win points field triggers it, so saved values are never
-// overwritten on page load, and every field stays editable afterwards.
+// Match admin: live calculation of points fields from odds using normalized probabilities.
+// For Football and Hockey (3-way with Draw):
+//   Normalized prob P(A), P(Draw), P(B).
+//   Win points = Math.round(100 - P), Lose points = -Math.round(P).
+// For Tennis, Badminton and Cricket (2-way without Draw):
+//   Normalized prob P(A), P(B).
+//   Win points = Math.round(100 - P), Lose points = -Math.round(P).
+//   Draw win and lose points are set to 0.
 (function () {
   "use strict";
 
@@ -25,49 +24,6 @@
       return;
     }
 
-    function calcWinLose(oddVal) {
-      if (oddVal === null || oddVal <= 1.0) return null;
-      var win = Math.round(100.0 - (100.0 / oddVal));
-      var lose = win - 100;
-      return [win, lose];
-    }
-
-    function floatValue(input) {
-      if (!input) return null;
-      var val = parseFloat(input.value.trim());
-      return (!isNaN(val) && isFinite(val) && val > 1.0) ? val : null;
-    }
-
-    if (aOdds) {
-      aOdds.addEventListener("input", function () {
-        var pts = calcWinLose(floatValue(aOdds));
-        if (pts) {
-          aWin.value = pts[0];
-          aLose.value = pts[1];
-        }
-      });
-    }
-
-    if (bOdds) {
-      bOdds.addEventListener("input", function () {
-        var pts = calcWinLose(floatValue(bOdds));
-        if (pts) {
-          bWin.value = pts[0];
-          bLose.value = pts[1];
-        }
-      });
-    }
-
-    if (drawOdds) {
-      drawOdds.addEventListener("input", function () {
-        var pts = calcWinLose(floatValue(drawOdds));
-        if (pts) {
-          drawWin.value = pts[0];
-          drawLose.value = pts[1];
-        }
-      });
-    }
-
     var autofillSports = [];
     var loseFromWinSports = [];
     try {
@@ -79,11 +35,67 @@
       return;
     }
 
+    function floatValue(input) {
+      if (!input) return null;
+      var val = parseFloat(input.value.trim());
+      return (!isNaN(val) && isFinite(val) && val > 1.0) ? val : null;
+    }
+
     function intValue(input) {
       var value = input.value.trim();
       return /^-?\d+$/.test(value) ? parseInt(value, 10) : null;
     }
 
+    function recalculateFromOdds() {
+      var oa = floatValue(aOdds);
+      var ob = floatValue(bOdds);
+      var od = floatValue(drawOdds);
+      var isDrawSport = (loseFromWinSports.indexOf(sportSelect.value) !== -1);
+
+      // 3-way sport (Football, Hockey): if all 3 odds available, normalize across all 3
+      if (isDrawSport && oa && ob && od) {
+        var invA = 1.0 / oa;
+        var invD = 1.0 / od;
+        var invB = 1.0 / ob;
+        var total = invA + invD + invB;
+        var pa = (invA / total) * 100.0;
+        var pd = (invD / total) * 100.0;
+        var pb = (invB / total) * 100.0;
+        aWin.value = Math.round(100.0 - pa);
+        aLose.value = -Math.round(pa);
+        bWin.value = Math.round(100.0 - pb);
+        bLose.value = -Math.round(pb);
+        drawWin.value = Math.round(100.0 - pd);
+        drawLose.value = -Math.round(pd);
+        return;
+      }
+
+      // 2-way sport (Tennis, Badminton, Cricket): normalize across A and B, set Draw to 0
+      if (!isDrawSport && oa && ob) {
+        var invA2 = 1.0 / oa;
+        var invB2 = 1.0 / ob;
+        var total2 = invA2 + invB2;
+        var pa2 = (invA2 / total2) * 100.0;
+        var pb2 = (invB2 / total2) * 100.0;
+        aWin.value = Math.round(100.0 - pa2);
+        aLose.value = -Math.round(pa2);
+        bWin.value = Math.round(100.0 - pb2);
+        bLose.value = -Math.round(pb2);
+        drawWin.value = 0;
+        drawLose.value = 0;
+        return;
+      }
+    }
+
+    [aOdds, bOdds, drawOdds].forEach(function (inp) {
+      if (inp) {
+        inp.addEventListener("input", recalculateFromOdds);
+      }
+    });
+
+    sportSelect.addEventListener("change", recalculateFromOdds);
+
+    // Manual typing into Team A win points for 2-way sports
     aWin.addEventListener("input", function () {
       if (autofillSports.indexOf(sportSelect.value) === -1) {
         return;
@@ -100,8 +112,7 @@
       drawLose.value = 0;
     });
 
-    // Football: each win points field fills its own lose points as
-    // win - 100, e.g. Team B win 60 gives Team B lose -40.
+    // 3-way sports: typing into win points fills lose points as win - 100
     [[aWin, aLose], [bWin, bLose], [drawWin, drawLose]].forEach(function (pair) {
       pair[0].addEventListener("input", function () {
         if (loseFromWinSports.indexOf(sportSelect.value) === -1) {

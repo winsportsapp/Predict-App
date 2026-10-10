@@ -106,7 +106,7 @@ def _int_or_none(value):
 POINTS_AUTOFILL_SPORTS = ("Tennis", "Badminton", "Cricket")
 # Sports whose lose points are filled from the win points as win - 100, for
 # Team A, Team B and Draw separately (see match_points.js).
-LOSE_FROM_WIN_SPORTS = ("Football",)
+LOSE_FROM_WIN_SPORTS = ("Football", "Hockey")
 
 
 class MatchAdminForm(forms.ModelForm):

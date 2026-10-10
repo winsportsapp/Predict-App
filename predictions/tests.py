@@ -5882,23 +5882,23 @@ class OddsAndPointsTests(TestCase):
     def test_calculate_match_points_football_with_draw(self):
         from predictions.services import calculate_match_points
 
-        # home=3.0, away=2.0, draw=3.0, allows_draw=True
-        pts = calculate_match_points(odds_a=3.0, odds_b=2.0, odds_draw=3.0, allows_draw=True)
-        self.assertEqual(pts["team_a_win_points"], 67)
-        self.assertEqual(pts["team_a_lose_points"], -33)
-        self.assertEqual(pts["team_b_win_points"], 50)
-        self.assertEqual(pts["team_b_lose_points"], -50)
-        self.assertEqual(pts["draw_win_points"], 67)
-        self.assertEqual(pts["draw_lose_points"], -33)
+        # home=2.04, away=3.78, draw=3.85, allows_draw=True
+        pts = calculate_match_points(odds_a=2.04, odds_b=3.78, odds_draw=3.85, allows_draw=True)
+        self.assertEqual(pts["team_a_win_points"], 52)
+        self.assertEqual(pts["team_a_lose_points"], -48)
+        self.assertEqual(pts["team_b_win_points"], 74)
+        self.assertEqual(pts["team_b_lose_points"], -26)
+        self.assertEqual(pts["draw_win_points"], 74)
+        self.assertEqual(pts["draw_lose_points"], -26)
 
     def test_calculate_match_points_tennis_no_draw(self):
         from predictions.services import calculate_match_points
 
         pts = calculate_match_points(odds_a=1.5, odds_b=2.5, odds_draw=None, allows_draw=False)
-        self.assertEqual(pts["team_a_win_points"], 33)
-        self.assertEqual(pts["team_a_lose_points"], -67)
-        self.assertEqual(pts["team_b_win_points"], 60)
-        self.assertEqual(pts["team_b_lose_points"], -40)
+        self.assertEqual(pts["team_a_win_points"], 38)
+        self.assertEqual(pts["team_a_lose_points"], -63)
+        self.assertEqual(pts["team_b_win_points"], 63)
+        self.assertEqual(pts["team_b_lose_points"], -38)
         self.assertEqual(pts["draw_win_points"], 0)
         self.assertEqual(pts["draw_lose_points"], 0)
 
@@ -5912,12 +5912,12 @@ class OddsAndPointsTests(TestCase):
         self.assertEqual(float(m.team_a_odds), 3.0)
         self.assertEqual(float(m.team_b_odds), 2.0)
         self.assertEqual(float(m.draw_odds), 4.0)
-        self.assertEqual(m.team_a_win_points, 67)
-        self.assertEqual(m.team_a_lose_points, -33)
-        self.assertEqual(m.team_b_win_points, 50)
-        self.assertEqual(m.team_b_lose_points, -50)
-        self.assertEqual(m.draw_win_points, 75)
-        self.assertEqual(m.draw_lose_points, -25)
+        self.assertEqual(m.team_a_win_points, 69)
+        self.assertEqual(m.team_a_lose_points, -31)
+        self.assertEqual(m.team_b_win_points, 54)
+        self.assertEqual(m.team_b_lose_points, -46)
+        self.assertEqual(m.draw_win_points, 77)
+        self.assertEqual(m.draw_lose_points, -23)
         self.assertEqual(m.odds_display, "A: 3.00 | D: 4.00 | B: 2.00")
 
     def test_admin_fetch_odds_and_calculate_points_action(self):
@@ -5972,12 +5972,12 @@ class OddsAndPointsTests(TestCase):
         self.assertEqual(float(match.team_a_odds), 3.0)
         self.assertEqual(float(match.team_b_odds), 2.0)
         self.assertEqual(float(match.draw_odds), 3.5)
-        self.assertEqual(match.team_a_win_points, 67)
-        self.assertEqual(match.team_a_lose_points, -33)
-        self.assertEqual(match.team_b_win_points, 50)
-        self.assertEqual(match.team_b_lose_points, -50)
-        self.assertEqual(match.draw_win_points, 71)
-        self.assertEqual(match.draw_lose_points, -29)
+        self.assertEqual(match.team_a_win_points, 70)
+        self.assertEqual(match.team_a_lose_points, -30)
+        self.assertEqual(match.team_b_win_points, 55)
+        self.assertEqual(match.team_b_lose_points, -45)
+        self.assertEqual(match.draw_win_points, 74)
+        self.assertEqual(match.draw_lose_points, -26)
 
     def test_extract_odds_tuple_flashlive_3way_football(self):
         from predictions.importers.flashlive import _extract_odds_tuple

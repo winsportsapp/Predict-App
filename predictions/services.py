@@ -1,5 +1,6 @@
 import os
 from datetime import timedelta
+from decimal import Decimal, ROUND_HALF_UP
 
 from django.core.exceptions import ValidationError
 from django.core.files.base import ContentFile
@@ -45,36 +46,101 @@ def calculate_points_from_odd(odd):
 
     Falls back to (POINTS_CORRECT, POINTS_WRONG) if odd is missing or <= 1.0.
     """
+def _round_half_up(val):
+    return int(Decimal(str(val)).quantize(Decimal("1"), rounding=ROUND_HALF_UP))
+
+
+def _safe_odd(odd):
     if odd is None:
-        return POINTS_CORRECT, POINTS_WRONG
+        return None
     try:
         val = float(odd)
+        return val if val > 1.0 else None
     except (ValueError, TypeError):
-        return POINTS_CORRECT, POINTS_WRONG
-    if val <= 1.0:
+        return None
+
+
+def calculate_points_from_odd(odd):
+    """Fallback single-odd calculation: (win, lose) points from an individual odd.
+
+    win = round(100 - (100 / odd)), lose = win - 100
+    Falls back to (POINTS_CORRECT, POINTS_WRONG) if odd is missing or <= 1.0.
+    """
+    val = _safe_odd(odd)
+    if val is None:
         return POINTS_CORRECT, POINTS_WRONG
 
-    win = int(round(100.0 - (100.0 / val)))
-    lose = win - 100
+    p = (1.0 / val) * 100.0
+    win = _round_half_up(100.0 - p)
+    lose = -_round_half_up(p)
     return win, lose
 
 
 def calculate_match_points(odds_a=None, odds_b=None, odds_draw=None, allows_draw=False):
-    """Return dict of the 6 point fields computed from odds."""
+    """Return dict of the 6 point fields computed from odds using normalized implied probabilities.
+
+    For 3-way sports (Football, Hockey):
+      Normalizes probabilities across Team A, Draw, and Team B (removing bookmaker overround).
+      Win points = round(100 - P(%)), Lose points = -round(P(%)).
+
+    For 2-way sports (Tennis, Badminton, Cricket):
+      Normalizes probabilities across Team A and Team B.
+      Win points = round(100 - P(%)), Lose points = -round(P(%)).
+      Draw fields are set to 0.
+
+    Falls back to (POINTS_CORRECT, POINTS_WRONG) if odds are missing or invalid.
+    """
+    val_a = _safe_odd(odds_a)
+    val_b = _safe_odd(odds_b)
+    val_d = _safe_odd(odds_draw) if allows_draw else None
+
+    # 3-way sports with all 3 odds available
+    if allows_draw and val_a and val_b and val_d:
+        inv_a = 1.0 / val_a
+        inv_d = 1.0 / val_d
+        inv_b = 1.0 / val_b
+        total = inv_a + inv_d + inv_b
+        pa = (inv_a / total) * 100.0
+        pd = (inv_d / total) * 100.0
+        pb = (inv_b / total) * 100.0
+        return {
+            "team_a_win_points": _round_half_up(100.0 - pa),
+            "team_a_lose_points": -_round_half_up(pa),
+            "team_b_win_points": _round_half_up(100.0 - pb),
+            "team_b_lose_points": -_round_half_up(pb),
+            "draw_win_points": _round_half_up(100.0 - pd),
+            "draw_lose_points": -_round_half_up(pd),
+        }
+
+    # 2-way sports with both odds available
+    if not allows_draw and val_a and val_b:
+        inv_a = 1.0 / val_a
+        inv_b = 1.0 / val_b
+        total = inv_a + inv_b
+        pa = (inv_a / total) * 100.0
+        pb = (inv_b / total) * 100.0
+        return {
+            "team_a_win_points": _round_half_up(100.0 - pa),
+            "team_a_lose_points": -_round_half_up(pa),
+            "team_b_win_points": _round_half_up(100.0 - pb),
+            "team_b_lose_points": -_round_half_up(pb),
+            "draw_win_points": 0,
+            "draw_lose_points": 0,
+        }
+
+    # Partial / fallback points calculation
     a_win, a_lose = (
-        calculate_points_from_odd(odds_a) if odds_a else (POINTS_CORRECT, POINTS_WRONG)
+        calculate_points_from_odd(val_a) if val_a else (POINTS_CORRECT, POINTS_WRONG)
     )
     b_win, b_lose = (
-        calculate_points_from_odd(odds_b) if odds_b else (POINTS_CORRECT, POINTS_WRONG)
+        calculate_points_from_odd(val_b) if val_b else (POINTS_CORRECT, POINTS_WRONG)
     )
 
     if allows_draw:
-        if odds_draw:
-            d_win, d_lose = calculate_points_from_odd(odds_draw)
-        else:
-            d_win, d_lose = POINTS_CORRECT, POINTS_WRONG
+        d_win, d_lose = (
+            calculate_points_from_odd(val_d) if val_d else (POINTS_CORRECT, POINTS_WRONG)
+        )
     else:
-        # Sports without draw (Tennis, Badminton) set both to 0 to hide draw pick
         d_win, d_lose = 0, 0
 
     return {
