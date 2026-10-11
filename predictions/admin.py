@@ -209,13 +209,29 @@ class PublishedFilter(admin.SimpleListFilter):
     parameter_name = "published"
 
     def lookups(self, request, model_admin):
-        return (("yes", "Published"), ("no", "To be published"))
+        return (
+            ("yes", "Published"),
+            ("no", "To be published"),
+            ("with_odds", "To be published with odds"),
+            ("without_odds", "To be published without odds"),
+        )
 
     def queryset(self, request, queryset):
         if self.value() == "yes":
             return queryset.filter(is_published=True)
         if self.value() == "no":
             return queryset.filter(is_published=False)
+        if self.value() == "with_odds":
+            return queryset.filter(
+                is_published=False,
+                team_a_odds__gt=0,
+                team_b_odds__gt=0,
+            )
+        if self.value() == "without_odds":
+            return queryset.filter(is_published=False).exclude(
+                team_a_odds__gt=0,
+                team_b_odds__gt=0,
+            )
         return queryset
 
 
@@ -316,7 +332,13 @@ class MatchAdmin(admin.ModelAdmin):
             "publication_links": self._filter_links(
                 request,
                 PublishedFilter.parameter_name,
-                (("", "All"), ("yes", "Published"), ("no", "To be published")),
+                (
+                    ("", "All"),
+                    ("yes", "Published"),
+                    ("no", "To be published"),
+                    ("with_odds", "To be published with odds"),
+                    ("without_odds", "To be published without odds"),
+                ),
             ),
             "added_by_links": self._filter_links(
                 request,

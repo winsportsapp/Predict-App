@@ -3231,6 +3231,70 @@ class MatchAdminActionTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'name="event_name"')
 
+    def test_published_filter_with_odds_and_without_odds(self):
+        from decimal import Decimal
+
+        match_with_odds = future_match(
+            is_published=False,
+            event_name="EventWithOdds",
+            team_a_odds=Decimal("2.10"),
+            team_b_odds=Decimal("1.80"),
+        )
+        match_without_odds = future_match(
+            is_published=False,
+            event_name="EventWithoutOdds",
+            team_a_odds=None,
+            team_b_odds=None,
+        )
+        match_published = future_match(
+            is_published=True,
+            event_name="EventPublished",
+            team_a_odds=Decimal("1.50"),
+            team_b_odds=Decimal("2.50"),
+        )
+
+        # Filter: with odds
+        resp = self.client.get(self.url + "?published=with_odds")
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "EventWithOdds")
+        self.assertNotContains(resp, "EventWithoutOdds")
+        self.assertNotContains(resp, "EventPublished")
+
+        # Filter: without odds
+        resp = self.client.get(self.url + "?published=without_odds")
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "EventWithoutOdds")
+        self.assertNotContains(resp, "EventWithOdds")
+        self.assertNotContains(resp, "EventPublished")
+
+        # Filter: to be published (all unpublished)
+        resp = self.client.get(self.url + "?published=no")
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "EventWithOdds")
+        self.assertContains(resp, "EventWithoutOdds")
+        self.assertNotContains(resp, "EventPublished")
+
+        # Filter: published
+        resp = self.client.get(self.url + "?published=yes")
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "EventPublished")
+        self.assertNotContains(resp, "EventWithOdds")
+        self.assertNotContains(resp, "EventWithoutOdds")
+
+    def test_publication_links_rendered_in_changelist(self):
+        resp = self.client.get(self.url)
+        self.assertEqual(resp.status_code, 200)
+        pub_links = resp.context["publication_links"]
+        titles = [item["title"] for item in pub_links]
+        self.assertIn("To be published with odds", titles)
+        self.assertIn("To be published without odds", titles)
+
+        resp_with_odds = self.client.get(self.url + "?published=with_odds")
+        self.assertContains(resp_with_odds, "<strong>To be published with odds</strong>")
+
+        resp_without_odds = self.client.get(self.url + "?published=without_odds")
+        self.assertContains(resp_without_odds, "<strong>To be published without odds</strong>")
+
 
 class SettingsSecurityTests(SimpleTestCase):
     """config/settings.py: HTTPS / secure-cookie config only under DEBUG=False.
