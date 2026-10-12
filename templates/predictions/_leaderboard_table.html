@@ -3,38 +3,34 @@
   <!-- Top 3 Podium Leaders (APK Style) -->
   {% if profiles|length >= 1 %}
     <div class="row g-2 mb-3 podium-row">
-      {% for p in profiles|slice:":3" %}
+      {% for slot in profiles|podium_slots %}
         <div class="col-4">
-          <div class="card h-100 text-center podium-card shadow-sm {% if p.medal == 'gold' %}podium-gold{% elif p.medal == 'silver' %}podium-silver{% elif p.medal == 'bronze' %}podium-bronze{% else %}podium-standard{% endif %}">
+          <div class="card h-100 text-center podium-card shadow-sm podium-{{ slot.medal }}">
             <div class="podium-badge">
-              {% if p.medal == "gold" %}
-                <img src="{% static 'predictions/medals/gold.svg' %}" alt="Gold" class="podium-medal-icon">
-                <span class="d-block fw-bold text-warning-emphasis" style="font-size: 0.70rem;">1st Place</span>
-              {% elif p.medal == "silver" %}
-                <img src="{% static 'predictions/medals/silver.svg' %}" alt="Silver" class="podium-medal-icon">
-                <span class="d-block fw-bold text-secondary" style="font-size: 0.70rem;">2nd Place</span>
-              {% elif p.medal == "bronze" %}
-                <img src="{% static 'predictions/medals/bronze.svg' %}" alt="Bronze" class="podium-medal-icon">
-                <span class="d-block fw-bold text-warning-emphasis" style="font-size: 0.70rem;">3rd Place</span>
-              {% else %}
-                <span class="badge rounded-pill bg-light text-secondary border fw-bold" style="font-size: 0.65rem;">#{{ forloop.counter }}</span>
-              {% endif %}
+              <img src="{% static 'predictions/medals/' %}{{ slot.medal }}.svg" alt="{{ slot.medal|title }}" class="podium-medal-icon">
+              <span class="d-block fw-bold {% if slot.medal == 'silver' %}text-secondary{% else %}text-warning-emphasis{% endif %}" style="font-size: 0.70rem;">{{ slot.place }}</span>
             </div>
-            <div class="podium-player fw-bold" title="{{ p.user.username }}">
-              {% country_flag p.country as flag_img %}
-              {% if flag_img %}
-                <div class="podium-flag">{{ flag_img }}</div>
-              {% endif %}
-              <div class="podium-player-name text-truncate">
-                <span class="small">{{ p.user.username }}</span>
+            {% if slot.profile %}
+              <div class="podium-player fw-bold" title="{{ slot.profile.user.username }}">
+                {% country_flag slot.profile.country as flag_img %}
+                {% if flag_img %}
+                  <div class="podium-flag">{{ flag_img }}</div>
+                {% endif %}
+                <div class="podium-player-name text-truncate">
+                  <span class="small">{{ slot.profile.user.username }}</span>
+                </div>
               </div>
-            </div>
-            <div class="podium-points fw-bold text-success" style="font-size: 0.82rem;">
-              {% if is_monthly %}{{ p.monthly_points }}{% else %}{{ p.points }}{% endif %} <span class="text-muted" style="font-size: 0.62rem;">pts</span>
-            </div>
-            <div class="text-muted" style="font-size: 0.65rem;">
-              {% if is_monthly %}{{ p.monthly_predictions_count }}{% else %}{{ p.predictions_count }}{% endif %} Picks
-            </div>
+              <div class="podium-points fw-bold {% if is_monthly %}{% if slot.profile.monthly_points < 0 %}text-danger{% else %}text-success{% endif %}{% else %}{% if slot.profile.points < 0 %}text-danger{% else %}text-success{% endif %}{% endif %}" style="font-size: 0.82rem;">
+                {% if is_monthly %}{{ slot.profile.monthly_points }}{% else %}{{ slot.profile.points }}{% endif %} <span class="text-muted" style="font-size: 0.62rem;">pts</span>
+              </div>
+              <div class="text-muted" style="font-size: 0.65rem;">
+                {% if is_monthly %}{{ slot.profile.monthly_predictions_count }}{% else %}{{ slot.profile.predictions_count }}{% endif %} Picks
+              </div>
+            {% else %}
+              <div class="podium-awaiting d-flex align-items-center justify-content-center text-muted fw-semibold small py-3" style="font-size: 0.75rem;">
+                Awaiting
+              </div>
+            {% endif %}
           </div>
         </div>
       {% endfor %}

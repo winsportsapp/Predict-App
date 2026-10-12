@@ -2315,17 +2315,12 @@ class UserPredictionCountAdminTests(TestCase):
 
 
 class VoucherAnnouncementTests(TestCase):
-    """Temporary October-2026 voucher promo banner on the Monthly board."""
+    """Gift voucher announcement banner removed from the Monthly board."""
 
-    def test_shown_on_or_before_october_2026(self):
-        with mock.patch("predictions.views._current_month", return_value=(2026, 10)):
-            response = self.client.get(reverse("leaderboard"))
-        self.assertContains(response, "Gift vouchers are expected to be issued")
-
-    def test_hidden_from_november_2026(self):
-        with mock.patch("predictions.views._current_month", return_value=(2026, 11)):
-            response = self.client.get(reverse("leaderboard"))
-        self.assertNotContains(response, "Gift vouchers are expected to be issued")
+    def test_voucher_announcement_is_removed(self):
+        response = self.client.get(reverse("leaderboard"))
+        self.assertNotContains(response, "Gift Voucher Announcement:")
+        self.assertNotContains(response, "Vouchers are expected to be issued")
 
 
 @mock.patch("predictions.views.MEDAL_MIN_PREDICTIONS", 0)
@@ -2495,20 +2490,87 @@ class AllTimeMedalEligibilityTests(TestCase):
     def test_note_is_shown_on_the_all_time_board(self):
         content = self.client.get(reverse("leaderboard")).content.decode()
         all_time = content[content.index('id="leaderboard-all-time"'):]
-        self.assertIn("Minimum of 200 Counts (Predictions)", all_time)
+        self.assertIn("Rule: Minimum of 200 Picks required", all_time)
 
     def test_note_is_shown_on_the_monthly_board(self):
         content = self.client.get(reverse("leaderboard")).content.decode()
         monthly = content[
             content.index('id="leaderboard-monthly"'):content.index('id="leaderboard-all-time"')
         ]
-        self.assertIn("Minimum of 200 Counts (Predictions)", monthly)
+        self.assertIn("Rule: Minimum of 200 Picks required", monthly)
+
+    def test_podium_box_shows_awaiting_when_player_not_eligible_for_medal(self):
+        self._player("first", points=300, predictions=200)
+        self._player("second", points=200, predictions=220)
+        self._player("ineligible_third", points=150, predictions=50)
+
+        response = self.client.get(reverse("leaderboard"))
+        content = response.content.decode()
+        all_time_content = content[content.index('id="leaderboard-all-time"'):]
+        podium_section = all_time_content[
+            all_time_content.index('class="row g-2 mb-3 podium-row"'):all_time_content.index('class="table-responsive')
+        ]
+
+        self.assertIn("first", podium_section)
+        self.assertIn("second", podium_section)
+        # Ineligible 3rd player's username does not appear in the podium
+        self.assertNotIn("ineligible_third", podium_section)
+        # 3rd place podium box shows 3rd Place, bronze medal icon and Awaiting
+        self.assertIn("3rd Place", podium_section)
+        self.assertIn("bronze.svg", podium_section)
+        self.assertIn("Awaiting", podium_section)
+
+    def test_podium_box_shows_red_color_for_negative_points(self):
+        self._player("neg_medalist", points=-25, predictions=250)
+
+        response = self.client.get(reverse("leaderboard"))
+        content = response.content.decode()
+        all_time_content = content[content.index('id="leaderboard-all-time"'):]
+        podium_section = all_time_content[
+            all_time_content.index('class="row g-2 mb-3 podium-row"'):all_time_content.index('class="table-responsive')
+        ]
+
+        self.assertIn("text-danger", podium_section)
+        self.assertIn("-25", podium_section)
+        # Player name should not have text-danger
+        self.assertNotIn('podium-player-name text-truncate text-danger', podium_section)
+
+    def test_negative_points_player_ranks_above_zero_picks_player(self):
+        neg_player = self._player("neg_active", points=-10, predictions=5)
+        zero_player = make_user("zero_picks", password="pass12345")
+        Profile.objects.filter(user=zero_player).update(points=0)
+
+        response = self.client.get(reverse("leaderboard"))
+        all_time_profiles = response.context["all_time_profiles"]
+        names = [p.user.username for p in all_time_profiles]
+
+        neg_idx = names.index("neg_active")
+        zero_idx = names.index("zero_picks")
+        self.assertLess(neg_idx, zero_idx)
+
+    def test_zero_picks_players_are_at_bottom_of_table(self):
+        active_pos = self._player("active_pos", points=50, predictions=10)
+        active_neg = self._player("active_neg", points=-5, predictions=2)
+        zero_p1 = make_user("zero_one", password="pass12345")
+        Profile.objects.filter(user=zero_p1).update(points=0)
+        zero_p2 = make_user("zero_two", password="pass12345")
+        Profile.objects.filter(user=zero_p2).update(points=0)
+
+        response = self.client.get(reverse("leaderboard"))
+        all_time_profiles = response.context["all_time_profiles"]
+        names = [p.user.username for p in all_time_profiles]
+
+        # Both active players appear before both zero-pick players
+        self.assertLess(names.index("active_pos"), names.index("zero_one"))
+        self.assertLess(names.index("active_pos"), names.index("zero_two"))
+        self.assertLess(names.index("active_neg"), names.index("zero_one"))
+        self.assertLess(names.index("active_neg"), names.index("zero_two"))
 
     def test_how_it_works_page_mentions_200_predictions(self):
         response = self.client.get(reverse("how_it_works"))
         self.assertContains(
             response,
-            "A minimum of 200 predictions is required to be eligible for a medal.",
+            "A minimum of 200 picks (predictions) is required to be eligible for a medal.",
         )
 
     def test_monthly_board_comes_before_all_time(self):

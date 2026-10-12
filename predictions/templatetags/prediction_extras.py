@@ -51,3 +51,28 @@ def country_flag(country, css_class="team-flag"):
         country,
         css_class,
     )
+
+
+@register.filter
+def podium_slots(profiles):
+    """Return 3 podium slot dicts (Gold, Silver, Bronze).
+    If an eligible player earned that medal, slot['profile'] is set to that player.
+    Otherwise, slot['profile'] is None (rendered as 'Awaiting' in the podium).
+    """
+    slots = [
+        {"place": "1st Place", "medal": "gold", "profile": None},
+        {"place": "2nd Place", "medal": "silver", "profile": None},
+        {"place": "3rd Place", "medal": "bronze", "profile": None},
+    ]
+    if not profiles:
+        return slots
+    for p in profiles:
+        medal = getattr(p, "medal", None)
+        if medal == "gold" and slots[0]["profile"] is None:
+            slots[0]["profile"] = p
+        elif medal == "silver" and slots[1]["profile"] is None:
+            slots[1]["profile"] = p
+        elif medal == "bronze" and slots[2]["profile"] is None:
+            slots[2]["profile"] = p
+    return slots
+

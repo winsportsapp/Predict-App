@@ -343,6 +343,21 @@ def _parse_month(value):
     return year, month
 
 
+def _sort_profiles_for_board(profiles, count_attr, points_attr):
+    """Active players (picks > 0) come first, ordered by points descending.
+    Players with negative points sit above players with zero picks.
+    Zero-pick players (picks == 0) sit at the bottom of the table.
+    """
+    profiles.sort(
+        key=lambda p: (
+            0 if getattr(p, count_attr, 0) > 0 else 1,
+            -getattr(p, points_attr, 0),
+            p.user.username,
+        )
+    )
+    return profiles
+
+
 def _monthly_profiles(year, month):
     """Points earned on matches that kicked off in the given calendar month.
 
@@ -384,7 +399,11 @@ def _monthly_profiles(year, month):
     for profile in profiles:
         profile.monthly_points = totals.get(profile.user_id, 0)
         profile.monthly_predictions_count = prediction_totals.get(profile.user_id, 0)
-    profiles.sort(key=lambda p: (-p.monthly_points, p.user.username))
+    _sort_profiles_for_board(
+        profiles,
+        count_attr="monthly_predictions_count",
+        points_attr="monthly_points",
+    )
     return profiles
 
 
@@ -401,17 +420,23 @@ def _assign_medals_by_rank(profiles):
         profile.medal = medal
 
 
-def _assign_medals_by_eligibility(profiles, minimum, count_attr="monthly_predictions_count"):
+def _assign_medals_by_eligibility(
+    profiles, minimum, count_attr="monthly_predictions_count", points_attr="monthly_points"
+):
     """Top 3 by position *among those with >= minimum predictions on this
     board* (read from `count_attr`) get gold/silver/bronze; a higher-ranked
     but ineligible player is skipped, not just left medal-less in their slot.
 
     Medal winners are placed at the top (ranks 1, 2, 3), followed by all
-    remaining players in their original points-descending order.
+    remaining players in their sorted order (active players with positive to
+    negative points, followed by zero-pick players at the bottom).
     """
     for profile in profiles:
         profile.medal = None
-    eligible = [p for p in profiles if getattr(p, count_attr) >= minimum]
+
+    _sort_profiles_for_board(profiles, count_attr, points_attr)
+
+    eligible = [p for p in profiles if getattr(p, count_attr, 0) >= minimum]
     for medal, profile in zip(_MEDALS, eligible):
         profile.medal = medal
 
@@ -428,9 +453,6 @@ def leaderboard(request):
     YYYY-MM` picks an earlier month, which shows only its top 3.
     """
     current = _current_month()
-    # Temporary promo for the October 2026 voucher draw; gone for good once
-    # November 2026 starts. Remove this once it's no longer needed.
-    show_voucher_announcement = current <= (2026, 10)
     selected = _parse_month(request.GET.get("month"))
     if selected is None or selected > current:
         selected = current
@@ -440,7 +462,10 @@ def leaderboard(request):
     # Medals on both boards always need the prediction floor.
     all_time_profiles = list(_all_time_profiles())
     all_time_profiles = _assign_medals_by_eligibility(
-        all_time_profiles, MEDAL_MIN_PREDICTIONS, count_attr="predictions_count"
+        all_time_profiles,
+        MEDAL_MIN_PREDICTIONS,
+        count_attr="predictions_count",
+        points_attr="points",
     )
 
     monthly_profiles = _monthly_profiles(*selected)
@@ -458,7 +483,10 @@ def leaderboard(request):
         _assign_medals_by_rank(monthly_profiles)
     else:
         monthly_profiles = _assign_medals_by_eligibility(
-            monthly_profiles, MEDAL_MIN_PREDICTIONS
+            monthly_profiles,
+            MEDAL_MIN_PREDICTIONS,
+            count_attr="monthly_predictions_count",
+            points_attr="monthly_points",
         )
 
     months_with_activity = {
@@ -488,7 +516,6 @@ def leaderboard(request):
             "is_past_month": is_past_month,
             "selected_month": f"{selected[0]:04d}-{selected[1]:02d}",
             "month_options": month_options,
-            "show_voucher_announcement": show_voucher_announcement,
         },
     )
 
