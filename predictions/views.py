@@ -81,7 +81,7 @@ def sport_matches(request, sport_slug, extra_context=None):
     sync_match_statuses()
     matches = list(
         Match.objects.filter(is_published=True, sport__name=sport_name).select_related(
-            "team_a", "team_b", "sport", "winner"
+            "team_a", "team_b", "sport", "winner", "stats"
         )
     )
     open_matches = [m for m in matches if m.predictions_open]
