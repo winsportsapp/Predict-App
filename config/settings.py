@@ -260,11 +260,21 @@ GOOGLE_CLIENT_SECRET = (
 
 # Match import (predictions/importers, `manage.py sync_external_matches`)
 
+# Dedicated API-Football key from api-sports.io (100 free requests/day = 3,000/mo).
+# Unset = Football falls back to FlashLive or manual entry.
+API_FOOTBALL_KEY = env('API_FOOTBALL_KEY', default='').strip().strip('"\'').strip()
+API_FOOTBALL_HOST = env('API_FOOTBALL_HOST', default='v3.football.api-sports.io').strip()
+API_FOOTBALL_LEAGUES = env.list('API_FOOTBALL_LEAGUES', default=[])
+
 # RapidAPI key for the FlashLive Sports API (Flashscore data). Unset = the
 # import is disabled.
 # Stray spaces/quotes (e.g. `RAPIDAPI_KEY= "abc"`) would make every request
 # fail with an invalid-header error, so strip them.
 RAPIDAPI_KEY = env('RAPIDAPI_KEY', default='').strip().strip('"\'').strip()
+# Secondary RapidAPI key used exclusively for H2H and recent form queries
+# (Cricket, Tennis, Badminton, Hockey) to isolate stats from daily sync quota.
+# Falls back to RAPIDAPI_KEY if unset.
+RAPIDAPI_STATS_KEY = env('RAPIDAPI_STATS_KEY', default='').strip().strip('"\'').strip()
 # Tournaments to import fixtures from: FlashLive tournament IDs or names,
 # comma-separated, "*" wildcards allowed (e.g. "* ATP*" = every ATP event).
 FLASHLIVE_TOURNAMENTS = env.list('FLASHLIVE_TOURNAMENTS', default=[])
@@ -274,8 +284,8 @@ FLASHLIVE_TEAMS = env.list('FLASHLIVE_TEAMS', default=[])
 # Never import from tournaments matching these (wildcards allowed), e.g.
 # "*Doubles*,*Test*". Checked before the two lists above.
 FLASHLIVE_EXCLUDE_TOURNAMENTS = env.list('FLASHLIVE_EXCLUDE_TOURNAMENTS', default=[])
-# Overrides/additions for our sport name -> FlashLive sport_id. Hockey is not
-# imported by default (entered by hand); "Hockey=24" would add field hockey.
+# Overrides/additions for our sport name -> FlashLive sport_id.
+# Field hockey default is 24.
 FLASHLIVE_SPORT_IDS = env.dict('FLASHLIVE_SPORT_IDS', default={})
 # Whole hours from UTC that "today"/"tomorrow" are counted in for the import
 # (FlashLive takes no half hours). 5 = a day runs 00:30 to 00:30 IST.

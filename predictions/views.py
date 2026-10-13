@@ -36,9 +36,11 @@ from .models import (
 from .services import (
     apply_referral_code,
     credit_referral_if_first_prediction,
+    get_or_fetch_match_stats,
     redeem_credits,
     sync_match_statuses,
 )
+
 
 logger = logging.getLogger(__name__)
 
@@ -156,6 +158,8 @@ def match_detail(request, pk):
             user=request.user, match=match
         ).first()
 
+    stats = get_or_fetch_match_stats(match)
+
     return render(
         request,
         "predictions/match_detail.html",
@@ -163,8 +167,10 @@ def match_detail(request, pk):
             "match": match,
             "state": state,
             "user_prediction": user_prediction,
+            "stats": stats,
         },
     )
+
 
 
 @login_required

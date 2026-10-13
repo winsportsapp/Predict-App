@@ -92,8 +92,12 @@ class Sport(models.Model):
     is_active = models.BooleanField(
         default=True,
         verbose_name="Active for sync",
-        help_text="Uncheck to pause checking fixtures and results from Flashscore (saves API credits).",
+        help_text=(
+            "Uncheck to completely pause all external sync for this sport: fixtures, "
+            "odds, results, H2H, and recent form will consume zero API credits."
+        ),
     )
+
 
     class Meta:
         ordering = ["name"]
@@ -433,6 +437,42 @@ class Match(models.Model):
 
         if errors:
             raise ValidationError(errors)
+
+
+class MatchStats(models.Model):
+    """Caches Head-to-Head (H2H) and recent 5-match form for a match.
+
+    Data is fetched on-demand when a user views match details, and cached
+    for 48 hours to minimize API usage against monthly quotas.
+    """
+
+    match = models.OneToOneField(
+        Match, on_delete=models.CASCADE, related_name="stats"
+    )
+    # Head-to-head match records:
+    # [{"date": "2024-03-10", "competition": "Premier League", "home": "Arsenal",
+    #   "away": "Chelsea", "home_score": "2", "away_score": "1", "winner": "Arsenal"}, ...]
+    h2h_data = models.JSONField(default=list, blank=True)
+    # Summary of H2H: {"team_a_wins": 3, "team_b_wins": 1, "draws": 1, "total": 5}
+    h2h_summary = models.JSONField(default=dict, blank=True)
+    # Team A last 5 matches:
+    # [{"date": "...", "opponent": "...", "score": "2 - 1", "result": "W"|"D"|"L", "competition": "..."}, ...]
+    team_a_recent = models.JSONField(default=list, blank=True)
+    # Team B last 5 matches:
+    team_b_recent = models.JSONField(default=list, blank=True)
+    last_fetched_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Match Stats"
+        verbose_name_plural = "Match Stats"
+
+    def __str__(self):
+        return f"Stats for {self.match}"
+
+    @property
+    def is_stale(self):
+        from datetime import timedelta
+        return timezone.now() - self.last_fetched_at > timedelta(hours=48)
 
 
 class Prediction(models.Model):

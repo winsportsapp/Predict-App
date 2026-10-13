@@ -279,6 +279,8 @@ ODDS_POINTS_FIELDS_3WAY = (
 class MatchAdmin(admin.ModelAdmin):
     form = MatchAdminForm
 
+
+
     class Media:
         js = (
             "predictions/admin/match_teams.js",
@@ -534,7 +536,11 @@ class MatchAdmin(admin.ModelAdmin):
 
         # Group matches by provider for bulk efficiency
         by_provider = {}
+        skipped_inactive = 0
         for match in queryset.select_related("sport"):
+            if not match.sport.is_active:
+                skipped_inactive += 1
+                continue
             provider = provider_for(match.sport.name, providers)
             if provider and match.external_id:
                 by_provider.setdefault(provider, []).append(match)
@@ -551,6 +557,8 @@ class MatchAdmin(admin.ModelAdmin):
                     logger.warning("Failed bulk fetching odds: %s", exc)
 
         for match in queryset.select_related("sport"):
+            if not match.sport.is_active:
+                continue
             if match.pk in fetched_map:
                 home_odds, away_odds, draw_odds = fetched_map[match.pk]
                 apply_odds_and_points(
@@ -584,7 +592,7 @@ class MatchAdmin(admin.ModelAdmin):
                 else ""
             )
             msg_parts.append(
-                f"{updated_count} match(es) updated with live Flashscore odds{req_info}."
+                f"{updated_count} match(es) updated with live odds{req_info}."
             )
         if recalculated_count:
             msg_parts.append(
@@ -592,6 +600,10 @@ class MatchAdmin(admin.ModelAdmin):
             )
         if failed_count:
             msg_parts.append(f"{failed_count} match(es) had no odds available.")
+        if skipped_inactive:
+            msg_parts.append(
+                f"{skipped_inactive} match(es) skipped because their sport is paused (Active for sync is unchecked)."
+            )
 
         if msg_parts:
             level = (
@@ -600,6 +612,7 @@ class MatchAdmin(admin.ModelAdmin):
                 else messages.WARNING
             )
             self.message_user(request, " ".join(msg_parts), level)
+
 
     def save_model(self, request, obj, form, change):
         super().save_model(request, obj, form, change)
@@ -825,6 +838,7 @@ PREDICTIONS_MENU_ORDER = (
     "VoucherRedemption",
     "PushSubscription",
 )
+
 
 _default_get_app_list = admin.site.get_app_list
 

@@ -6436,4 +6436,247 @@ class OddsAndPointsTests(TestCase):
             self.assertEqual(res[m2.pk], (2.0, 3.0, 3.5))
 
 
+class MultiSportAPISyncAndH2HTests(TestCase):
+    def setUp(self):
+        self.football = Sport.objects.get(name="Football")
+        self.cricket = Sport.objects.get(name="Cricket")
+        self.hockey = Sport.objects.get(name="Hockey")
+
+    def test_sport_is_active_disables_fixtures_and_results(self):
+        from predictions.services import import_fixtures, sync_results
+        self.football.is_active = False
+        self.football.save()
+
+        provider = mock.Mock()
+        provider.name = "test_provider"
+
+        summary = import_fixtures(provider, self.football)
+        self.assertEqual(summary["created"], 0)
+        provider.fetch_fixtures.assert_not_called()
+
+        summary_res = sync_results(provider, self.football)
+        self.assertEqual(summary_res["suggested"], 0)
+        provider.fetch_results.assert_not_called()
+
+    def test_admin_fetch_odds_skips_inactive_sports(self):
+        from django.contrib.admin.sites import AdminSite
+        from predictions.admin import MatchAdmin
+
+        self.cricket.is_active = False
+        self.cricket.save()
+
+        m = sport_match("Cricket", "India", "Australia")
+        m.external_id = "crick-1"
+        m.save()
+
+        site = AdminSite()
+        admin = MatchAdmin(Match, site)
+        admin.message_user = mock.Mock()
+        request = mock.Mock()
+
+        with mock.patch("predictions.admin.provider_for") as mock_pf:
+            admin.fetch_odds_and_calculate_points(request, Match.objects.filter(pk=m.pk))
+            mock_pf.assert_not_called()
+
+        # Check message contains skipped note
+        request_calls = admin.message_user.call_args_list
+        self.assertTrue(any("skipped because their sport is paused" in call[0][1] for call in request_calls))
+
+    def test_match_stats_model_and_caching(self):
+        from predictions.models import MatchStats
+        from predictions.services import get_or_fetch_match_stats
+        from predictions.importers.base import H2HSummary
+
+        m = sport_match("Football", "Arsenal", "Chelsea")
+        m.external_id = "ext-fb-101"
+        m.external_source = "api-football"
+        m.save()
+
+        mock_summary = H2HSummary(
+            team_a_wins=3,
+            team_b_wins=1,
+            draws=1,
+            total_matches=5,
+            past_matches=[{
+                "date": "2024-01-01",
+                "competition": "Premier League",
+                "home": "Arsenal",
+                "away": "Chelsea",
+                "score": "2 - 1",
+                "winner": "Arsenal",
+            }],
+            team_a_form=[{"result": "W", "opponent": "Chelsea", "score": "2 - 1", "date": "2024-01-01"}],
+            team_b_form=[{"result": "L", "opponent": "Arsenal", "score": "1 - 2", "date": "2024-01-01"}],
+        )
+
+        mock_provider = mock.Mock()
+        mock_provider.name = "api-football"
+        mock_provider.fetch_h2h_and_form.return_value = mock_summary
+
+        with mock.patch("predictions.importers.registry.get_providers", return_value=[mock_provider]):
+            stats1 = get_or_fetch_match_stats(m)
+            self.assertIsNotNone(stats1)
+            self.assertEqual(stats1.h2h_summary["team_a_wins"], 3)
+            self.assertEqual(stats1.team_a_recent[0]["result"], "W")
+            mock_provider.fetch_h2h_and_form.assert_called_once()
+
+            # Second call should use cache and NOT call provider
+            mock_provider.fetch_h2h_and_form.reset_mock()
+            stats2 = get_or_fetch_match_stats(m)
+            self.assertEqual(stats2.pk, stats1.pk)
+            mock_provider.fetch_h2h_and_form.assert_not_called()
+
+    def test_get_or_fetch_match_stats_skips_when_sport_inactive(self):
+        from predictions.services import get_or_fetch_match_stats
+
+        self.football.is_active = False
+        self.football.save()
+
+        m = sport_match("Football", "Liverpool", "Everton")
+        mock_provider = mock.Mock()
+
+        with mock.patch("predictions.importers.registry.get_providers", return_value=[mock_provider]):
+            stats = get_or_fetch_match_stats(m)
+            self.assertIsNone(stats)
+            mock_provider.fetch_h2h_and_form.assert_not_called()
+
+    def test_api_football_provider_parsing(self):
+        from predictions.importers.api_football import APIFootballProvider
+
+        provider = APIFootballProvider(api_key="mock-key")
+        self.assertTrue(provider.supports("Football"))
+        self.assertFalse(provider.supports("Cricket"))
+
+        mock_fixture_resp = [{
+            "fixture": {"id": 1234, "date": "2026-10-15T15:00:00+00:00", "status": {"short": "NS"}},
+            "league": {"name": "Premier League", "country": "England"},
+            "teams": {"home": {"name": "Arsenal", "logo": "https://img/arsenal.png"}, "away": {"name": "Chelsea", "logo": "https://img/chelsea.png"}},
+            "goals": {"home": None, "away": None},
+        }]
+
+        with mock.patch.object(provider, "_get", return_value=mock_fixture_resp):
+            events = provider.fetch_fixtures("Football", days_ahead=0)
+            self.assertEqual(len(events), 1)
+            ev = events[0]
+            self.assertEqual(ev.external_id, "1234")
+            self.assertEqual(ev.home, "Arsenal")
+            self.assertEqual(ev.away, "Chelsea")
+            self.assertEqual(ev.event_name, "England: Premier League")
+
+
+    def test_flashlive_hockey_support_and_dual_key(self):
+        from predictions.importers.flashlive import FlashLiveProvider
+
+        provider = FlashLiveProvider(api_key="key1", stats_api_key="key2", sport_ids={"Hockey": 24})
+        self.assertTrue(provider.supports("Hockey"))
+        self.assertEqual(provider.sport_ids["Hockey"], 24)
+        self.assertEqual(provider.api_key, "key1")
+        self.assertEqual(provider.stats_api_key, "key2")
+
+
+    def test_flashlive_fetch_h2h_parsing(self):
+        from predictions.importers.flashlive import FlashLiveProvider
+
+        provider = FlashLiveProvider(api_key="key1", stats_api_key="key2")
+        m = sport_match("Tennis", "Alcaraz", "Sinner")
+        m.external_id = "flash-tennis-1"
+        m.save()
+
+        mock_h2h_data = [
+            {
+                "TAB_NAME": "Overall",
+                "GROUPS": [
+                    {
+                        "GROUP_LABEL": "Head-to-head matches",
+                        "EVENTS": [
+                            {
+                                "HOME_NAME": "Alcaraz",
+                                "AWAY_NAME": "Sinner",
+                                "HOME_SCORE_CURRENT": "2",
+                                "AWAY_SCORE_CURRENT": "1",
+                                "WINNER": "1",
+                                "START_TIME": 1710000000,
+                                "TOURNAMENT_NAME": "Wimbledon",
+                            }
+                        ]
+                    },
+                    {
+                        "GROUP_LABEL": "Last Matches: Alcaraz",
+                        "EVENTS": [
+                            {
+                                "HOME_NAME": "Alcaraz",
+                                "AWAY_NAME": "Medvedev",
+                                "HOME_SCORE_CURRENT": "2",
+                                "AWAY_SCORE_CURRENT": "0",
+                                "WINNER": "1",
+                                "START_TIME": 1710000000,
+                            }
+                        ]
+                    },
+                    {
+                        "GROUP_LABEL": "Last Matches: Sinner",
+                        "EVENTS": [
+                            {
+                                "HOME_NAME": "Sinner",
+                                "AWAY_NAME": "Djokovic",
+                                "HOME_SCORE_CURRENT": "2",
+                                "AWAY_SCORE_CURRENT": "1",
+                                "WINNER": "1",
+                                "START_TIME": 1710000000,
+                            }
+                        ]
+                    }
+                ]
+            }
+        ]
+
+        with mock.patch.object(provider, "_get_stats", return_value=mock_h2h_data):
+            summary = provider.fetch_h2h_and_form(m)
+            self.assertIsNotNone(summary)
+            self.assertEqual(summary.team_a_wins, 1)
+            self.assertEqual(summary.team_b_wins, 0)
+            self.assertEqual(len(summary.past_matches), 1)
+            self.assertEqual(summary.past_matches[0]["winner"], "Alcaraz")
+            self.assertEqual(summary.team_a_form[0]["result"], "W")
+            self.assertEqual(summary.team_b_form[0]["result"], "W")
+
+    def test_match_detail_view_renders_stats_and_odds(self):
+        from django.urls import reverse
+        from predictions.models import MatchStats
+
+        m = sport_match("Football", "Arsenal", "Chelsea")
+        m.team_a_odds = 2.10
+        m.team_b_odds = 3.40
+        m.draw_odds = 3.20
+        m.is_published = True
+        m.save()
+
+        MatchStats.objects.create(
+            match=m,
+            h2h_summary={"team_a_wins": 2, "team_b_wins": 1, "draws": 1, "total": 4},
+            h2h_data=[{
+                "date": "2025-05-10",
+                "competition": "Premier League",
+                "home": "Arsenal",
+                "away": "Chelsea",
+                "score": "2 - 1",
+                "winner": "Arsenal",
+            }],
+            team_a_recent=[{"result": "W", "opponent": "Chelsea", "score": "2 - 1", "date": "2025-05-10"}],
+            team_b_recent=[{"result": "L", "opponent": "Arsenal", "score": "1 - 2", "date": "2025-05-10"}],
+        )
+
+        resp = self.client.get(reverse("match_detail", kwargs={"pk": m.pk}))
+        self.assertEqual(resp.status_code, 200)
+        content = resp.content.decode()
+        self.assertIn("Match Odds &amp; Points", content)
+        self.assertIn("2.10", content)
+        self.assertIn("Head-to-Head &amp; Form", content)
+        self.assertIn("Past Encounters", content)
+        self.assertIn("Premier League", content)
+        self.assertIn("2 - 1", content)
+
+
+
+
 

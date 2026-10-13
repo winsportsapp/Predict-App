@@ -1,3 +1,4 @@
+import logging
 import os
 from datetime import timedelta
 from decimal import Decimal, ROUND_HALF_UP
@@ -15,6 +16,7 @@ from .constants import DRAW_SPORTS, SUPPORTED_SPORTS
 from .models import (
     CreditLedger,
     Match,
+    MatchStats,
     Prediction,
     Profile,
     Referral,
@@ -24,6 +26,9 @@ from .models import (
     TeamAlias,
     VoucherRedemption,
 )
+
+logger = logging.getLogger(__name__)
+
 
 # Legacy fallback values, kept for Prediction.points_earned's backward-compat
 # path (rows scored before points_awarded existed). Live scoring now reads
@@ -355,6 +360,7 @@ def import_fixtures(
     download_images=True,
     new_day_only=False,
     with_odds=True,
+    force=False,
 ):
     """Create (unpublished) matches for `sport`'s upcoming fixtures from
     `provider`, and follow kickoff-time changes of matches already imported.
@@ -371,6 +377,10 @@ def import_fixtures(
         "called_off": [],
         "odds_filled": 0,
     }
+    if not sport.is_active and not force:
+        return summary
+
+
     now = timezone.now()
     allows_draw = sport.name in DRAW_SPORTS
 
@@ -486,7 +496,7 @@ def import_fixtures(
 RESULT_LOOKUP_DAYS = 3
 
 
-def sync_results(provider, sport):
+def sync_results(provider, sport, force=False):
     """Store `provider`'s final results as *suggested* results on imported
     `sport` matches awaiting one.
 
@@ -495,6 +505,10 @@ def sync_results(provider, sport):
     """
     sync_match_statuses()
     summary = {"suggested": 0, "called_off": [], "enter_by_hand": []}
+    if not sport.is_active and not force:
+        return summary
+
+
     cutoff = timezone.now() - timedelta(days=RESULT_LOOKUP_DAYS)
     pending = {}
     for match in (
@@ -725,3 +739,63 @@ def send_redemption_fulfilled_email(redemption):
         {"redemption": redemption, "user": user},
     )
     send_mail(subject, message, None, [user.email])
+
+
+def get_or_fetch_match_stats(match, force_refresh=False):
+    """Retrieve cached MatchStats from the database, or fetch on-demand from the provider.
+
+    Guarantees:
+    1. If match.sport.is_active is False, returns existing cached stats or None
+       (ZERO external requests made).
+    2. If match.stats exists and is not stale (less than 48 hours old) and not force_refresh,
+       returns the cached stats immediately (ZERO external requests made).
+    3. If stats are missing or stale, fetches from the matching provider and caches in MatchStats.
+    4. Safe: never crashes or raises uncaught exceptions on network failure; returns existing stats or None.
+    """
+    from .importers.registry import get_providers, provider_for
+
+    existing = getattr(match, "stats", None)
+    if not match.sport.is_active:
+        return existing
+
+    if existing and not existing.is_stale and not force_refresh:
+        return existing
+
+    providers = get_providers()
+    provider = None
+    for p in providers:
+        if match.external_source and p.name == match.external_source:
+            provider = p
+            break
+    if provider is None:
+        provider = provider_for(match.sport.name, providers)
+
+    if provider is None:
+        return existing
+
+    try:
+        summary = provider.fetch_h2h_and_form(match)
+        if summary is None:
+            return existing
+
+        stats_obj, _ = MatchStats.objects.update_or_create(
+            match=match,
+            defaults={
+                "h2h_data": summary.past_matches,
+                "h2h_summary": {
+                    "team_a_wins": summary.team_a_wins,
+                    "team_b_wins": summary.team_b_wins,
+                    "draws": summary.draws,
+                    "total": summary.total_matches,
+                },
+                "team_a_recent": summary.team_a_form,
+                "team_b_recent": summary.team_b_form,
+            },
+        )
+        return stats_obj
+    except Exception as exc:
+        logger.warning(
+            "Failed fetching stats for match %s: %s", match.pk, exc, exc_info=True
+        )
+        return existing
+

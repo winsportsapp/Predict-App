@@ -75,7 +75,7 @@ class Command(BaseCommand):
 
         providers = get_providers()
         if not providers:
-            raise CommandError("No provider is configured: set RAPIDAPI_KEY.")
+            raise CommandError("No provider is configured: set API_FOOTBALL_KEY or RAPIDAPI_KEY.")
 
         sports = Sport.objects.all()
         if options["sport"]:
@@ -110,10 +110,14 @@ class Command(BaseCommand):
                                 download_images=not options["dry_run"],
                                 new_day_only=options["new_day_only"],
                                 with_odds=not options["no_odds"],
+                                force=options["force"],
                             ),
                         )
                     if options["results"]:
-                        self._report_results(sport, sync_results(provider, sport))
+                        self._report_results(
+                            sport, sync_results(provider, sport, force=options["force"])
+                        )
+
                 except ProviderError as exc:
                     # Keep going: one sport failing shouldn't block the rest.
                     failed = True
