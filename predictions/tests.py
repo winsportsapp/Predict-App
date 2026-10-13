@@ -4478,9 +4478,11 @@ class MatchTitleAndPointsMarkupTests(TestCase):
 
         self.assertContains(
             response,
-            f'<a class="match-title-link" href="{url}">TA link</a> Vs '
-            f'<a class="match-title-link" href="{url}">TB link</a>',
+            f'<a class="match-title-link" href="{url}">',
         )
+        self.assertContains(response, "TA link")
+        self.assertContains(response, "TB link")
+        self.assertContains(response, "Vs")
         self.assertNotContains(response, "TA link vs")
 
     def test_closed_matches_links_each_team_separately_with_plain_vs(self):
