@@ -125,7 +125,7 @@ class MatchAdminForm(forms.ModelForm):
         required=False,
         initial=False,
         label="Fetch H2H and Recent results",
-        help_text="Tick this box to automatically fetch and import Head to Head clashes and recent 5-match form from the provider upon saving.",
+        help_text="Tick this box to automatically fetch and import Head to Head clashes and recent 5-match form from the provider (API-Football for Football, FlashLive for other sports) upon saving.",
     )
 
     class Meta:
@@ -593,7 +593,7 @@ class MatchAdmin(admin.ModelAdmin):
         for error in failed:
             self.message_user(request, error, messages.ERROR)
 
-    @admin.action(description="Fetch Flashscore odds & calculate points")
+    @admin.action(description="Fetch live odds & calculate points (API-Football / Flashscore)")
     def fetch_odds_and_calculate_points(self, request, queryset):
         providers = get_providers()
         updated_count = 0
@@ -701,7 +701,7 @@ class MatchAdmin(admin.ModelAdmin):
             total,
         )
 
-    @admin.action(description="Fetch Head to Head & recent form (secondary key)")
+    @admin.action(description="Fetch Head to Head & recent form (API-Football / FlashLive)")
     def fetch_h2h_and_recent_form(self, request, queryset):
         success_count = 0
         skipped_count = 0
@@ -725,7 +725,7 @@ class MatchAdmin(admin.ModelAdmin):
         msg_parts = []
         if success_count:
             msg_parts.append(
-                f"Fetched Head to Head & recent form for {success_count} match(es)."
+                f"Fetched Head to Head & recent form for {success_count} match(es) (API-Football / FlashLive)."
             )
         if skipped_count:
             msg_parts.append(
