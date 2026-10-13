@@ -203,6 +203,11 @@ def predict(request, pk):
             )
             credit_referral_if_first_prediction(request.user)
             messages.success(request, "Your prediction has been saved.")
+            next_url = request.POST.get("next")
+            if next_url and url_has_allowed_host_and_scheme(
+                next_url, allowed_hosts={request.get_host()}
+            ):
+                return redirect(next_url)
             return _sport_redirect(match.sport)
     else:
         initial = {"choice": existing.choice} if existing else None

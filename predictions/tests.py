@@ -6640,7 +6640,7 @@ class MultiSportAPISyncAndH2HTests(TestCase):
             self.assertEqual(summary.team_a_form[0]["result"], "W")
             self.assertEqual(summary.team_b_form[0]["result"], "W")
 
-    def test_match_detail_view_renders_stats_and_odds(self):
+    def test_match_detail_view_renders_stats_without_odds(self):
         from django.urls import reverse
         from predictions.models import MatchStats
 
@@ -6648,6 +6648,10 @@ class MultiSportAPISyncAndH2HTests(TestCase):
         m.team_a_odds = 2.10
         m.team_b_odds = 3.40
         m.draw_odds = 3.20
+        m.team_a_win_points = 10
+        m.team_a_lose_points = -5
+        m.team_b_win_points = 25
+        m.team_b_lose_points = -5
         m.is_published = True
         m.save()
 
@@ -6669,12 +6673,39 @@ class MultiSportAPISyncAndH2HTests(TestCase):
         resp = self.client.get(reverse("match_detail", kwargs={"pk": m.pk}))
         self.assertEqual(resp.status_code, 200)
         content = resp.content.decode()
-        self.assertIn("Match Odds &amp; Points", content)
-        self.assertIn("2.10", content)
+        # Betting odds must NEVER be displayed to players:
+        self.assertNotIn("Match Odds &amp; Points", content)
+        self.assertNotIn("Odds", content)
+        self.assertNotIn("2.10", content)
+        self.assertNotIn("3.20", content)
+        # H2H stats and form are displayed:
         self.assertIn("Head-to-Head &amp; Form", content)
         self.assertIn("Past Encounters", content)
         self.assertIn("Premier League", content)
         self.assertIn("2 - 1", content)
+        # In-place prediction panel is present:
+        self.assertIn("Select your Prediction", content)
+        self.assertIn("+10", content)
+        self.assertIn("+25", content)
+
+    def test_in_place_prediction_from_match_detail_with_next_param(self):
+        from django.contrib.auth.models import User
+        from django.urls import reverse
+        from predictions.models import Prediction
+
+        user = User.objects.create_user("testplayer", "player@example.com", "pass1234")
+        m = sport_match("Football", "Arsenal", "Chelsea")
+        m.is_published = True
+        m.save()
+
+        detail_url = reverse("match_detail", kwargs={"pk": m.pk})
+        self.client.force_login(user)
+        resp = self.client.post(
+            reverse("predict", kwargs={"pk": m.pk}),
+            {"choice": "A", "next": detail_url},
+        )
+        self.assertRedirects(resp, detail_url)
+        self.assertTrue(Prediction.objects.filter(user=user, match=m, choice="A").exists())
 
 
 
