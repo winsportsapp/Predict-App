@@ -6532,6 +6532,61 @@ class MultiSportAPISyncAndH2HTests(TestCase):
         self.assertIn("1W", display_html)
         self.assertIn("5", display_html)
 
+    def test_match_admin_form_checkbox_placement(self):
+        from django.contrib.admin.sites import AdminSite
+        from predictions.admin import MatchAdmin, MatchAdminForm
+
+        self.assertIn("fetch_h2h_and_recent", MatchAdminForm.base_fields)
+
+        site = AdminSite()
+        admin = MatchAdmin(Match, site)
+        fieldsets = admin.get_fieldsets(mock.Mock(GET={}))
+        base_fields = fieldsets[0][1]["fields"]
+        self.assertIn("is_published", base_fields)
+        self.assertIn("fetch_h2h_and_recent", base_fields)
+        pub_idx = base_fields.index("is_published")
+        h2h_idx = base_fields.index("fetch_h2h_and_recent")
+        self.assertEqual(h2h_idx, pub_idx + 1)
+
+    def test_match_admin_save_model_fetches_when_checkbox_ticked(self):
+        from django.contrib.admin.sites import AdminSite
+        from predictions.admin import MatchAdmin
+        from predictions.models import MatchStats
+
+        m = sport_match("Football", "Arsenal", "Chelsea")
+        site = AdminSite()
+        admin = MatchAdmin(Match, site)
+        request = mock.Mock()
+
+        form = mock.Mock()
+        form.changed_data = []
+        form.cleaned_data = {"fetch_h2h_and_recent": True}
+
+        with mock.patch("predictions.admin.get_or_fetch_match_stats") as mock_fetch:
+            mock_fetch.return_value = MatchStats(
+                match=m,
+                h2h_summary={"team_a_wins": 1, "team_b_wins": 0, "draws": 0, "total": 1},
+            )
+            admin.save_model(request, m, form, change=True)
+            mock_fetch.assert_called_once_with(m, force_refresh=True)
+
+    def test_match_admin_save_model_skips_fetch_when_checkbox_unticked(self):
+        from django.contrib.admin.sites import AdminSite
+        from predictions.admin import MatchAdmin
+
+        m = sport_match("Football", "Arsenal", "Chelsea")
+        site = AdminSite()
+        admin = MatchAdmin(Match, site)
+        request = mock.Mock()
+
+        form = mock.Mock()
+        form.changed_data = []
+        form.cleaned_data = {"fetch_h2h_and_recent": False}
+
+        with mock.patch("predictions.admin.get_or_fetch_match_stats") as mock_fetch:
+            admin.save_model(request, m, form, change=True)
+            mock_fetch.assert_not_called()
+
     def test_match_stats_model_and_caching(self):
         from predictions.models import MatchStats
         from predictions.services import get_or_fetch_match_stats

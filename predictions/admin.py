@@ -121,6 +121,13 @@ class MatchAdminForm(forms.ModelForm):
     make the server enforce the same rule.
     """
 
+    fetch_h2h_and_recent = forms.BooleanField(
+        required=False,
+        initial=False,
+        label="Fetch H2H and Recent results",
+        help_text="Tick this box to automatically fetch and import Head to Head clashes and recent 5-match form from the provider upon saving.",
+    )
+
     class Meta:
         model = Match
         fields = "__all__"
@@ -187,6 +194,15 @@ class MatchAdminForm(forms.ModelForm):
                 field.label = field.label.replace("Team a", "Team A").replace(
                     "Team b", "Team B"
                 )
+
+        if instance.pk and getattr(instance, "stats", None) and instance.stats.h2h_summary:
+            total = instance.stats.h2h_summary.get("total", 0)
+            a_w = instance.stats.h2h_summary.get("team_a_wins", 0)
+            d = instance.stats.h2h_summary.get("draws", 0)
+            b_w = instance.stats.h2h_summary.get("team_b_wins", 0)
+            self.fields["fetch_h2h_and_recent"].help_text = (
+                f"Currently stored: {a_w}W · {d}D · {b_w}W ({total} clashes). Tick to refresh."
+            )
 
 
 class SuggestedResultFilter(admin.SimpleListFilter):
@@ -444,6 +460,7 @@ class MatchAdmin(admin.ModelAdmin):
                 "team_b_score",
                 "suggested_result",
                 "is_published",
+                "fetch_h2h_and_recent",
                 "is_scored",
             ),
         }),
@@ -732,6 +749,35 @@ class MatchAdmin(admin.ModelAdmin):
 
     def save_model(self, request, obj, form, change):
         super().save_model(request, obj, form, change)
+
+        if form.cleaned_data.get("fetch_h2h_and_recent"):
+            try:
+                stats = get_or_fetch_match_stats(obj, force_refresh=True)
+                if stats and (
+                    stats.h2h_summary.get("total")
+                    or stats.team_a_recent
+                    or stats.team_b_recent
+                ):
+                    messages.success(
+                        request,
+                        f"Head to Head and recent results fetched successfully for {obj}.",
+                    )
+                elif stats:
+                    messages.info(
+                        request,
+                        f"Stats fetched for {obj} (0 past clashes recorded at provider).",
+                    )
+                else:
+                    messages.warning(
+                        request,
+                        f"Could not fetch Head to Head for {obj} (sport paused or provider returned no data).",
+                    )
+            except Exception as exc:
+                logger.warning("Error fetching H2H on save for %s: %s", obj.pk, exc)
+                messages.warning(
+                    request, f"Error fetching Head to Head for {obj}: {exc}"
+                )
+
         changed = getattr(form, "changed_data", ())
         if obj.is_published and (not change or "is_published" in changed):
             push.notify_new_matches_later([obj.pk])
