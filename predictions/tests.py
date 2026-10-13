@@ -6678,8 +6678,10 @@ class MultiSportAPISyncAndH2HTests(TestCase):
         self.assertNotIn("Odds", content)
         self.assertNotIn("2.10", content)
         self.assertNotIn("3.20", content)
-        # H2H stats and form are displayed:
+        # Head to Head stats and form are displayed (wording must be "Head to Head", not "H2H"):
         self.assertIn("Head-to-Head &amp; Form", content)
+        self.assertIn("Head to Head:", content)
+        self.assertNotIn("H2H:", content)
         self.assertIn("Past Encounters", content)
         self.assertIn("Premier League", content)
         self.assertIn("2 - 1", content)
