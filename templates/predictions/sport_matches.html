@@ -76,7 +76,10 @@
               <div>Deadline: {{ match.prediction_deadline|date:"N j, Y, P T" }}</div>
             </div>
 
-            <!-- Head to Head Summary Link (if stats exist) -->
+            <!-- Select your Team / Player (below deadline, above team name box) -->
+            <div class="small fw-semibold text-start text-dark mb-1">Select your Team / Player</div>
+
+            <!-- Head to Head Summary Link (beneath 'Select your Team / Player', above recent results) -->
             {% if match.stats and match.stats.h2h_summary.total %}
               <div class="small text-start mb-2">
                 <a href="{% url 'match_detail' match.pk %}" class="badge bg-light text-dark border text-decoration-none px-2 py-1">
@@ -87,9 +90,6 @@
                 </a>
               </div>
             {% endif %}
-
-            <!-- Select your Team / Player (below deadline, above team name box) -->
-            <div class="small fw-semibold text-start text-dark mb-1">Select your Team / Player</div>
 
             <!-- Prediction Options / Buttons (pick-panel, fit in one row, reduced rectangle box length on desktop) -->
             <div class="pick-panel mt-2">
