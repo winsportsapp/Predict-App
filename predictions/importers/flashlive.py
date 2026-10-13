@@ -351,7 +351,7 @@ class FlashLiveProvider(Provider):
             if not isinstance(g, dict):
                 continue
             label = str(g.get("GROUP_LABEL") or g.get("NAME") or "").lower()
-            evs = g.get("EVENTS") or []
+            evs = g.get("ITEMS") or g.get("EVENTS") or []
             if "head-to-head" in label or "h2h" in label:
                 h2h_events.extend(evs)
             elif team_a_lower in label:
@@ -371,10 +371,16 @@ class FlashLiveProvider(Provider):
         for raw in h2h_events[:10]:
             if not isinstance(raw, dict):
                 continue
-            home = str(raw.get("HOME_NAME") or "")
-            away = str(raw.get("AWAY_NAME") or "")
-            hs = raw.get("HOME_SCORE_CURRENT")
-            aws = raw.get("AWAY_SCORE_CURRENT")
+            home_raw = raw.get("HOME_PARTICIPANT_NAME_ONE") or raw.get("HOME_PARTICIPANT") or raw.get("HOME_NAME") or ""
+            away_raw = raw.get("AWAY_PARTICIPANT_NAME_ONE") or raw.get("AWAY_PARTICIPANT") or raw.get("AWAY_NAME") or ""
+            home = str(home_raw).lstrip("*").strip()
+            away = str(away_raw).lstrip("*").strip()
+            if not home and not away:
+                continue
+
+            hs = raw.get("HOME_SCORE_FULL") if raw.get("HOME_SCORE_FULL") is not None else raw.get("HOME_SCORE_CURRENT")
+            aws = raw.get("AWAY_SCORE_FULL") if raw.get("AWAY_SCORE_FULL") is not None else raw.get("AWAY_SCORE_CURRENT")
+
             start = raw.get("START_TIME") or raw.get("START_UTIME")
             date_str = ""
             if start:
@@ -383,19 +389,17 @@ class FlashLiveProvider(Provider):
                 except (ValueError, TypeError):
                     pass
 
-            winner_code = str(raw.get("WINNER") or "").strip()
-            winner_side = "D"
-            winner_name = "Draw"
+            winner_outcome = _determine_flashlive_winner(raw, hs, aws)
             is_team_a_home = team_a_lower in home.lower()
 
-            if winner_code == "1":
+            if winner_outcome == "HOME":
                 winner_name = home
                 winner_side = "A" if is_team_a_home else "B"
                 if winner_side == "A":
                     team_a_wins += 1
                 else:
                     team_b_wins += 1
-            elif winner_code == "2":
+            elif winner_outcome == "AWAY":
                 winner_name = away
                 winner_side = "B" if is_team_a_home else "A"
                 if winner_side == "B":
@@ -403,12 +407,19 @@ class FlashLiveProvider(Provider):
                 else:
                     team_a_wins += 1
             else:
+                winner_name = "Draw"
+                winner_side = "D"
                 draws += 1
 
-            score_str = f"{hs} - {aws}" if (hs is not None and aws is not None) else ""
+            score_str = str(raw.get("CURRENT_RESULT") or "").strip()
+            if not score_str and (hs is not None and aws is not None):
+                score_str = f"{hs} - {aws}"
+            elif score_str and ":" in score_str:
+                score_str = score_str.replace(":", " - ")
+
             past_matches.append({
                 "date": date_str,
-                "competition": raw.get("TOURNAMENT_NAME") or raw.get("SHORT_NAME") or match.sport.name,
+                "competition": raw.get("EVENT_NAME") or raw.get("TOURNAMENT_NAME") or raw.get("SHORT_NAME") or match.sport.name,
                 "home": home,
                 "away": away,
                 "score": score_str,
@@ -768,16 +779,61 @@ def _extract_odds_tuple(odds_obj):
     return None, None, None
 
 
+def _determine_flashlive_winner(raw, hs, aws):
+    """Determine outcome ('HOME', 'AWAY', or 'DRAW') from FlashLive raw match dict."""
+    home_p = str(raw.get("HOME_PARTICIPANT") or "")
+    away_p = str(raw.get("AWAY_PARTICIPANT") or "")
+    if home_p.startswith("*"):
+        return "HOME"
+    if away_p.startswith("*"):
+        return "AWAY"
+
+    winner_code = str(raw.get("WINNER") or "").strip()
+    if winner_code == "1":
+        return "HOME"
+    elif winner_code == "2":
+        return "AWAY"
+
+    wis = str(raw.get("WIS") or "").strip().lower()
+    if wis == "w":
+        return "HOME"
+    elif wis == "l":
+        return "AWAY"
+    elif wis == "d":
+        return "DRAW"
+
+    if hs is not None and aws is not None:
+        try:
+            h_int = int(str(hs).split("/")[0].strip())
+            a_int = int(str(aws).split("/")[0].strip())
+            if h_int > a_int:
+                return "HOME"
+            elif a_int > h_int:
+                return "AWAY"
+            elif h_int == a_int:
+                return "DRAW"
+        except (ValueError, TypeError):
+            pass
+
+    return "DRAW"
+
+
 def _parse_flashlive_recent_form(raw_events, team_name):
     form_list = []
     team_name_lower = team_name.lower()
     for ev in raw_events:
         if not isinstance(ev, dict):
             continue
-        home = str(ev.get("HOME_NAME") or "")
-        away = str(ev.get("AWAY_NAME") or "")
-        hs = ev.get("HOME_SCORE_CURRENT")
-        aws = ev.get("AWAY_SCORE_CURRENT")
+        home_raw = ev.get("HOME_PARTICIPANT_NAME_ONE") or ev.get("HOME_PARTICIPANT") or ev.get("HOME_NAME") or ""
+        away_raw = ev.get("AWAY_PARTICIPANT_NAME_ONE") or ev.get("AWAY_PARTICIPANT") or ev.get("AWAY_NAME") or ""
+        home = str(home_raw).lstrip("*").strip()
+        away = str(away_raw).lstrip("*").strip()
+        if not home and not away:
+            continue
+
+        hs = ev.get("HOME_SCORE_FULL") if ev.get("HOME_SCORE_FULL") is not None else ev.get("HOME_SCORE_CURRENT")
+        aws = ev.get("AWAY_SCORE_FULL") if ev.get("AWAY_SCORE_FULL") is not None else ev.get("AWAY_SCORE_CURRENT")
+
         start = ev.get("START_TIME") or ev.get("START_UTIME")
         date_str = ""
         if start:
@@ -788,22 +844,27 @@ def _parse_flashlive_recent_form(raw_events, team_name):
 
         is_home = team_name_lower in home.lower()
         opponent = away if is_home else home
-        winner_code = str(ev.get("WINNER") or "").strip()
 
-        if winner_code == "1":
+        winner_outcome = _determine_flashlive_winner(ev, hs, aws)
+        if winner_outcome == "HOME":
             res = "W" if is_home else "L"
-        elif winner_code == "2":
+        elif winner_outcome == "AWAY":
             res = "L" if is_home else "W"
         else:
             res = "D"
 
-        score_str = f"{hs} - {aws}" if (hs is not None and aws is not None) else ""
+        score_str = str(ev.get("CURRENT_RESULT") or "").strip()
+        if not score_str and (hs is not None and aws is not None):
+            score_str = f"{hs} - {aws}"
+        elif score_str and ":" in score_str:
+            score_str = score_str.replace(":", " - ")
+
         form_list.append({
             "date": date_str,
             "opponent": opponent,
             "score": score_str,
             "result": res,
-            "competition": ev.get("TOURNAMENT_NAME") or ev.get("SHORT_NAME") or "",
+            "competition": ev.get("EVENT_NAME") or ev.get("TOURNAMENT_NAME") or ev.get("SHORT_NAME") or "",
         })
     return form_list
 

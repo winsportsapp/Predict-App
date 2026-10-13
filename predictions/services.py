@@ -762,22 +762,40 @@ def get_or_fetch_match_stats(match, force_refresh=False):
         return existing
 
     providers = get_providers()
-    provider = None
+    candidates = []
+    # 1. If match has external_source, try that provider first if it supports this sport
+    if match.external_source:
+        for p in providers:
+            if p.name == match.external_source and p.supports(match.sport.name):
+                candidates.append(p)
+                break
+    # 2. Add other configured providers that support this sport
     for p in providers:
-        if match.external_source and p.name == match.external_source:
-            provider = p
-            break
-    if provider is None:
-        provider = provider_for(match.sport.name, providers)
+        if p not in candidates and p.supports(match.sport.name):
+            candidates.append(p)
 
-    if provider is None:
+    if not candidates:
+        return existing
+
+    summary = None
+    for provider in candidates:
+        try:
+            res = provider.fetch_h2h_and_form(match)
+            if res and (res.total_matches or res.team_a_form or res.team_b_form):
+                summary = res
+                break
+            elif res and summary is None:
+                summary = res
+        except Exception as exc:
+            logger.warning(
+                "Provider %s failed fetching stats for match %s: %s",
+                getattr(provider, "name", provider), match.pk, exc, exc_info=True
+            )
+
+    if summary is None:
         return existing
 
     try:
-        summary = provider.fetch_h2h_and_form(match)
-        if summary is None:
-            return existing
-
         stats_obj, _ = MatchStats.objects.update_or_create(
             match=match,
             defaults={
@@ -795,7 +813,7 @@ def get_or_fetch_match_stats(match, force_refresh=False):
         return stats_obj
     except Exception as exc:
         logger.warning(
-            "Failed fetching stats for match %s: %s", match.pk, exc, exc_info=True
+            "Failed saving stats for match %s: %s", match.pk, exc, exc_info=True
         )
         return existing
 

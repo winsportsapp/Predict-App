@@ -688,15 +688,23 @@ class MatchAdmin(admin.ModelAdmin):
         if total == 0:
             if stats.team_a_recent or stats.team_b_recent:
                 return format_html('<span style="color: #28a745;">{}</span>', "Form fetched (0 clashes)")
-            return format_html('<span style="color: #999;">{}</span>', "Not fetched")
+            return format_html('<span style="color: #999;">{}</span>', "0 clashes")
         a_w = stats.h2h_summary.get("team_a_wins", 0)
         d = stats.h2h_summary.get("draws", 0)
         b_w = stats.h2h_summary.get("team_b_wins", 0)
+        if getattr(obj, "allows_draw", True):
+            return format_html(
+                '<span title="{} past clashes"><b>{}W</b>-<b>{}D</b>-<b>{}W</b> ({})</span>',
+                total,
+                a_w,
+                d,
+                b_w,
+                total,
+            )
         return format_html(
-            '<span title="{} past clashes"><b>{}W</b>-<b>{}D</b>-<b>{}W</b> ({})</span>',
+            '<span title="{} past clashes"><b>{}W</b>-<b>{}W</b> ({})</span>',
             total,
             a_w,
-            d,
             b_w,
             total,
         )
@@ -704,6 +712,7 @@ class MatchAdmin(admin.ModelAdmin):
     @admin.action(description="Fetch Head to Head & recent form (API-Football / FlashLive)")
     def fetch_h2h_and_recent_form(self, request, queryset):
         success_count = 0
+        empty_count = 0
         skipped_count = 0
         failed_count = 0
         for match in queryset.select_related("sport", "team_a", "team_b"):
@@ -715,7 +724,7 @@ class MatchAdmin(admin.ModelAdmin):
                 if stats and (stats.h2h_summary.get("total") or stats.team_a_recent or stats.team_b_recent):
                     success_count += 1
                 elif stats:
-                    success_count += 1
+                    empty_count += 1
                 else:
                     failed_count += 1
             except Exception as exc:
@@ -726,6 +735,10 @@ class MatchAdmin(admin.ModelAdmin):
         if success_count:
             msg_parts.append(
                 f"Fetched Head to Head & recent form for {success_count} match(es) (API-Football / FlashLive)."
+            )
+        if empty_count:
+            msg_parts.append(
+                f"{empty_count} match(es) returned 0 past clashes and 0 recent matches from provider."
             )
         if skipped_count:
             msg_parts.append(
@@ -758,25 +771,31 @@ class MatchAdmin(admin.ModelAdmin):
                     or stats.team_a_recent
                     or stats.team_b_recent
                 ):
-                    messages.success(
+                    self.message_user(
                         request,
                         f"Head to Head and recent results fetched successfully for {obj}.",
+                        messages.SUCCESS,
                     )
                 elif stats:
-                    messages.info(
+                    self.message_user(
                         request,
                         f"Stats fetched for {obj} (0 past clashes recorded at provider).",
+                        messages.INFO,
                     )
                 else:
-                    messages.warning(
+                    self.message_user(
                         request,
                         f"Could not fetch Head to Head for {obj} (sport paused or provider returned no data).",
+                        messages.WARNING,
                     )
             except Exception as exc:
                 logger.warning("Error fetching H2H on save for %s: %s", obj.pk, exc)
-                messages.warning(
-                    request, f"Error fetching Head to Head for {obj}: {exc}"
-                )
+                try:
+                    self.message_user(
+                        request, f"Error fetching Head to Head for {obj}: {exc}", messages.WARNING
+                    )
+                except Exception:
+                    pass
 
         changed = getattr(form, "changed_data", ())
         if obj.is_published and (not change or "is_published" in changed):

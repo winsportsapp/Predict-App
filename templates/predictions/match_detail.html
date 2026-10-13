@@ -81,9 +81,15 @@
         <div class="small text-start mb-2">
           <span class="badge bg-light text-dark border px-2 py-1">
             📊 Head to Head: <strong class="text-success">{{ stats.h2h_summary.team_a_wins }}W</strong> &middot;
-            <strong>{{ stats.h2h_summary.draws }}D</strong> &middot;
+            {% if match.allows_draw %}<strong>{{ stats.h2h_summary.draws }}D</strong> &middot;{% endif %}
             <strong class="text-primary">{{ stats.h2h_summary.team_b_wins }}W</strong>
-            <span class="text-muted fw-normal ms-1">({{ stats.h2h_summary.total }} past clashes)</span>
+            <span class="text-muted fw-normal ms-1">({{ stats.h2h_summary.total }} past clash{{ stats.h2h_summary.total|pluralize:"es" }})</span>
+          </span>
+        </div>
+      {% elif stats.team_a_recent or stats.team_b_recent %}
+        <div class="small text-start mb-2">
+          <span class="badge bg-light text-dark border px-2 py-1">
+            📊 Head to Head: <span class="text-muted fw-normal">First clash recorded &middot; Recent form below</span>
           </span>
         </div>
       {% endif %}
@@ -134,7 +140,7 @@
             <div class="col-4">
               <!-- Spacer above Draw tile to maintain horizontal alignment -->
               <div class="d-flex align-items-center justify-content-center text-muted small mb-1" style="min-height: 20px; font-size: 0.65rem;">
-                {% if stats and stats.h2h_summary.draws is not None %}
+                {% if stats and stats.h2h_summary.draws is not None and stats.h2h_summary.total %}
                   <span>{{ stats.h2h_summary.draws }} Draw{{ stats.h2h_summary.draws|pluralize }}</span>
                 {% endif %}
               </div>
@@ -283,7 +289,7 @@
               {% if stats.h2h_summary.total %}
                 <span class="small text-muted">
                   <strong class="text-success">{{ stats.h2h_summary.team_a_wins }}W</strong> &ndash;
-                  <strong>{{ stats.h2h_summary.draws }}D</strong> &ndash;
+                  {% if match.allows_draw %}<strong>{{ stats.h2h_summary.draws }}D</strong> &ndash;{% endif %}
                   <strong class="text-primary">{{ stats.h2h_summary.team_b_wins }}W</strong>
                 </span>
               {% endif %}
@@ -326,6 +332,10 @@
                 </tbody>
               </table>
             </div>
+          </div>
+        {% elif stats.team_a_recent or stats.team_b_recent %}
+          <div class="border-top pt-3">
+            <div class="small text-muted">No past head-to-head encounters recorded between these two teams.</div>
           </div>
         {% endif %}
       </div>

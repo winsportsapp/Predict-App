@@ -290,12 +290,39 @@ class APIFootballProvider(Provider):
         )
 
     def _search_team_id(self, team_name):
+        if not team_name:
+            return None
+        # 1. Exact name match
         try:
             data = self._get("/teams", {"name": team_name})
             if data and isinstance(data, list):
                 return data[0].get("team", {}).get("id")
         except ProviderError:
             pass
+
+        # 2. General search query
+        try:
+            data = self._get("/teams", {"search": team_name})
+            if data and isinstance(data, list):
+                return data[0].get("team", {}).get("id")
+        except ProviderError:
+            pass
+
+        # 3. Clean common club suffixes/prefixes (FC, CF, SC, AFC, Club)
+        import re
+        cleaned = re.sub(r"\b(fc|cf|sc|afc|club)\b", "", team_name, flags=re.IGNORECASE).strip()
+        cleaned = re.sub(r"\s+", " ", cleaned).strip()
+        if cleaned and cleaned.lower() != team_name.lower():
+            try:
+                data = self._get("/teams", {"name": cleaned})
+                if data and isinstance(data, list):
+                    return data[0].get("team", {}).get("id")
+                data = self._get("/teams", {"search": cleaned})
+                if data and isinstance(data, list):
+                    return data[0].get("team", {}).get("id")
+            except ProviderError:
+                pass
+
         return None
 
     def _fetch_team_recent_form(self, team_id, team_name):

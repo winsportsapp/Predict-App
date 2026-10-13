@@ -6853,6 +6853,169 @@ class MultiSportAPISyncAndH2HTests(TestCase):
         self.assertIn("Head to Head:", content)
         self.assertNotIn("H2H:", content)
 
+    def test_flashlive_h2h_parser_with_items_and_asterisk_winner(self):
+        from predictions.importers.flashlive import FlashLiveProvider
+
+        p = FlashLiveProvider(api_key="mock", stats_api_key="mock")
+        m = sport_match("Cricket", "India", "Australia")
+        m.external_id = "test_event_123"
+
+        mock_data = [
+            {
+                "TAB_NAME": "Overall",
+                "GROUPS": [
+                    {
+                        "GROUP_LABEL": "Last matches: India",
+                        "ITEMS": [
+                            {
+                                "START_TIME": 1791846000,
+                                "HOME_PARTICIPANT": "*India",
+                                "HOME_PARTICIPANT_NAME_ONE": "India",
+                                "AWAY_PARTICIPANT": "South Africa",
+                                "AWAY_PARTICIPANT_NAME_ONE": "South Africa",
+                                "CURRENT_RESULT": "180:150",
+                                "HOME_SCORE_FULL": "180",
+                                "AWAY_SCORE_FULL": "150",
+                                "EVENT_NAME": "T20 International",
+                            }
+                        ],
+                    },
+                    {
+                        "GROUP_LABEL": "Last matches: Australia",
+                        "ITEMS": [
+                            {
+                                "START_TIME": 1791846000,
+                                "HOME_PARTICIPANT": "England",
+                                "HOME_PARTICIPANT_NAME_ONE": "England",
+                                "AWAY_PARTICIPANT": "*Australia",
+                                "AWAY_PARTICIPANT_NAME_ONE": "Australia",
+                                "CURRENT_RESULT": "140:145",
+                                "HOME_SCORE_FULL": "140",
+                                "AWAY_SCORE_FULL": "145",
+                                "EVENT_NAME": "ODI Cup",
+                            }
+                        ],
+                    },
+                    {
+                        "GROUP_LABEL": "Head-to-head matches",
+                        "ITEMS": [
+                            {
+                                "START_TIME": 1791846000,
+                                "HOME_PARTICIPANT": "*India",
+                                "HOME_PARTICIPANT_NAME_ONE": "India",
+                                "AWAY_PARTICIPANT": "Australia",
+                                "AWAY_PARTICIPANT_NAME_ONE": "Australia",
+                                "CURRENT_RESULT": "200:190",
+                                "HOME_SCORE_FULL": "200",
+                                "AWAY_SCORE_FULL": "190",
+                                "EVENT_NAME": "World Cup",
+                            },
+                            {
+                                "START_TIME": 1791746000,
+                                "HOME_PARTICIPANT": "India",
+                                "HOME_PARTICIPANT_NAME_ONE": "India",
+                                "AWAY_PARTICIPANT": "*Australia",
+                                "AWAY_PARTICIPANT_NAME_ONE": "Australia",
+                                "CURRENT_RESULT": "160:165",
+                                "HOME_SCORE_FULL": "160",
+                                "AWAY_SCORE_FULL": "165",
+                                "EVENT_NAME": "World Cup",
+                            },
+                        ],
+                    },
+                ],
+            }
+        ]
+
+        with mock.patch.object(p, "_get_stats", return_value=mock_data):
+            summary = p.fetch_h2h_and_form(m)
+
+        self.assertIsNotNone(summary)
+        self.assertEqual(summary.total_matches, 2)
+        self.assertEqual(summary.team_a_wins, 1)
+        self.assertEqual(summary.team_b_wins, 1)
+        self.assertEqual(summary.draws, 0)
+        self.assertEqual(len(summary.team_a_form), 1)
+        self.assertEqual(summary.team_a_form[0]["result"], "W")
+        self.assertEqual(summary.team_a_form[0]["opponent"], "South Africa")
+        self.assertEqual(len(summary.team_b_form), 1)
+        self.assertEqual(summary.team_b_form[0]["result"], "W")
+        self.assertEqual(summary.team_b_form[0]["opponent"], "England")
+
+    def test_api_football_search_team_id_suffix_cleaning(self):
+        from predictions.importers.api_football import APIFootballProvider
+
+        p = APIFootballProvider(api_key="mock")
+
+        def mock_get(path, params):
+            # "Odisha FC" has no exact name match, but "Odisha" does
+            if params.get("name") == "Odisha":
+                return [{"team": {"id": 7177, "name": "Odisha"}}]
+            if params.get("search") == "Odisha":
+                return [{"team": {"id": 7177, "name": "Odisha"}}]
+            return []
+
+        with mock.patch.object(p, "_get", side_effect=mock_get):
+            team_id = p._search_team_id("Odisha FC")
+            self.assertEqual(team_id, 7177)
+
+    def test_get_or_fetch_match_stats_multi_provider_fallback(self):
+        from predictions.services import get_or_fetch_match_stats
+        from predictions.importers.base import H2HSummary
+
+        m = sport_match("Football", "Arsenal", "Chelsea")
+        m.save()
+
+        mock_provider1 = mock.Mock()
+        mock_provider1.name = "API-Football"
+        mock_provider1.supports.return_value = True
+        mock_provider1.fetch_h2h_and_form.return_value = None  # fails
+
+        mock_provider2 = mock.Mock()
+        mock_provider2.name = "Flashscore"
+        mock_provider2.supports.return_value = True
+        mock_provider2.fetch_h2h_and_form.return_value = H2HSummary(
+            team_a_wins=2,
+            team_b_wins=1,
+            draws=1,
+            total_matches=4,
+            past_matches=[{"date": "2025-01-01", "home": "Arsenal", "away": "Chelsea", "score": "2 - 1"}],
+            team_a_form=[{"result": "W"}],
+            team_b_form=[{"result": "L"}],
+        )
+
+        with mock.patch("predictions.importers.registry.get_providers", return_value=[mock_provider1, mock_provider2]):
+            stats = get_or_fetch_match_stats(m, force_refresh=True)
+
+        self.assertIsNotNone(stats)
+        self.assertEqual(stats.h2h_summary["total"], 4)
+        mock_provider1.fetch_h2h_and_form.assert_called_once_with(m)
+        mock_provider2.fetch_h2h_and_form.assert_called_once_with(m)
+
+    def test_template_renders_form_when_zero_h2h_clashes(self):
+        from django.urls import reverse
+        from predictions.models import MatchStats
+
+        m = sport_match("Football", "Team Alpha", "Team Beta")
+        m.is_published = True
+        m.save()
+
+        MatchStats.objects.create(
+            match=m,
+            h2h_summary={"team_a_wins": 0, "team_b_wins": 0, "draws": 0, "total": 0},
+            h2h_data=[],
+            team_a_recent=[{"result": "W", "opponent": "Other Team", "score": "1 - 0", "date": "2026-10-01"}],
+            team_b_recent=[{"result": "L", "opponent": "Other Team 2", "score": "0 - 2", "date": "2026-10-01"}],
+        )
+
+        resp = self.client.get(reverse("match_detail", kwargs={"pk": m.pk}))
+        self.assertEqual(resp.status_code, 200)
+        content = resp.content.decode()
+        self.assertIn("First clash recorded", content)
+        self.assertIn("No past head-to-head encounters recorded between these two teams.", content)
+        self.assertNotIn("0 past clashes", content)
+
+
 
 
 

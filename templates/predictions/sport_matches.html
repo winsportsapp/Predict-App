@@ -89,9 +89,15 @@
               <div class="small text-start mb-2">
                 <a href="{% url 'match_detail' match.pk %}" class="badge bg-light text-dark border text-decoration-none px-2 py-1">
                   📊 Head to Head: <strong class="text-success">{{ match.stats.h2h_summary.team_a_wins }}W</strong> &middot;
-                  <strong>{{ match.stats.h2h_summary.draws }}D</strong> &middot;
+                  {% if match.allows_draw %}<strong>{{ match.stats.h2h_summary.draws }}D</strong> &middot;{% endif %}
                   <strong class="text-primary">{{ match.stats.h2h_summary.team_b_wins }}W</strong>
-                  <span class="text-muted fw-normal ms-1">({{ match.stats.h2h_summary.total }} past clashes &rarr;)</span>
+                  <span class="text-muted fw-normal ms-1">({{ match.stats.h2h_summary.total }} past clash{{ match.stats.h2h_summary.total|pluralize:"es" }} &rarr;)</span>
+                </a>
+              </div>
+            {% elif match.stats.team_a_recent or match.stats.team_b_recent %}
+              <div class="small text-start mb-2">
+                <a href="{% url 'match_detail' match.pk %}" class="badge bg-light text-dark border text-decoration-none px-2 py-1">
+                  📊 Head to Head: <span class="text-muted fw-normal">First clash &middot; Recent form available &rarr;</span>
                 </a>
               </div>
             {% endif %}
@@ -142,7 +148,7 @@
                   <div class="col-4">
                     <!-- Spacer above Draw tile to maintain horizontal alignment -->
                     <div class="d-flex align-items-center justify-content-center text-muted small mb-1" style="min-height: 20px; font-size: 0.65rem;">
-                      {% if match.stats and match.stats.h2h_summary.draws is not None %}
+                      {% if match.stats and match.stats.h2h_summary.draws is not None and match.stats.h2h_summary.total %}
                         <span>{{ match.stats.h2h_summary.draws }} Draw{{ match.stats.h2h_summary.draws|pluralize }}</span>
                       {% endif %}
                     </div>
