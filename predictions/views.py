@@ -36,7 +36,6 @@ from .models import (
 from .services import (
     apply_referral_code,
     credit_referral_if_first_prediction,
-    get_or_fetch_match_stats,
     redeem_credits,
     sync_match_statuses,
 )
@@ -136,7 +135,7 @@ def match_detail(request, pk):
     """Read-only page for a single published match and its status."""
     sync_match_statuses()
     match = get_object_or_404(
-        Match.objects.select_related("sport", "team_a", "team_b", "winner"),
+        Match.objects.select_related("sport", "team_a", "team_b", "winner", "stats"),
         pk=pk,
         is_published=True,
     )
@@ -158,7 +157,7 @@ def match_detail(request, pk):
             user=request.user, match=match
         ).first()
 
-    stats = get_or_fetch_match_stats(match)
+    stats = getattr(match, "stats", None)
 
     return render(
         request,

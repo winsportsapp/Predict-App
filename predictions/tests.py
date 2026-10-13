@@ -6795,6 +6795,21 @@ class MultiSportAPISyncAndH2HTests(TestCase):
         self.assertIn("+10", content)
         self.assertIn("+25", content)
 
+    def test_match_detail_never_calls_external_api_when_stats_missing(self):
+        from django.urls import reverse
+
+        m = sport_match("Football", "Arsenal", "Chelsea")
+        m.is_published = True
+        m.save()
+
+        with mock.patch("predictions.services.get_or_fetch_match_stats") as mock_fetch:
+            resp = self.client.get(reverse("match_detail", kwargs={"pk": m.pk}))
+            self.assertEqual(resp.status_code, 200)
+            mock_fetch.assert_not_called()
+
+        content = resp.content.decode()
+        self.assertNotIn("Head-to-Head &amp; Form", content)
+
     def test_in_place_prediction_from_match_detail_with_next_param(self):
         from django.contrib.auth.models import User
         from django.urls import reverse
