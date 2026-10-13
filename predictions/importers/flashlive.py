@@ -16,7 +16,14 @@ from datetime import datetime, timedelta, timezone as dt_timezone
 import requests
 from django.conf import settings
 
-from .base import REQUEST_TIMEOUT, ExternalEvent, Provider, ProviderError, make_session
+from .base import (
+    REQUEST_TIMEOUT,
+    ExternalEvent,
+    H2HSummary,
+    Provider,
+    ProviderError,
+    make_session,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -25,16 +32,15 @@ BASE_URL = f"https://{API_HOST}/v1"
 LOCALE = "en_INT"
 
 # Our Sport.name -> FlashLive sport_id. Only these sports are imported, and
-# each one costs API quota on every run. Hockey (field hockey) is left out
-# on purpose: it is entered by hand. Add a sport with FLASHLIVE_SPORT_IDS
-# (field hockey is 24); check the IDs with
-# `python manage.py sync_external_matches --list-sports`.
+# each one costs API quota on every run. Add or override a sport with FLASHLIVE_SPORT_IDS;
+# check IDs with `python manage.py sync_external_matches --list-sports`.
 DEFAULT_SPORT_IDS = {
     "Football": 1,
     "Tennis": 2,
     "Cricket": 13,
     "Badminton": 21,
 }
+
 
 # FlashLive's list endpoint only reaches 7 days either side of today.
 MAX_INDENT_DAYS = 7
@@ -54,8 +60,15 @@ class FlashLiveProvider(Provider):
         teams=None,
         exclude_tournaments=None,
         utc_offset=None,
+        stats_api_key=None,
+        stats_session=None,
     ):
         self.api_key = api_key if api_key is not None else settings.RAPIDAPI_KEY
+        self.stats_api_key = (
+            stats_api_key
+            if stats_api_key is not None
+            else getattr(settings, "RAPIDAPI_STATS_KEY", "") or self.api_key
+        )
         # Tournament names or IDs; "*" wildcards allowed, e.g. "* ATP*".
         self.tournaments = _patterns(
             tournaments if tournaments is not None else settings.FLASHLIVE_TOURNAMENTS
@@ -95,9 +108,16 @@ class FlashLiveProvider(Provider):
         self.session = session or make_session(
             {"x-rapidapi-key": self.api_key, "x-rapidapi-host": API_HOST}
         )
+        # Dedicated session for H2H and recent form requests using secondary key
+        self.stats_session = stats_session or (
+            make_session({"x-rapidapi-key": self.stats_api_key, "x-rapidapi-host": API_HOST})
+            if self.stats_api_key
+            else self.session
+        )
         # Requests made by this instance, reported by the command so usage
         # against the monthly quota can be followed in the logs.
         self.requests_made = 0
+        self.stats_requests_made = 0
 
     # -- Provider interface ------------------------------------------------
 
@@ -297,7 +317,134 @@ class FlashLiveProvider(Provider):
         data = self._get("/sports/list", {})
         return [(item.get("ID"), item.get("NAME")) for item in data or []]
 
+    def fetch_h2h_and_form(self, match):
+        """Fetch H2H history and recent 5-match form using FlashLive's /events/h2h endpoint.
+        Uses stats_session (RAPIDAPI_STATS_KEY) to isolate quota from fixture sync.
+        """
+        ext_id = getattr(match, "external_id", "")
+        if not ext_id:
+            return None
+
+        data = self._get_stats("/events/h2h", {"event_id": ext_id, "locale": LOCALE})
+        if not data:
+            return None
+
+        groups = []
+        if isinstance(data, list):
+            for item in data:
+                if isinstance(item, dict):
+                    if "GROUPS" in item:
+                        groups.extend(item.get("GROUPS") or [])
+                    else:
+                        groups.append(item)
+        elif isinstance(data, dict):
+            groups = data.get("GROUPS") or [data]
+
+        h2h_events = []
+        team_a_events = []
+        team_b_events = []
+
+        team_a_lower = match.team_a.name.lower()
+        team_b_lower = match.team_b.name.lower()
+
+        for g in groups:
+            if not isinstance(g, dict):
+                continue
+            label = str(g.get("GROUP_LABEL") or g.get("NAME") or "").lower()
+            evs = g.get("EVENTS") or []
+            if "head-to-head" in label or "h2h" in label:
+                h2h_events.extend(evs)
+            elif team_a_lower in label:
+                team_a_events.extend(evs)
+            elif team_b_lower in label:
+                team_b_events.extend(evs)
+            elif not team_a_events and "last matches" in label:
+                team_a_events.extend(evs)
+            elif not team_b_events and "last matches" in label:
+                team_b_events.extend(evs)
+
+        past_matches = []
+        team_a_wins = 0
+        team_b_wins = 0
+        draws = 0
+
+        for raw in h2h_events[:10]:
+            if not isinstance(raw, dict):
+                continue
+            home = str(raw.get("HOME_NAME") or "")
+            away = str(raw.get("AWAY_NAME") or "")
+            hs = raw.get("HOME_SCORE_CURRENT")
+            aws = raw.get("AWAY_SCORE_CURRENT")
+            start = raw.get("START_TIME") or raw.get("START_UTIME")
+            date_str = ""
+            if start:
+                try:
+                    date_str = datetime.fromtimestamp(int(start), tz=dt_timezone.utc).strftime("%Y-%m-%d")
+                except (ValueError, TypeError):
+                    pass
+
+            winner_code = str(raw.get("WINNER") or "").strip()
+            winner_side = "D"
+            winner_name = "Draw"
+            is_team_a_home = team_a_lower in home.lower()
+
+            if winner_code == "1":
+                winner_name = home
+                winner_side = "A" if is_team_a_home else "B"
+                if winner_side == "A":
+                    team_a_wins += 1
+                else:
+                    team_b_wins += 1
+            elif winner_code == "2":
+                winner_name = away
+                winner_side = "B" if is_team_a_home else "A"
+                if winner_side == "B":
+                    team_b_wins += 1
+                else:
+                    team_a_wins += 1
+            else:
+                draws += 1
+
+            score_str = f"{hs} - {aws}" if (hs is not None and aws is not None) else ""
+            past_matches.append({
+                "date": date_str,
+                "competition": raw.get("TOURNAMENT_NAME") or raw.get("SHORT_NAME") or match.sport.name,
+                "home": home,
+                "away": away,
+                "score": score_str,
+                "winner": winner_name,
+                "winner_side": winner_side,
+            })
+
+        team_a_form = _parse_flashlive_recent_form(team_a_events[:5], match.team_a.name)
+        team_b_form = _parse_flashlive_recent_form(team_b_events[:5], match.team_b.name)
+
+        return H2HSummary(
+            team_a_wins=team_a_wins,
+            team_b_wins=team_b_wins,
+            draws=draws,
+            total_matches=len(past_matches),
+            past_matches=past_matches,
+            team_a_form=team_a_form,
+            team_b_form=team_b_form,
+        )
+
     # -- helpers -----------------------------------------------------------
+
+    def _get_stats(self, path, params):
+        if not self.stats_api_key:
+            return []
+        self.stats_requests_made += 1
+        try:
+            resp = self.stats_session.get(
+                BASE_URL + path, params=params, timeout=REQUEST_TIMEOUT
+            )
+            if resp.status_code == 200:
+                return resp.json().get("DATA") or []
+        except Exception as exc:
+            logger.debug("FlashLive stats request %s failed: %s", path, exc)
+        return []
+
 
     def _get(self, path, params):
         if not self.api_key:
@@ -619,4 +766,44 @@ def _extract_odds_tuple(odds_obj):
         return home, away, draw
 
     return None, None, None
+
+
+def _parse_flashlive_recent_form(raw_events, team_name):
+    form_list = []
+    team_name_lower = team_name.lower()
+    for ev in raw_events:
+        if not isinstance(ev, dict):
+            continue
+        home = str(ev.get("HOME_NAME") or "")
+        away = str(ev.get("AWAY_NAME") or "")
+        hs = ev.get("HOME_SCORE_CURRENT")
+        aws = ev.get("AWAY_SCORE_CURRENT")
+        start = ev.get("START_TIME") or ev.get("START_UTIME")
+        date_str = ""
+        if start:
+            try:
+                date_str = datetime.fromtimestamp(int(start), tz=dt_timezone.utc).strftime("%Y-%m-%d")
+            except (ValueError, TypeError):
+                pass
+
+        is_home = team_name_lower in home.lower()
+        opponent = away if is_home else home
+        winner_code = str(ev.get("WINNER") or "").strip()
+
+        if winner_code == "1":
+            res = "W" if is_home else "L"
+        elif winner_code == "2":
+            res = "L" if is_home else "W"
+        else:
+            res = "D"
+
+        score_str = f"{hs} - {aws}" if (hs is not None and aws is not None) else ""
+        form_list.append({
+            "date": date_str,
+            "opponent": opponent,
+            "score": score_str,
+            "result": res,
+            "competition": ev.get("TOURNAMENT_NAME") or ev.get("SHORT_NAME") or "",
+        })
+    return form_list
 

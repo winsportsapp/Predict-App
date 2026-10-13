@@ -66,6 +66,273 @@
     </div>
   </div>
 
+  <!-- Prediction Pick Panel (Only when match is open for prediction) -->
+  {% if state == "open" %}
+    <div class="card border-0 shadow-sm rounded-4 p-4 bg-white mb-3">
+      <div class="d-flex align-items-center justify-content-between mb-3">
+        <h2 class="h6 fw-bold text-dark mb-0">Select your Prediction</h2>
+        <span class="badge bg-success-subtle text-success border border-success-subtle rounded-pill px-2 py-1 small fw-semibold">
+          Open for Prediction
+        </span>
+      </div>
+
+      <!-- Head to Head Summary badge above pick panel -->
+      {% if stats and stats.h2h_summary.total %}
+        <div class="small text-start mb-2">
+          <span class="badge bg-light text-dark border px-2 py-1">
+            📊 Head to Head: <strong class="text-success">{{ stats.h2h_summary.team_a_wins }}W</strong> &middot;
+            <strong>{{ stats.h2h_summary.draws }}D</strong> &middot;
+            <strong class="text-primary">{{ stats.h2h_summary.team_b_wins }}W</strong>
+            <span class="text-muted fw-normal ms-1">({{ stats.h2h_summary.total }} past clashes)</span>
+          </span>
+        </div>
+      {% endif %}
+
+      <div class="pick-panel">
+        <div class="row g-2 text-center pick-row">
+          <!-- Choice A -->
+          <div class="{% if match.allows_draw %}col-4{% else %}col-6{% endif %}">
+            <!-- Team A Recent Form (Outside and directly above tile box) -->
+            <div class="d-flex align-items-center justify-content-center gap-1 mb-1" style="min-height: 20px;">
+              {% if stats and stats.team_a_recent %}
+                {% for r in stats.team_a_recent %}
+                  <span class="badge rounded-circle p-0 d-inline-flex align-items-center justify-content-center {% if r.result == 'W' %}bg-success text-white{% elif r.result == 'L' %}bg-danger text-white{% else %}bg-secondary text-white{% endif %}"
+                        style="width: 17px; height: 17px; font-size: 0.6rem; line-height: 1;"
+                        title="{{ r.date }}: vs {{ r.opponent }} ({{ r.score }})">
+                    {{ r.result }}
+                  </span>
+                {% endfor %}
+              {% endif %}
+            </div>
+
+            {% if user.is_authenticated %}
+              <form method="post" action="{% url 'predict' match.pk %}">
+                {% csrf_token %}
+                <input type="hidden" name="choice" value="A">
+                <input type="hidden" name="next" value="{{ request.path }}">
+                <button type="submit"
+                        class="btn w-100 pick-btn {% if user_prediction.choice == 'A' %}pick-btn-selected{% else %}pick-btn-unselected{% endif %} shadow-sm">
+                  <div class="pick-team-name mb-1">{% team_flag match.team_a %}{{ match.team_a }}</div>
+                  <div class="pick-points-line">If Win get: <strong{% if match.team_a_win_points < 0 %} class="pts-negative"{% endif %}>{{ match.team_a_win_points|signed_points }}</strong></div>
+                  <div class="pick-points-line">{% if match.allows_draw %}If not get{% else %}If Lose get{% endif %}: <strong{% if match.team_a_lose_points < 0 %} class="pts-negative"{% endif %}>{{ match.team_a_lose_points|signed_points }}</strong></div>
+                  {% if user_prediction.choice == 'A' %}
+                    <div class="small mt-1"><span class="badge text-bg-success">Predicted</span></div>
+                  {% endif %}
+                </button>
+              </form>
+            {% else %}
+              <div class="border rounded-3 p-2 h-100 bg-light-subtle">
+                <div class="pick-team-name mb-1">{% team_flag match.team_a %}{{ match.team_a }}</div>
+                <div class="pick-points-line text-muted">If Win get: <strong>{{ match.team_a_win_points|signed_points }}</strong></div>
+                <div class="pick-points-line text-muted">{% if match.allows_draw %}If not get{% else %}If Lose get{% endif %}: <strong>{{ match.team_a_lose_points|signed_points }}</strong></div>
+              </div>
+            {% endif %}
+          </div>
+
+          <!-- Choice Draw (if allowed) -->
+          {% if match.allows_draw %}
+            <div class="col-4">
+              <!-- Spacer above Draw tile to maintain horizontal alignment -->
+              <div class="d-flex align-items-center justify-content-center text-muted small mb-1" style="min-height: 20px; font-size: 0.65rem;">
+                {% if stats and stats.h2h_summary.draws is not None %}
+                  <span>{{ stats.h2h_summary.draws }} Draw{{ stats.h2h_summary.draws|pluralize }}</span>
+                {% endif %}
+              </div>
+
+              {% if user.is_authenticated %}
+                <form method="post" action="{% url 'predict' match.pk %}">
+                  {% csrf_token %}
+                  <input type="hidden" name="choice" value="D">
+                  <input type="hidden" name="next" value="{{ request.path }}">
+                  <button type="submit"
+                          class="btn w-100 pick-btn {% if user_prediction.choice == 'D' %}pick-btn-selected{% else %}pick-btn-unselected{% endif %} shadow-sm">
+                    <div class="pick-team-name mb-1">Draw</div>
+                    <div class="pick-points-line">If Draw get: <strong{% if match.draw_win_points < 0 %} class="pts-negative"{% endif %}>{{ match.draw_win_points|signed_points }}</strong></div>
+                    <div class="pick-points-line">If not: <strong{% if match.draw_lose_points < 0 %} class="pts-negative"{% endif %}>{{ match.draw_lose_points|signed_points }}</strong></div>
+                    {% if user_prediction.choice == 'D' %}
+                      <div class="small mt-1"><span class="badge text-bg-success">Predicted</span></div>
+                    {% endif %}
+                  </button>
+                </form>
+              {% else %}
+                <div class="border rounded-3 p-2 h-100 bg-light-subtle">
+                  <div class="pick-team-name mb-1">Draw</div>
+                  <div class="pick-points-line text-muted">If Draw get: <strong>{{ match.draw_win_points|signed_points }}</strong></div>
+                  <div class="pick-points-line text-muted">If not: <strong>{{ match.draw_lose_points|signed_points }}</strong></div>
+                </div>
+              {% endif %}
+            </div>
+          {% endif %}
+
+          <!-- Choice B -->
+          <div class="{% if match.allows_draw %}col-4{% else %}col-6{% endif %}">
+            <!-- Team B Recent Form (Outside and directly above tile box) -->
+            <div class="d-flex align-items-center justify-content-center gap-1 mb-1" style="min-height: 20px;">
+              {% if stats and stats.team_b_recent %}
+                {% for r in stats.team_b_recent %}
+                  <span class="badge rounded-circle p-0 d-inline-flex align-items-center justify-content-center {% if r.result == 'W' %}bg-success text-white{% elif r.result == 'L' %}bg-danger text-white{% else %}bg-secondary text-white{% endif %}"
+                        style="width: 17px; height: 17px; font-size: 0.6rem; line-height: 1;"
+                        title="{{ r.date }}: vs {{ r.opponent }} ({{ r.score }})">
+                    {{ r.result }}
+                  </span>
+                {% endfor %}
+              {% endif %}
+            </div>
+
+            {% if user.is_authenticated %}
+              <form method="post" action="{% url 'predict' match.pk %}">
+                {% csrf_token %}
+                <input type="hidden" name="choice" value="B">
+                <input type="hidden" name="next" value="{{ request.path }}">
+                <button type="submit"
+                        class="btn w-100 pick-btn {% if user_prediction.choice == 'B' %}pick-btn-selected{% else %}pick-btn-unselected{% endif %} shadow-sm">
+                  <div class="pick-team-name mb-1">{% team_flag match.team_b %}{{ match.team_b }}</div>
+                  <div class="pick-points-line">If Win get: <strong{% if match.team_b_win_points < 0 %} class="pts-negative"{% endif %}>{{ match.team_b_win_points|signed_points }}</strong></div>
+                  <div class="pick-points-line">{% if match.allows_draw %}If not get{% else %}If Lose get{% endif %}: <strong{% if match.team_b_lose_points < 0 %} class="pts-negative"{% endif %}>{{ match.team_b_lose_points|signed_points }}</strong></div>
+                  {% if user_prediction.choice == 'B' %}
+                    <div class="small mt-1"><span class="badge text-bg-success">Predicted</span></div>
+                  {% endif %}
+                </button>
+              </form>
+            {% else %}
+              <div class="border rounded-3 p-2 h-100 bg-light-subtle">
+                <div class="pick-team-name mb-1">{% team_flag match.team_b %}{{ match.team_b }}</div>
+                <div class="pick-points-line text-muted">If Win get: <strong>{{ match.team_b_win_points|signed_points }}</strong></div>
+                <div class="pick-points-line text-muted">{% if match.allows_draw %}If not get{% else %}If Lose get{% endif %}: <strong>{{ match.team_b_lose_points|signed_points }}</strong></div>
+              </div>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+
+      {% if not user.is_authenticated %}
+        <div class="text-center mt-3 pt-2 border-top">
+          <a class="btn btn-outline-success btn-sm rounded-pill px-4" href="{% url 'login' %}">Log in to predict</a>
+        </div>
+      {% endif %}
+    </div>
+  {% endif %}
+
+  <!-- Head-to-Head & Recent Form -->
+  {% if stats %}
+    {% if stats.h2h_data or stats.team_a_recent or stats.team_b_recent %}
+      <div class="card border-0 shadow-sm rounded-4 p-4 bg-white mb-3">
+        <div class="d-flex align-items-center justify-content-between mb-3">
+          <h2 class="h6 fw-bold text-dark mb-0">Head-to-Head &amp; Form</h2>
+          <span class="badge bg-light text-muted border fw-normal small">Head to Head Stats</span>
+        </div>
+
+        <!-- Recent 5 Matches Form for Team A & Team B -->
+        {% if stats.team_a_recent or stats.team_b_recent %}
+          <div class="row g-3 mb-4">
+            <div class="col-md-6">
+              <div class="border rounded-3 p-3 bg-light-subtle h-100">
+                <div class="fw-semibold small text-dark mb-2 text-truncate">
+                  {% team_flag match.team_a %}{{ match.team_a }} Recent Form
+                </div>
+                {% if stats.team_a_recent %}
+                  <div class="d-flex align-items-center gap-2 mb-2">
+                    {% for m in stats.team_a_recent %}
+                      <span class="badge rounded-circle p-0 d-inline-flex align-items-center justify-content-center {% if m.result == 'W' %}bg-success text-white{% elif m.result == 'L' %}bg-danger text-white{% else %}bg-secondary text-white{% endif %}"
+                            style="width: 26px; height: 26px; font-size: 0.75rem;"
+                            title="{{ m.date }}: vs {{ m.opponent }} ({{ m.score }})">
+                        {{ m.result }}
+                      </span>
+                    {% endfor %}
+                  </div>
+                  <div class="small text-muted" style="font-size: 0.8rem;">
+                    Last 5 matches (hover badge for opponent &amp; score)
+                  </div>
+                {% else %}
+                  <div class="small text-muted">No recent match history found.</div>
+                {% endif %}
+              </div>
+            </div>
+
+            <div class="col-md-6">
+              <div class="border rounded-3 p-3 bg-light-subtle h-100">
+                <div class="fw-semibold small text-dark mb-2 text-truncate">
+                  {% team_flag match.team_b %}{{ match.team_b }} Recent Form
+                </div>
+                {% if stats.team_b_recent %}
+                  <div class="d-flex align-items-center gap-2 mb-2">
+                    {% for m in stats.team_b_recent %}
+                      <span class="badge rounded-circle p-0 d-inline-flex align-items-center justify-content-center {% if m.result == 'W' %}bg-success text-white{% elif m.result == 'L' %}bg-danger text-white{% else %}bg-secondary text-white{% endif %}"
+                            style="width: 26px; height: 26px; font-size: 0.75rem;"
+                            title="{{ m.date }}: vs {{ m.opponent }} ({{ m.score }})">
+                        {{ m.result }}
+                      </span>
+                    {% endfor %}
+                  </div>
+                  <div class="small text-muted" style="font-size: 0.8rem;">
+                    Last 5 matches (hover badge for opponent &amp; score)
+                  </div>
+                {% else %}
+                  <div class="small text-muted">No recent match history found.</div>
+                {% endif %}
+              </div>
+            </div>
+          </div>
+        {% endif %}
+
+        <!-- Head-to-Head Past Encounters -->
+        {% if stats.h2h_data %}
+          <div class="border-top pt-3">
+            <div class="d-flex align-items-center justify-content-between mb-3">
+              <span class="fw-semibold small text-dark">Past Encounters (Last {{ stats.h2h_data|length }})</span>
+              {% if stats.h2h_summary.total %}
+                <span class="small text-muted">
+                  <strong class="text-success">{{ stats.h2h_summary.team_a_wins }}W</strong> &ndash;
+                  <strong>{{ stats.h2h_summary.draws }}D</strong> &ndash;
+                  <strong class="text-primary">{{ stats.h2h_summary.team_b_wins }}W</strong>
+                </span>
+              {% endif %}
+            </div>
+
+            <div class="table-responsive">
+              <table class="table table-sm table-borderless align-middle mb-0 small">
+                <thead class="text-muted border-bottom">
+                  <tr>
+                    <th scope="col" style="width: 28%;">Date / League</th>
+                    <th scope="col" class="text-end" style="width: 28%;">Home</th>
+                    <th scope="col" class="text-center" style="width: 16%;">Score</th>
+                    <th scope="col" style="width: 28%;">Away</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {% for enc in stats.h2h_data %}
+                    <tr class="border-bottom border-light-subtle">
+                      <td>
+                        <div class="fw-semibold text-dark">{{ enc.date }}</div>
+                        <div class="text-muted text-truncate" style="font-size: 0.75rem; max-width: 140px;">{{ enc.competition }}</div>
+                      </td>
+                      <td class="text-end text-truncate">
+                        <span class="{% if enc.winner == enc.home %}fw-bold text-dark{% else %}text-muted{% endif %}">
+                          {{ enc.home }}
+                        </span>
+                      </td>
+                      <td class="text-center">
+                        <span class="badge bg-light text-dark border px-2 py-1 font-monospace">
+                          {{ enc.score }}
+                        </span>
+                      </td>
+                      <td class="text-truncate">
+                        <span class="{% if enc.winner == enc.away %}fw-bold text-dark{% else %}text-muted{% endif %}">
+                          {{ enc.away }}
+                        </span>
+                      </td>
+                    </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        {% endif %}
+      </div>
+    {% endif %}
+  {% endif %}
+
+
   {% if user_prediction %}
     <div class="card border-0 shadow-sm rounded-4 p-4 bg-white mb-3">
       <div class="d-flex align-items-center justify-content-between mb-2">
@@ -105,16 +372,5 @@
     </div>
   {% endif %}
 
-  {% if state == "open" %}
-    <div class="mt-3">
-      {% if user.is_authenticated %}
-        <a class="btn btn-success rounded-pill px-4" href="{% url 'predict' match.pk %}">
-          {% if user_prediction %}Change pick{% else %}Predict{% endif %}
-        </a>
-      {% else %}
-        <a class="btn btn-outline-success rounded-pill px-4" href="{% url 'login' %}">Log in to predict</a>
-      {% endif %}
-    </div>
-  {% endif %}
 </div>
 {% endblock %}

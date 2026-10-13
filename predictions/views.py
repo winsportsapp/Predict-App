@@ -36,9 +36,11 @@ from .models import (
 from .services import (
     apply_referral_code,
     credit_referral_if_first_prediction,
+    get_or_fetch_match_stats,
     redeem_credits,
     sync_match_statuses,
 )
+
 
 logger = logging.getLogger(__name__)
 
@@ -79,7 +81,7 @@ def sport_matches(request, sport_slug, extra_context=None):
     sync_match_statuses()
     matches = list(
         Match.objects.filter(is_published=True, sport__name=sport_name).select_related(
-            "team_a", "team_b", "sport", "winner"
+            "team_a", "team_b", "sport", "winner", "stats"
         )
     )
     open_matches = [m for m in matches if m.predictions_open]
@@ -156,6 +158,8 @@ def match_detail(request, pk):
             user=request.user, match=match
         ).first()
 
+    stats = get_or_fetch_match_stats(match)
+
     return render(
         request,
         "predictions/match_detail.html",
@@ -163,8 +167,10 @@ def match_detail(request, pk):
             "match": match,
             "state": state,
             "user_prediction": user_prediction,
+            "stats": stats,
         },
     )
+
 
 
 @login_required
@@ -197,6 +203,11 @@ def predict(request, pk):
             )
             credit_referral_if_first_prediction(request.user)
             messages.success(request, "Your prediction has been saved.")
+            next_url = request.POST.get("next")
+            if next_url and url_has_allowed_host_and_scheme(
+                next_url, allowed_hosts={request.get_host()}
+            ):
+                return redirect(next_url)
             return _sport_redirect(match.sport)
     else:
         initial = {"choice": existing.choice} if existing else None

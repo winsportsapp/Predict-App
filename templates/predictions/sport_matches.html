@@ -61,13 +61,18 @@
               </div>
             {% endif %}
 
-            <!-- Teams Headline (Left-aligned) -->
-            <div class="text-start mb-1">
-              <strong class="match-teams-title">
+            <!-- Teams Headline & Team Details Button (Same line, right-aligned button) -->
+            <div class="d-flex align-items-center justify-content-between mb-1 gap-2 flex-wrap">
+              <strong class="match-teams-title text-start">
                 <a class="match-title-link" href="{% url 'match_detail' match.pk %}">{% team_flag match.team_a %}{{ match.team_a }}</a>
                 <span class="text-muted px-1 fw-normal">Vs</span>
                 <a class="match-title-link" href="{% url 'match_detail' match.pk %}">{% team_flag match.team_b %}{{ match.team_b }}</a>
               </strong>
+              <a href="{% url 'match_detail' match.pk %}"
+                 class="btn btn-sm btn-outline-secondary rounded-pill px-2 py-0 text-nowrap team-details-btn"
+                 style="font-size: 0.72rem; line-height: 1.5; font-weight: 500;">
+                Team Details
+              </a>
             </div>
 
             <!-- Kickoff & Deadline (Left-aligned, Kickoff directly above Deadline below teams) -->
@@ -79,11 +84,36 @@
             <!-- Select your Team / Player (below deadline, above team name box) -->
             <div class="small fw-semibold text-start text-dark mb-1">Select your Team / Player</div>
 
+            <!-- Head to Head Summary Link (beneath 'Select your Team / Player', above recent results) -->
+            {% if match.stats and match.stats.h2h_summary.total %}
+              <div class="small text-start mb-2">
+                <a href="{% url 'match_detail' match.pk %}" class="badge bg-light text-dark border text-decoration-none px-2 py-1">
+                  📊 Head to Head: <strong class="text-success">{{ match.stats.h2h_summary.team_a_wins }}W</strong> &middot;
+                  <strong>{{ match.stats.h2h_summary.draws }}D</strong> &middot;
+                  <strong class="text-primary">{{ match.stats.h2h_summary.team_b_wins }}W</strong>
+                  <span class="text-muted fw-normal ms-1">({{ match.stats.h2h_summary.total }} past clashes &rarr;)</span>
+                </a>
+              </div>
+            {% endif %}
+
             <!-- Prediction Options / Buttons (pick-panel, fit in one row, reduced rectangle box length on desktop) -->
             <div class="pick-panel mt-2">
               <div class="row g-2 text-center pick-row">
                 <!-- Choice A -->
                 <div class="{% if match.allows_draw %}col-4{% else %}col-6{% endif %}">
+                  <!-- Team A Recent Form (Outside and directly above tile box) -->
+                  <div class="d-flex align-items-center justify-content-center gap-1 mb-1" style="min-height: 20px;">
+                    {% if match.stats and match.stats.team_a_recent %}
+                      {% for r in match.stats.team_a_recent %}
+                        <span class="badge rounded-circle p-0 d-inline-flex align-items-center justify-content-center {% if r.result == 'W' %}bg-success text-white{% elif r.result == 'L' %}bg-danger text-white{% else %}bg-secondary text-white{% endif %}"
+                              style="width: 17px; height: 17px; font-size: 0.6rem; line-height: 1;"
+                              title="{{ r.date }}: vs {{ r.opponent }} ({{ r.score }})">
+                          {{ r.result }}
+                        </span>
+                      {% endfor %}
+                    {% endif %}
+                  </div>
+
                   {% if user.is_authenticated %}
                     <form method="post" action="{% url 'predict' match.pk %}">
                       {% csrf_token %}
@@ -110,6 +140,13 @@
                 <!-- Choice Draw (if allowed) -->
                 {% if match.allows_draw %}
                   <div class="col-4">
+                    <!-- Spacer above Draw tile to maintain horizontal alignment -->
+                    <div class="d-flex align-items-center justify-content-center text-muted small mb-1" style="min-height: 20px; font-size: 0.65rem;">
+                      {% if match.stats and match.stats.h2h_summary.draws is not None %}
+                        <span>{{ match.stats.h2h_summary.draws }} Draw{{ match.stats.h2h_summary.draws|pluralize }}</span>
+                      {% endif %}
+                    </div>
+
                     {% if user.is_authenticated %}
                       <form method="post" action="{% url 'predict' match.pk %}">
                         {% csrf_token %}
@@ -136,6 +173,19 @@
 
                 <!-- Choice B -->
                 <div class="{% if match.allows_draw %}col-4{% else %}col-6{% endif %}">
+                  <!-- Team B Recent Form (Outside and directly above tile box) -->
+                  <div class="d-flex align-items-center justify-content-center gap-1 mb-1" style="min-height: 20px;">
+                    {% if match.stats and match.stats.team_b_recent %}
+                      {% for r in match.stats.team_b_recent %}
+                        <span class="badge rounded-circle p-0 d-inline-flex align-items-center justify-content-center {% if r.result == 'W' %}bg-success text-white{% elif r.result == 'L' %}bg-danger text-white{% else %}bg-secondary text-white{% endif %}"
+                              style="width: 17px; height: 17px; font-size: 0.6rem; line-height: 1;"
+                              title="{{ r.date }}: vs {{ r.opponent }} ({{ r.score }})">
+                          {{ r.result }}
+                        </span>
+                      {% endfor %}
+                    {% endif %}
+                  </div>
+
                   {% if user.is_authenticated %}
                     <form method="post" action="{% url 'predict' match.pk %}">
                       {% csrf_token %}
@@ -266,6 +316,17 @@
   .match-card:hover {
     border-color: #cbd5e1 !important;
     box-shadow: 0 4px 14px rgba(0, 0, 0, 0.06) !important;
+  }
+  .team-details-btn {
+    border-color: #cbd5e1 !important;
+    color: #475569 !important;
+    background-color: #f8fafc;
+    transition: all 0.15s ease;
+  }
+  .team-details-btn:hover {
+    border-color: #0B3D2E !important;
+    color: #0B3D2E !important;
+    background-color: #ecfdf5 !important;
   }
 </style>
 

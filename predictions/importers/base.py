@@ -42,6 +42,20 @@ class ExternalEvent:
     extra: dict = field(default_factory=dict)
 
 
+@dataclass
+class H2HSummary:
+    team_a_wins: int = 0
+    team_b_wins: int = 0
+    draws: int = 0
+    total_matches: int = 0
+    # List of past encounters between the two teams
+    past_matches: list = field(default_factory=list)
+    # Team A last 5 matches: [{"date": "...", "opponent": "...", "score": "...", "result": "W"|"D"|"L", "competition": "..."}, ...]
+    team_a_form: list = field(default_factory=list)
+    # Team B last 5 matches
+    team_b_form: list = field(default_factory=list)
+
+
 class Provider:
     """Base class. Subclasses set `name` and implement the fetch methods."""
 
@@ -82,6 +96,13 @@ class Provider:
         ({external_id: start_time}) as the source knows about. Events
         without a final result have result=None."""
         raise NotImplementedError
+
+    def fetch_h2h_and_form(self, match):
+        """Fetch Head-to-Head encounters and recent form for the given Match object.
+
+        Returns an H2HSummary instance or None.
+        """
+        return None
 
     def fetch_image(self, url):
         """Raw bytes of an image URL (team logo/flag), or None on failure.
