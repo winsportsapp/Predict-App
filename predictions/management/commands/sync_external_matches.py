@@ -131,6 +131,14 @@ class Command(BaseCommand):
         if failed:
             raise CommandError("Some sports failed; see errors above.")
 
+    def _safe_write(self, msg):
+        try:
+            self.stdout.write(msg)
+        except UnicodeEncodeError:
+            encoding = getattr(self.stdout, "encoding", None) or "ascii"
+            safe = str(msg).encode(encoding, errors="replace").decode(encoding)
+            self.stdout.write(safe)
+
     def _report_requests(self, providers):
         used = sum(getattr(p, "requests_made", 0) for p in providers)
         self.stdout.write(f"API requests used this run: {used}")
@@ -138,23 +146,23 @@ class Command(BaseCommand):
     def _report_fixtures(self, sport, summary):
         odds_count = summary.get("odds_filled", 0)
         odds_info = f", {odds_count} odds & points filled" if odds_count else ""
-        self.stdout.write(
+        self._safe_write(
             f"{sport.name} fixtures: {summary['created']} created, "
             f"{summary['updated']} kickoff times updated{odds_info}, "
             f"{summary['skipped']} skipped"
         )
         for name in summary["new_teams"]:
-            self.stdout.write(f"  new team (please review): {name}")
+            self._safe_write(f"  new team (please review): {name}")
         for match in summary["called_off"]:
-            self.stdout.write(self.style.WARNING(f"  postponed/cancelled at source: {match}"))
+            self._safe_write(self.style.WARNING(f"  postponed/cancelled at source: {match}"))
 
     def _report_results(self, sport, summary):
-        self.stdout.write(
+        self._safe_write(
             f"{sport.name} results: {summary['suggested']} suggested, awaiting admin confirmation"
         )
         for match in summary["enter_by_hand"]:
-            self.stdout.write(
+            self._safe_write(
                 self.style.WARNING(f"  no result from source, enter it by hand: {match}")
             )
         for match in summary["called_off"]:
-            self.stdout.write(self.style.WARNING(f"  postponed/cancelled at source: {match}"))
+            self._safe_write(self.style.WARNING(f"  postponed/cancelled at source: {match}"))
