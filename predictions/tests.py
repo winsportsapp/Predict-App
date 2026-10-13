@@ -6484,6 +6484,54 @@ class MultiSportAPISyncAndH2HTests(TestCase):
         request_calls = admin.message_user.call_args_list
         self.assertTrue(any("skipped because their sport is paused" in call[0][1] for call in request_calls))
 
+    def test_admin_fetch_h2h_and_form_action(self):
+        from django.contrib.admin.sites import AdminSite
+        from predictions.admin import MatchAdmin
+        from predictions.models import MatchStats
+
+        m = sport_match("Football", "Arsenal", "Chelsea")
+        site = AdminSite()
+        admin = MatchAdmin(Match, site)
+        admin.message_user = mock.Mock()
+        request = mock.Mock()
+
+        with mock.patch("predictions.admin.get_or_fetch_match_stats") as mock_fetch:
+            mock_fetch.return_value = MatchStats(
+                match=m,
+                h2h_summary={"team_a_wins": 2, "team_b_wins": 1, "draws": 1, "total": 4},
+                team_a_recent=[{"result": "W"}],
+                team_b_recent=[{"result": "L"}],
+            )
+            admin.fetch_h2h_and_recent_form(request, Match.objects.filter(pk=m.pk))
+            mock_fetch.assert_called_once_with(m, force_refresh=True)
+
+        calls = admin.message_user.call_args_list
+        self.assertTrue(any("Fetched Head to Head & recent form for 1 match(es)" in call[0][1] for call in calls))
+
+    def test_admin_h2h_display(self):
+        from django.contrib.admin.sites import AdminSite
+        from predictions.admin import MatchAdmin
+        from predictions.models import MatchStats
+
+        m = sport_match("Football", "Arsenal", "Chelsea")
+        site = AdminSite()
+        admin = MatchAdmin(Match, site)
+
+        # Before stats fetched
+        display_html = admin.h2h_display(m)
+        self.assertIn("Not fetched", display_html)
+
+        # After stats attached
+        m.stats = MatchStats(
+            match=m,
+            h2h_summary={"team_a_wins": 3, "team_b_wins": 1, "draws": 1, "total": 5},
+        )
+        display_html = admin.h2h_display(m)
+        self.assertIn("3W", display_html)
+        self.assertIn("1D", display_html)
+        self.assertIn("1W", display_html)
+        self.assertIn("5", display_html)
+
     def test_match_stats_model_and_caching(self):
         from predictions.models import MatchStats
         from predictions.services import get_or_fetch_match_stats

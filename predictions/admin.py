@@ -12,6 +12,7 @@ from . import push
 from .models import (
     CreditLedger,
     Match,
+    MatchStats,
     Prediction,
     Profile,
     PushSubscription,
@@ -29,6 +30,7 @@ from .services import (
     apply_odds_and_points,
     confirm_suggested_result,
     fulfill_redemption,
+    get_or_fetch_match_stats,
     reject_redemption,
     score_match,
     sync_match_statuses,
@@ -275,11 +277,56 @@ ODDS_POINTS_FIELDS_3WAY = (
 )
 
 
+class MatchStatsInline(admin.StackedInline):
+    model = MatchStats
+    can_delete = True
+    extra = 0
+    readonly_fields = (
+        "last_fetched_at",
+        "h2h_summary_display",
+        "team_a_recent_display",
+        "team_b_recent_display",
+    )
+    fields = (
+        "last_fetched_at",
+        "h2h_summary_display",
+        "team_a_recent_display",
+        "team_b_recent_display",
+    )
+
+    @admin.display(description="Head to Head Summary")
+    def h2h_summary_display(self, obj):
+        s = obj.h2h_summary or {}
+        if not s.get("total"):
+            return "No past clashes recorded"
+        return f"{s.get('team_a_wins', 0)}W - {s.get('draws', 0)}D - {s.get('team_b_wins', 0)}W (Total: {s.get('total', 0)} clashes)"
+
+    @admin.display(description="Team A Recent Form")
+    def team_a_recent_display(self, obj):
+        matches = obj.team_a_recent or []
+        if not matches:
+            return "None"
+        return ", ".join(
+            f"{m.get('result', '?')} vs {m.get('opponent', '?')} ({m.get('score', '')})"
+            for m in matches
+        )
+
+    @admin.display(description="Team B Recent Form")
+    def team_b_recent_display(self, obj):
+        matches = obj.team_b_recent or []
+        if not matches:
+            return "None"
+        return ", ".join(
+            f"{m.get('result', '?')} vs {m.get('opponent', '?')} ({m.get('score', '')})"
+            for m in matches
+        )
+
+
 @admin.register(Match)
 class MatchAdmin(admin.ModelAdmin):
     form = MatchAdminForm
-
-
+    inlines = [MatchStatsInline]
+    list_select_related = ("team_a", "team_b", "sport", "winner", "suggested_winner", "stats")
 
     class Media:
         js = (
@@ -301,6 +348,7 @@ class MatchAdmin(admin.ModelAdmin):
         "winner",
         "is_draw",
         "odds_display",
+        "h2h_display",
         "suggested_result",
         "is_published",
         "is_scored",
@@ -324,6 +372,7 @@ class MatchAdmin(admin.ModelAdmin):
         "unpublish_matches",
         "confirm_suggested_results",
         "fetch_odds_and_calculate_points",
+        "fetch_h2h_and_recent_form",
     )
     change_list_template = "admin/predictions/match/change_list.html"
 
@@ -613,6 +662,73 @@ class MatchAdmin(admin.ModelAdmin):
             )
             self.message_user(request, " ".join(msg_parts), level)
 
+    @admin.display(description="Head to Head")
+    def h2h_display(self, obj):
+        stats = getattr(obj, "stats", None)
+        if not stats or not stats.h2h_summary:
+            return format_html('<span style="color: #999;">{}</span>', "Not fetched")
+        total = stats.h2h_summary.get("total", 0)
+        if total == 0:
+            if stats.team_a_recent or stats.team_b_recent:
+                return format_html('<span style="color: #28a745;">{}</span>', "Form fetched (0 clashes)")
+            return format_html('<span style="color: #999;">{}</span>', "Not fetched")
+        a_w = stats.h2h_summary.get("team_a_wins", 0)
+        d = stats.h2h_summary.get("draws", 0)
+        b_w = stats.h2h_summary.get("team_b_wins", 0)
+        return format_html(
+            '<span title="{} past clashes"><b>{}W</b>-<b>{}D</b>-<b>{}W</b> ({})</span>',
+            total,
+            a_w,
+            d,
+            b_w,
+            total,
+        )
+
+    @admin.action(description="Fetch Head to Head & recent form (secondary key)")
+    def fetch_h2h_and_recent_form(self, request, queryset):
+        success_count = 0
+        skipped_count = 0
+        failed_count = 0
+        for match in queryset.select_related("sport", "team_a", "team_b"):
+            if not match.sport.is_active:
+                skipped_count += 1
+                continue
+            try:
+                stats = get_or_fetch_match_stats(match, force_refresh=True)
+                if stats and (stats.h2h_summary.get("total") or stats.team_a_recent or stats.team_b_recent):
+                    success_count += 1
+                elif stats:
+                    success_count += 1
+                else:
+                    failed_count += 1
+            except Exception as exc:
+                logger.warning("Error fetching H2H for match %s: %s", match.pk, exc)
+                failed_count += 1
+
+        msg_parts = []
+        if success_count:
+            msg_parts.append(
+                f"Fetched Head to Head & recent form for {success_count} match(es)."
+            )
+        if skipped_count:
+            msg_parts.append(
+                f"{skipped_count} match(es) skipped because their sport is paused."
+            )
+        if failed_count:
+            msg_parts.append(
+                f"{failed_count} match(es) could not be retrieved from provider."
+            )
+
+        if not msg_parts:
+            msg_parts.append("No matches processed.")
+
+        level = (
+            messages.SUCCESS
+            if success_count
+            else (messages.WARNING if (failed_count or skipped_count) else messages.INFO)
+        )
+        self.message_user(request, " ".join(msg_parts), level)
+
 
     def save_model(self, request, obj, form, change):
         super().save_model(request, obj, form, change)
@@ -820,11 +936,33 @@ class UserPredictionCountAdmin(admin.ModelAdmin):
         return obj.predictions_alltime_count
 
 
+@admin.register(MatchStats)
+class MatchStatsAdmin(admin.ModelAdmin):
+    list_display = ("match", "h2h_summary_display", "last_fetched_at", "is_stale")
+    search_fields = ("match__team_a__name", "match__team_b__name", "match__event_name")
+    readonly_fields = (
+        "match",
+        "last_fetched_at",
+        "h2h_summary",
+        "h2h_data",
+        "team_a_recent",
+        "team_b_recent",
+    )
+
+    @admin.display(description="Head to Head Summary")
+    def h2h_summary_display(self, obj):
+        s = obj.h2h_summary or {}
+        if not s.get("total"):
+            return "No past clashes recorded"
+        return f"{s.get('team_a_wins', 0)}W - {s.get('draws', 0)}D - {s.get('team_b_wins', 0)}W (Total: {s.get('total', 0)} clashes)"
+
+
 # The PREDICTIONS menu in the admin sidebar follows this order instead of
 # Django's default alphabetical one. A model missing from the list goes last
 # (a stable sort keeps those in their alphabetical order).
 PREDICTIONS_MENU_ORDER = (
     "Match",
+    "MatchStats",
     "Team",
     "TeamAlias",
     "Sport",
