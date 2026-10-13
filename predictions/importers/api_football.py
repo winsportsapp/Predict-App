@@ -232,31 +232,52 @@ class APIFootballProvider(Provider):
             )
             return None
 
-        # 3. Fetch H2H encounters
+        # 3. Fetch H2H encounters (do NOT pass 'last' param as API-Football free plans reject it)
         past_matches = []
         team_a_wins = 0
         team_b_wins = 0
         draws = 0
 
         try:
-            h2h_raw = self._get("/fixtures/headtohead", {"h2h": f"{home_id}-{away_id}", "last": 10})
-            for item in h2h_raw:
-                parsed = _parse_h2h_encounter(item, match.team_a.name, match.team_b.name)
-                if parsed:
-                    past_matches.append(parsed)
-                    res = parsed.get("winner_side")
-                    if res == "A":
-                        team_a_wins += 1
-                    elif res == "B":
-                        team_b_wins += 1
-                    elif res == "D":
-                        draws += 1
+            h2h_raw = self._get("/fixtures/headtohead", {"h2h": f"{home_id}-{away_id}"})
+            if isinstance(h2h_raw, list):
+                # Sort newest first and take the last 10 clashes
+                h2h_raw.sort(key=lambda x: x.get("fixture", {}).get("date", ""), reverse=True)
+                for item in h2h_raw[:10]:
+                    parsed = _parse_h2h_encounter(item, match.team_a.name, match.team_b.name)
+                    if parsed:
+                        past_matches.append(parsed)
+                        res = parsed.get("winner_side")
+                        if res == "A":
+                            team_a_wins += 1
+                        elif res == "B":
+                            team_b_wins += 1
+                        elif res == "D":
+                            draws += 1
         except ProviderError as exc:
             logger.warning("Failed fetching H2H for %s vs %s: %s", match.team_a, match.team_b, exc)
 
         # 4. Fetch recent form (last 5 matches for Team A & Team B)
         team_a_form = self._fetch_team_recent_form(home_id, match.team_a.name)
         team_b_form = self._fetch_team_recent_form(away_id, match.team_b.name)
+
+        # If team form is not available from API (free plan restriction), fall back to H2H recent form
+        if not team_a_form and past_matches:
+            for p in past_matches[:5]:
+                team_a_form.append({
+                    "result": "W" if p.get("winner_side") == "A" else ("D" if p.get("winner_side") == "D" else "L"),
+                    "opponent": match.team_b.name,
+                    "score": p.get("score", ""),
+                    "date": p.get("date", ""),
+                })
+        if not team_b_form and past_matches:
+            for p in past_matches[:5]:
+                team_b_form.append({
+                    "result": "W" if p.get("winner_side") == "B" else ("D" if p.get("winner_side") == "D" else "L"),
+                    "opponent": match.team_a.name,
+                    "score": p.get("score", ""),
+                    "date": p.get("date", ""),
+                })
 
         return H2HSummary(
             team_a_wins=team_a_wins,
@@ -279,9 +300,15 @@ class APIFootballProvider(Provider):
 
     def _fetch_team_recent_form(self, team_id, team_name):
         try:
-            fixtures = self._get("/fixtures", {"team": team_id, "last": 5})
+            current_year = datetime.now().year
+            fixtures = self._get("/fixtures", {"team": team_id, "season": current_year})
+            finished = [
+                f for f in fixtures
+                if f.get("fixture", {}).get("status", {}).get("short") in FINISHED_STATUSES
+            ]
+            finished.sort(key=lambda x: x.get("fixture", {}).get("date", ""), reverse=True)
             results = []
-            for item in fixtures:
+            for item in finished[:5]:
                 parsed = _parse_form_fixture(item, team_name)
                 if parsed:
                     results.append(parsed)
