@@ -6709,6 +6709,30 @@ class MultiSportAPISyncAndH2HTests(TestCase):
         self.assertRedirects(resp, detail_url)
         self.assertTrue(Prediction.objects.filter(user=user, match=m, choice="A").exists())
 
+    def test_sport_matches_renders_team_details_button(self):
+        from django.urls import reverse
+        from predictions.models import MatchStats
+
+        m = sport_match("Football", "Arsenal", "Chelsea")
+        m.is_published = True
+        m.save()
+        MatchStats.objects.create(
+            match=m,
+            h2h_summary={"team_a_wins": 3, "team_b_wins": 1, "draws": 2, "total": 6},
+            h2h_data=[],
+            team_a_recent=[{"result": "W", "opponent": "Chelsea", "score": "2 - 1", "date": "2025-05-10"}],
+            team_b_recent=[{"result": "L", "opponent": "Arsenal", "score": "1 - 2", "date": "2025-05-10"}],
+        )
+
+        resp = self.client.get(reverse("sport_matches", kwargs={"sport_slug": "football"}))
+        self.assertEqual(resp.status_code, 200)
+        content = resp.content.decode()
+        detail_url = reverse("match_detail", kwargs={"pk": m.pk})
+        self.assertIn("Team Details", content)
+        self.assertIn(f'href="{detail_url}"', content)
+        self.assertIn("Head to Head:", content)
+        self.assertNotIn("H2H:", content)
+
 
 
 

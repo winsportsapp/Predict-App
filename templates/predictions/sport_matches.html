@@ -61,13 +61,18 @@
               </div>
             {% endif %}
 
-            <!-- Teams Headline (Left-aligned) -->
-            <div class="text-start mb-1">
-              <strong class="match-teams-title">
+            <!-- Teams Headline & Team Details Button (Same line, right-aligned button) -->
+            <div class="d-flex align-items-center justify-content-between mb-1 gap-2 flex-wrap">
+              <strong class="match-teams-title text-start">
                 <a class="match-title-link" href="{% url 'match_detail' match.pk %}">{% team_flag match.team_a %}{{ match.team_a }}</a>
                 <span class="text-muted px-1 fw-normal">Vs</span>
                 <a class="match-title-link" href="{% url 'match_detail' match.pk %}">{% team_flag match.team_b %}{{ match.team_b }}</a>
               </strong>
+              <a href="{% url 'match_detail' match.pk %}"
+                 class="btn btn-sm btn-outline-secondary rounded-pill px-2 py-0 text-nowrap team-details-btn"
+                 style="font-size: 0.72rem; line-height: 1.5; font-weight: 500;">
+                Team Details
+              </a>
             </div>
 
             <!-- Kickoff & Deadline (Left-aligned, Kickoff directly above Deadline below teams) -->
@@ -311,6 +316,17 @@
   .match-card:hover {
     border-color: #cbd5e1 !important;
     box-shadow: 0 4px 14px rgba(0, 0, 0, 0.06) !important;
+  }
+  .team-details-btn {
+    border-color: #cbd5e1 !important;
+    color: #475569 !important;
+    background-color: #f8fafc;
+    transition: all 0.15s ease;
+  }
+  .team-details-btn:hover {
+    border-color: #0B3D2E !important;
+    color: #0B3D2E !important;
+    background-color: #ecfdf5 !important;
   }
 </style>
 
