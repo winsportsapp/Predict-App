@@ -32,6 +32,14 @@ MAX_FREE_DAYS_AHEAD = 1
 
 
 def _patterns(values):
+    if not values:
+        return set()
+    if isinstance(values, str):
+        values = [
+            p.strip()
+            for p in values.replace("\r\n", "\n").replace("\n", ",").split(",")
+            if p.strip()
+        ]
     return {str(v).strip().lower() for v in values if str(v).strip()}
 
 
@@ -108,13 +116,20 @@ class APIFootballProvider(Provider):
     def supports(self, sport_name):
         return str(sport_name).strip().lower() == "football"
 
-    def _tournament_matches(self, event_name, league_name):
+    def _tournament_matches(
+        self, event_name, league_name, tournaments=None, exclude_tournaments=None
+    ):
         keys = [str(league_name).strip().lower(), str(event_name).strip().lower()]
-        if self.exclude_tournaments:
-            if any(fnmatchcase(k, pat) for k in keys for pat in self.exclude_tournaments):
+        excludes = (
+            self.exclude_tournaments if exclude_tournaments is None else exclude_tournaments
+        )
+        includes = self.tournaments if tournaments is None else tournaments
+
+        if excludes:
+            if any(fnmatchcase(k, pat) for k in keys for pat in excludes):
                 return False
-        if self.tournaments:
-            return any(fnmatchcase(k, pat) for k in keys for pat in self.tournaments)
+        if includes:
+            return any(fnmatchcase(k, pat) for k in keys for pat in includes)
         return True
 
     # -- Core endpoints ----------------------------------------------------
@@ -162,6 +177,25 @@ class APIFootballProvider(Provider):
             else range(0, min(days_ahead, effective_max) + 1)
         )
 
+        # Resolve active tournament filters from database Sport if present
+        active_tournaments = set(self.tournaments)
+        active_exclude_tournaments = set(self.exclude_tournaments)
+        try:
+            from predictions.models import Sport
+
+            sport_obj = Sport.objects.filter(name__iexact=sport_name).first()
+            if sport_obj:
+                db_inc = _patterns(sport_obj.tournaments_filter)
+                if db_inc:
+                    active_tournaments = db_inc
+                db_exc = _patterns(sport_obj.exclude_tournaments_filter)
+                if db_exc:
+                    active_exclude_tournaments = db_exc | set(self.exclude_tournaments)
+        except Exception as exc:
+            logger.debug(
+                "Could not read Sport tournament filters for %s: %s", sport_name, exc
+            )
+
         all_events = []
         for d in days:
             target_date = (today + timedelta(days=d)).isoformat()
@@ -187,6 +221,8 @@ class APIFootballProvider(Provider):
                             )
                             break
                         logger.warning("Failed fetching league %s on %s: %s", league_id, target_date, exc)
+                    except Exception as exc:
+                        logger.warning("Failed fetching league %s on %s: %s", league_id, target_date, exc)
             else:
                 try:
                     raw_fixtures = self._get("/fixtures", params)
@@ -206,7 +242,12 @@ class APIFootballProvider(Provider):
                 country = league_obj.get("country")
                 event_name = f"{country}: {league_name}" if country else league_name
 
-                if not self._tournament_matches(event_name, league_name):
+                if not self._tournament_matches(
+                    event_name,
+                    league_name,
+                    tournaments=active_tournaments,
+                    exclude_tournaments=active_exclude_tournaments,
+                ):
                     continue
 
                 event = self._to_event(item)

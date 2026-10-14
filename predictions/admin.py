@@ -49,9 +49,28 @@ logger = logging.getLogger(__name__)
 
 @admin.register(Sport)
 class SportAdmin(admin.ModelAdmin):
-    list_display = ("name", "is_active")
+    list_display = (
+        "name",
+        "is_active",
+        "has_tournaments_filter",
+        "has_exclude_filter",
+    )
     list_editable = ("is_active",)
     search_fields = ("name",)
+    fields = (
+        "name",
+        "is_active",
+        "tournaments_filter",
+        "exclude_tournaments_filter",
+    )
+
+    @admin.display(boolean=True, description="Inclusion filter")
+    def has_tournaments_filter(self, obj):
+        return bool(obj.tournaments_filter and obj.tournaments_filter.strip())
+
+    @admin.display(boolean=True, description="Exclusion filter")
+    def has_exclude_filter(self, obj):
+        return bool(obj.exclude_tournaments_filter and obj.exclude_tournaments_filter.strip())
 
 
 @admin.register(Team)

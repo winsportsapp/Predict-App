@@ -128,7 +128,24 @@ class FlashLiveProvider(Provider):
 
     def fetch_fixtures(self, sport_name, days_ahead, new_day_only=False, with_odds=False):
         teams = self.teams.get(sport_name.lower(), set())
-        if not (self.tournaments or teams):
+
+        active_tournaments = set(self.tournaments)
+        active_exclude_tournaments = set(self.exclude_tournaments)
+        try:
+            from predictions.models import Sport
+
+            sport_obj = Sport.objects.filter(name__iexact=sport_name).first()
+            if sport_obj:
+                db_inc = _patterns(sport_obj.tournaments_filter)
+                if db_inc:
+                    active_tournaments = db_inc
+                db_exc = _patterns(sport_obj.exclude_tournaments_filter)
+                if db_exc:
+                    active_exclude_tournaments = db_exc | set(self.exclude_tournaments)
+        except Exception:
+            pass
+
+        if not (active_tournaments or teams):
             # Without a filter this would import every match in the world.
             return []
         last_day = min(days_ahead, MAX_INDENT_DAYS)
@@ -140,9 +157,9 @@ class FlashLiveProvider(Provider):
             odds_map = self.fetch_odds(sport_name, day) if with_odds else {}
             for group in self._list_events(sport_name, day):
                 keys = _tournament_keys(group)
-                if _matches_any(keys, self.exclude_tournaments):
+                if _matches_any(keys, active_exclude_tournaments):
                     continue
-                whole_tournament = _matches_any(keys, self.tournaments)
+                whole_tournament = _matches_any(keys, active_tournaments)
                 for raw in group.get("EVENTS") or []:
                     if not whole_tournament and not _plays(raw, teams):
                         continue
@@ -560,6 +577,14 @@ class FlashLiveProvider(Provider):
 
 
 def _patterns(values):
+    if not values:
+        return set()
+    if isinstance(values, str):
+        values = [
+            p.strip()
+            for p in values.replace("\r\n", "\n").replace("\n", ",").split(",")
+            if p.strip()
+        ]
     return {str(v).strip().lower() for v in values if str(v).strip()}
 
 

@@ -97,6 +97,27 @@ class Sport(models.Model):
             "odds, results, H2H, and recent form will consume zero API credits."
         ),
     )
+    tournaments_filter = models.TextField(
+        blank=True,
+        default="",
+        verbose_name="Included Tournaments",
+        help_text=(
+            "Comma- or line-separated tournament names/wildcards to import "
+            "(e.g. *Premier League*, *Champions League*, *La Liga*). "
+            "NOTE: Adding any tournament here automatically excludes all others. "
+            "Leave blank to import all tournaments (subject to exclusions below)."
+        ),
+    )
+    exclude_tournaments_filter = models.TextField(
+        blank=True,
+        default="",
+        verbose_name="Excluded Tournaments",
+        help_text=(
+            "Comma- or line-separated tournament names/wildcards to reject "
+            "(e.g. *Res.*, *Reserve*, *U20*, *U19*, *Women*, *Amateur*). "
+            "Any match matching an exclusion is dropped even if included above."
+        ),
+    )
 
 
     class Meta:

@@ -7332,6 +7332,154 @@ class APIFootballProviderTests(TestCase):
         self.assertEqual(odds, {})
         self.assertEqual(p.session.get.call_count, 0)
 
+    def test_fetch_fixtures_db_inclusion_filter(self):
+        from unittest import mock
+        from predictions.models import Sport
+
+        sport = Sport.objects.get(name="Football")
+        sport.tournaments_filter = "Premier League\nLa Liga"
+        sport.exclude_tournaments_filter = ""
+        sport.save()
+
+        p = self._provider(max_days_ahead=0)
+        fixture_payload = {
+            "response": [
+                {
+                    "fixture": {"id": 1, "date": "2026-10-14T15:00:00+00:00", "status": {"short": "NS"}},
+                    "teams": {"home": {"name": "Arsenal"}, "away": {"name": "Chelsea"}},
+                    "league": {"name": "Premier League", "country": "England"},
+                },
+                {
+                    "fixture": {"id": 2, "date": "2026-10-14T15:00:00+00:00", "status": {"short": "NS"}},
+                    "teams": {"home": {"name": "Real Madrid"}, "away": {"name": "Barcelona"}},
+                    "league": {"name": "La Liga", "country": "Spain"},
+                },
+                {
+                    "fixture": {"id": 3, "date": "2026-10-14T15:00:00+00:00", "status": {"short": "NS"}},
+                    "teams": {"home": {"name": "Juventus"}, "away": {"name": "Inter"}},
+                    "league": {"name": "Serie A", "country": "Italy"},
+                },
+            ]
+        }
+        resp = mock.Mock()
+        resp.status_code = 200
+        resp.json.return_value = fixture_payload
+        p.session.get.return_value = resp
+
+        events = p.fetch_fixtures("Football", days_ahead=0, new_day_only=False, with_odds=False)
+        self.assertEqual({e.external_id for e in events}, {"1", "2"})
+
+    def test_fetch_fixtures_db_exclusion_filter(self):
+        from unittest import mock
+        from predictions.models import Sport
+
+        sport = Sport.objects.get(name="Football")
+        sport.tournaments_filter = ""
+        sport.exclude_tournaments_filter = "*Res.*, *U20*"
+        sport.save()
+
+        p = self._provider(max_days_ahead=0)
+        fixture_payload = {
+            "response": [
+                {
+                    "fixture": {"id": 1, "date": "2026-10-14T15:00:00+00:00", "status": {"short": "NS"}},
+                    "teams": {"home": {"name": "Arsenal"}, "away": {"name": "Chelsea"}},
+                    "league": {"name": "Premier League", "country": "England"},
+                },
+                {
+                    "fixture": {"id": 2, "date": "2026-10-14T15:00:00+00:00", "status": {"short": "NS"}},
+                    "teams": {"home": {"name": "Arsenal Res."}, "away": {"name": "Chelsea Res."}},
+                    "league": {"name": "Premier League Res.", "country": "England"},
+                },
+                {
+                    "fixture": {"id": 3, "date": "2026-10-14T15:00:00+00:00", "status": {"short": "NS"}},
+                    "teams": {"home": {"name": "U20 A"}, "away": {"name": "U20 B"}},
+                    "league": {"name": "World Cup U20", "country": "World"},
+                },
+            ]
+        }
+        resp = mock.Mock()
+        resp.status_code = 200
+        resp.json.return_value = fixture_payload
+        p.session.get.return_value = resp
+
+        events = p.fetch_fixtures("Football", days_ahead=0, new_day_only=False, with_odds=False)
+        self.assertEqual({e.external_id for e in events}, {"1"})
+
+    def test_fetch_fixtures_db_inclusion_and_exclusion_combined(self):
+        from unittest import mock
+        from predictions.models import Sport
+
+        sport = Sport.objects.get(name="Football")
+        sport.tournaments_filter = "*League*"
+        sport.exclude_tournaments_filter = "*U21*"
+        sport.save()
+
+        p = self._provider(max_days_ahead=0)
+        fixture_payload = {
+            "response": [
+                {
+                    "fixture": {"id": 1, "date": "2026-10-14T15:00:00+00:00", "status": {"short": "NS"}},
+                    "teams": {"home": {"name": "Arsenal"}, "away": {"name": "Chelsea"}},
+                    "league": {"name": "Premier League", "country": "England"},
+                },
+                {
+                    "fixture": {"id": 2, "date": "2026-10-14T15:00:00+00:00", "status": {"short": "NS"}},
+                    "teams": {"home": {"name": "Arsenal U21"}, "away": {"name": "Chelsea U21"}},
+                    "league": {"name": "Premier League U21", "country": "England"},
+                },
+                {
+                    "fixture": {"id": 3, "date": "2026-10-14T15:00:00+00:00", "status": {"short": "NS"}},
+                    "teams": {"home": {"name": "Milan"}, "away": {"name": "Inter"}},
+                    "league": {"name": "Coppa Italia", "country": "Italy"},
+                },
+            ]
+        }
+        resp = mock.Mock()
+        resp.status_code = 200
+        resp.json.return_value = fixture_payload
+        p.session.get.return_value = resp
+
+        events = p.fetch_fixtures("Football", days_ahead=0, new_day_only=False, with_odds=False)
+        self.assertEqual({e.external_id for e in events}, {"1"})
+
+
+class SportAdminTournamentFilterTests(TestCase):
+    def setUp(self):
+        from django.contrib.auth.models import User
+        self.admin = User.objects.create_superuser("adminuser2", "admin2@example.com", "pass123")
+        self.client.force_login(self.admin)
+
+    def test_sport_admin_saves_tournament_filters(self):
+        from predictions.models import Sport
+        sport = Sport.objects.get(name="Football")
+        resp = self.client.post(
+            reverse("admin:predictions_sport_change", args=[sport.pk]),
+            {
+                "name": "Football",
+                "is_active": "on",
+                "tournaments_filter": "Premier League\nLa Liga",
+                "exclude_tournaments_filter": "*Res.*, *U20*",
+            },
+            follow=True,
+        )
+        self.assertEqual(resp.status_code, 200)
+        sport.refresh_from_db()
+        self.assertEqual(sport.tournaments_filter, "Premier League\nLa Liga")
+        self.assertEqual(sport.exclude_tournaments_filter, "*Res.*, *U20*")
+
+    def test_sport_admin_list_displays_filter_flags(self):
+        from predictions.models import Sport
+        sport = Sport.objects.get(name="Football")
+        sport.tournaments_filter = "Premier League"
+        sport.exclude_tournaments_filter = "*Res.*"
+        sport.save()
+
+        resp = self.client.get(reverse("admin:predictions_sport_changelist"))
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "Inclusion filter")
+        self.assertContains(resp, "Exclusion filter")
+
 
 class AdminManualSyncTests(TestCase):
     def setUp(self):
