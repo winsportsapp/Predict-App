@@ -52,6 +52,66 @@ def _is_plan_limit_error(exc):
     return "plan" in msg or "free plan" in msg or "access to this date" in msg
 
 
+# Auto-expand football aliases (e.g. Europe: Champions League -> World: UEFA Champions League, Premier League -> England: Premier League)
+FOOTBALL_TIER_EXPANSIONS = {
+    "champions league": {
+        "world: uefa champions league",
+        "uefa champions league",
+        "*champions league*",
+    },
+    "uefa champions league": {
+        "world: uefa champions league",
+        "uefa champions league",
+        "*champions league*",
+    },
+    "europe: champions league": {
+        "world: uefa champions league",
+        "uefa champions league",
+        "*champions league*",
+    },
+    "ucl": {
+        "world: uefa champions league",
+        "uefa champions league",
+        "*champions league*",
+    },
+    "epl": {
+        "england: premier league",
+        "*premier league*",
+    },
+    "premier league": {
+        "england: premier league",
+    },
+    "la liga": {
+        "spain: laliga",
+        "spain: la liga",
+        "laliga",
+    },
+    "laliga": {
+        "spain: laliga",
+        "spain: la liga",
+        "laliga",
+    },
+    "serie a": {
+        "italy: serie a",
+    },
+    "bundesliga": {
+        "germany: bundesliga",
+    },
+    "ligue 1": {
+        "france: ligue 1",
+    },
+    "isl": {
+        "india: isl*",
+        "india: indian super league*",
+        "indian super league",
+    },
+    "mls": {
+        "usa: major league soccer",
+        "major league soccer",
+    },
+}
+
+
 class APIFootballProvider(Provider):
     name = "api-football"
 
@@ -207,6 +267,17 @@ class APIFootballProvider(Provider):
             logger.debug(
                 "Could not read Sport tournament filters for %s: %s", sport_name, exc
             )
+
+        # Auto-expand football aliases (e.g. Europe: Champions League -> World: UEFA Champions League, Premier League -> England: Premier League)
+        if active_tournaments:
+            expanded = set()
+            for pat in active_tournaments:
+                p_lower = pat.lower().strip()
+                if p_lower in FOOTBALL_TIER_EXPANSIONS:
+                    expanded.update(FOOTBALL_TIER_EXPANSIONS[p_lower])
+                else:
+                    expanded.add(pat)
+            active_tournaments = expanded
 
         all_events = []
         for d in days:

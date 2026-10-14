@@ -7804,6 +7804,46 @@ class BadmintonTournamentFilterTests(TestCase):
         self.assertEqual(len(fixtures), 1)
         self.assertEqual(fixtures[0].external_id, "atp1")
 
+    def test_football_champions_league_and_epl_alias_expansion(self):
+        from unittest import mock
+        from predictions.importers.api_football import APIFootballProvider
+        from predictions.models import Sport
+
+        sport = Sport.objects.get(name="Football")
+        # User entered 'EUROPE: Champions League' (FlashLive style) and 'Premier League' (generic)
+        sport.tournaments_filter = "EUROPE: Champions League\nPremier League"
+        sport.save()
+
+        p = APIFootballProvider(api_key="mock-key")
+        fake_fixtures = [
+            # Group 1: World: UEFA Champions League (API-Football naming)
+            {
+                "fixture": {"id": 1001, "date": "2026-10-14T20:00:00+00:00"},
+                "league": {"name": "UEFA Champions League", "country": "World"},
+                "teams": {"home": {"name": "Man City"}, "away": {"name": "PSG"}},
+            },
+            # Group 2: England: Premier League
+            {
+                "fixture": {"id": 1002, "date": "2026-10-14T15:00:00+00:00"},
+                "league": {"name": "Premier League", "country": "England"},
+                "teams": {"home": {"name": "Arsenal"}, "away": {"name": "Chelsea"}},
+            },
+            # Group 3: Uganda: Premier League (should NOT match because Premier League expanded to England)
+            {
+                "fixture": {"id": 1003, "date": "2026-10-14T15:00:00+00:00"},
+                "league": {"name": "Premier League", "country": "Uganda"},
+                "teams": {"home": {"name": "Vipers SC"}, "away": {"name": "KCCA"}},
+            },
+        ]
+        with mock.patch.object(p, "_get", return_value=fake_fixtures):
+            events = p.fetch_fixtures("Football", days_ahead=0)
+
+        # Only UCL and England: Premier League matched; Uganda was excluded!
+        self.assertEqual(len(events), 2)
+        event_names = [e.event_name for e in events]
+        self.assertIn("World: UEFA Champions League", event_names)
+        self.assertIn("England: Premier League", event_names)
+
 
 class AdminManualSyncTests(TestCase):
     def setUp(self):

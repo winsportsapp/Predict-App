@@ -92,6 +92,21 @@ TENNIS_TIER_EXPANSIONS = {
     },
 }
 
+FOOTBALL_TIER_EXPANSIONS = {
+    "world: uefa champions league": {"europe: champions league", "*champions league*"},
+    "uefa champions league": {"europe: champions league", "*champions league*"},
+    "champions league": {"europe: champions league", "*champions league*"},
+    "ucl": {"europe: champions league", "*champions league*"},
+    "premier league": {"england: premier league"},
+    "epl": {"england: premier league"},
+    "la liga": {"spain: laliga", "*laliga*"},
+    "laliga": {"spain: laliga", "*laliga*"},
+    "serie a": {"italy: serie a"},
+    "bundesliga": {"germany: bundesliga"},
+    "ligue 1": {"france: ligue 1"},
+    "isl": {"india: isl*", "india: indian super league*"},
+}
+
 
 class FlashLiveProvider(Provider):
     name = "flashlive"
@@ -203,6 +218,15 @@ class FlashLiveProvider(Provider):
                 for tier_key, opens in TENNIS_TIER_EXPANSIONS.items():
                     if tier_key in pat:
                         expanded.update(opens)
+            active_tournaments = expanded
+        elif sport_key == "football" and active_tournaments:
+            expanded = set()
+            for pat in active_tournaments:
+                p_lower = pat.lower().strip()
+                if p_lower in FOOTBALL_TIER_EXPANSIONS:
+                    expanded.update(FOOTBALL_TIER_EXPANSIONS[p_lower])
+                else:
+                    expanded.add(pat)
             active_tournaments = expanded
 
         if not (active_tournaments or teams):
