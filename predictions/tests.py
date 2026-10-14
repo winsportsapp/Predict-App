@@ -7181,6 +7181,158 @@ class MultiSportAPISyncAndH2HTests(TestCase):
         self.assertNotIn("0 past clashes", content)
 
 
+class APIFootballProviderTests(TestCase):
+    def _provider(self, responses=None, **kwargs):
+        from unittest import mock
+        from predictions.importers.api_football import APIFootballProvider
+
+        session = mock.Mock()
+        if responses is not None:
+            session.get.side_effect = responses
+        return APIFootballProvider(
+            api_key="test-key",
+            session=session,
+            **kwargs,
+        )
+
+    def test_supports_football_only(self):
+        p = self._provider()
+        self.assertTrue(p.supports("Football"))
+        self.assertTrue(p.supports("football"))
+        self.assertFalse(p.supports("Cricket"))
+        self.assertFalse(p.supports("Tennis"))
+
+    def test_timing_and_timezone_alignment(self):
+        from datetime import timezone as dt_timezone, timedelta
+        from django.conf import settings
+
+        p = self._provider()
+        expected_offset = getattr(settings, "FLASHLIVE_UTC_OFFSET", 5)
+        self.assertEqual(p.utc_offset, expected_offset)
+        self.assertEqual(p.local_tz, dt_timezone(timedelta(hours=expected_offset)))
+
+    def test_fetch_fixtures_clamps_days_ahead_to_max_allowed(self):
+        from unittest import mock
+        from datetime import datetime
+
+        p = self._provider(max_days_ahead=1)
+        fixture_payload = {
+            "response": [
+                {
+                    "fixture": {"id": 101, "date": "2026-10-14T15:00:00+00:00", "status": {"short": "NS"}},
+                    "teams": {"home": {"name": "Arsenal"}, "away": {"name": "Chelsea"}},
+                    "league": {"name": "Premier League", "country": "England"},
+                }
+            ]
+        }
+        resp = mock.Mock()
+        resp.status_code = 200
+        resp.json.return_value = fixture_payload
+        p.session.get.return_value = resp
+
+        # Requesting 7 days ahead with max_days_ahead=1 should only make 2 requests (day 0 and day 1)
+        events = p.fetch_fixtures("Football", days_ahead=7, new_day_only=False, with_odds=False)
+        self.assertEqual(p.session.get.call_count, 2)
+        self.assertEqual(len(events), 2)
+
+    def test_fetch_fixtures_new_day_only_fetches_day_one(self):
+        from unittest import mock
+        from datetime import datetime, timedelta
+
+        p = self._provider(max_days_ahead=1)
+        fixture_payload = {
+            "response": [
+                {
+                    "fixture": {"id": 202, "date": "2026-10-15T15:00:00+00:00", "status": {"short": "NS"}},
+                    "teams": {"home": {"name": "Real Madrid"}, "away": {"name": "Barcelona"}},
+                    "league": {"name": "La Liga", "country": "Spain"},
+                }
+            ]
+        }
+        resp = mock.Mock()
+        resp.status_code = 200
+        resp.json.return_value = fixture_payload
+        p.session.get.return_value = resp
+
+        events = p.fetch_fixtures("Football", days_ahead=7, new_day_only=True, with_odds=False)
+        self.assertEqual(p.session.get.call_count, 1)
+        called_url, called_kwargs = p.session.get.call_args
+        tomorrow_date = (datetime.now(p.local_tz).date() + timedelta(days=1)).isoformat()
+        self.assertEqual(called_kwargs["params"]["date"], tomorrow_date)
+        self.assertEqual(len(events), 1)
+        self.assertEqual(events[0].external_id, "202")
+
+    def test_fetch_fixtures_handles_plan_limit_error_gracefully(self):
+        from unittest import mock
+
+        p = self._provider(max_days_ahead=2)
+        resp_ok = mock.Mock()
+        resp_ok.status_code = 200
+        resp_ok.json.return_value = {
+            "response": [
+                {
+                    "fixture": {"id": 303, "date": "2026-10-14T15:00:00+00:00", "status": {"short": "NS"}},
+                    "teams": {"home": {"name": "Milan"}, "away": {"name": "Inter"}},
+                    "league": {"name": "Serie A", "country": "Italy"},
+                }
+            ]
+        }
+
+        resp_plan_err = mock.Mock()
+        resp_plan_err.status_code = 200
+        resp_plan_err.json.return_value = {
+            "errors": {"plan": "Free plans do not have access to this date, try from 2026-10-13 to 2026-10-15."}
+        }
+
+        p.session.get.side_effect = [resp_ok, resp_plan_err]
+        events = p.fetch_fixtures("Football", days_ahead=2, new_day_only=False, with_odds=False)
+        self.assertEqual(len(events), 1)
+        self.assertEqual(events[0].external_id, "303")
+
+    def test_fetch_fixtures_tournament_filtering(self):
+        from unittest import mock
+
+        p = self._provider(
+            tournaments=["*Premier League*"],
+            exclude_tournaments=["*Res.*"],
+            max_days_ahead=0,
+        )
+        fixture_payload = {
+            "response": [
+                {
+                    "fixture": {"id": 1, "date": "2026-10-14T15:00:00+00:00", "status": {"short": "NS"}},
+                    "teams": {"home": {"name": "Arsenal"}, "away": {"name": "Chelsea"}},
+                    "league": {"name": "Premier League", "country": "England"},
+                },
+                {
+                    "fixture": {"id": 2, "date": "2026-10-14T15:00:00+00:00", "status": {"short": "NS"}},
+                    "teams": {"home": {"name": "Arsenal Res."}, "away": {"name": "Chelsea Res."}},
+                    "league": {"name": "Premier League Res.", "country": "England"},
+                },
+                {
+                    "fixture": {"id": 3, "date": "2026-10-14T15:00:00+00:00", "status": {"short": "NS"}},
+                    "teams": {"home": {"name": "Team A"}, "away": {"name": "Team B"}},
+                    "league": {"name": "Obscure Division", "country": "Nowhere"},
+                },
+            ]
+        }
+        resp = mock.Mock()
+        resp.status_code = 200
+        resp.json.return_value = fixture_payload
+        p.session.get.return_value = resp
+
+        events = p.fetch_fixtures("Football", days_ahead=0, new_day_only=False, with_odds=False)
+        self.assertEqual(len(events), 1)
+        self.assertEqual(events[0].external_id, "1")
+
+    def test_fetch_odds_clamped_to_max_days_ahead(self):
+        p = self._provider(max_days_ahead=1)
+        # Calling with indent_days=2 when max is 1 should make 0 requests
+        odds = p.fetch_odds("Football", indent_days=2)
+        self.assertEqual(odds, {})
+        self.assertEqual(p.session.get.call_count, 0)
+
+
 
 
 

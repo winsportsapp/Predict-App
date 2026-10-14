@@ -7,7 +7,8 @@ Provides fixtures, bookmaker odds, head-to-head (H2H), and recent form for Footb
 """
 
 import logging
-from datetime import datetime, timezone as dt_timezone
+from datetime import datetime, timedelta, timezone as dt_timezone
+from fnmatch import fnmatchcase
 import requests
 from django.conf import settings
 
@@ -27,12 +28,32 @@ logger = logging.getLogger(__name__)
 DEFAULT_HOST = "v3.football.api-sports.io"
 CALLED_OFF_STATUSES = {"PST", "CANC", "ABD", "SUSP", "INT", "WO"}
 FINISHED_STATUSES = {"FT", "AET", "PEN"}
+MAX_FREE_DAYS_AHEAD = 1
+
+
+def _patterns(values):
+    return {str(v).strip().lower() for v in values if str(v).strip()}
+
+
+def _is_plan_limit_error(exc):
+    msg = str(exc).lower()
+    return "plan" in msg or "free plan" in msg or "access to this date" in msg
 
 
 class APIFootballProvider(Provider):
     name = "api-football"
 
-    def __init__(self, api_key=None, host=None, session=None, leagues=None):
+    def __init__(
+        self,
+        api_key=None,
+        host=None,
+        session=None,
+        leagues=None,
+        utc_offset=None,
+        max_days_ahead=None,
+        tournaments=None,
+        exclude_tournaments=None,
+    ):
         self.api_key = (
             api_key if api_key is not None else getattr(settings, "API_FOOTBALL_KEY", "")
         )
@@ -41,6 +62,32 @@ class APIFootballProvider(Provider):
         )
         self.leagues = (
             leagues if leagues is not None else getattr(settings, "API_FOOTBALL_LEAGUES", [])
+        )
+        # Whole hours from UTC that "today"/"tomorrow" are counted in.
+        # Shared with FlashLive (settings.FLASHLIVE_UTC_OFFSET, default 5 for IST).
+        self.utc_offset = int(
+            utc_offset
+            if utc_offset is not None
+            else getattr(settings, "FLASHLIVE_UTC_OFFSET", 5)
+        )
+        self.local_tz = dt_timezone(timedelta(hours=self.utc_offset))
+
+        # Max fixture lookahead window. Default 1 for Free plans (today + 1 day).
+        self.max_days_ahead = int(
+            max_days_ahead
+            if max_days_ahead is not None
+            else getattr(settings, "API_FOOTBALL_DAYS_AHEAD", MAX_FREE_DAYS_AHEAD)
+        )
+
+        self.tournaments = _patterns(
+            tournaments
+            if tournaments is not None
+            else getattr(settings, "API_FOOTBALL_TOURNAMENTS", [])
+        )
+        self.exclude_tournaments = _patterns(
+            exclude_tournaments
+            if exclude_tournaments is not None
+            else getattr(settings, "API_FOOTBALL_EXCLUDE_TOURNAMENTS", [])
         )
         self.requests_made = 0
 
@@ -60,6 +107,15 @@ class APIFootballProvider(Provider):
 
     def supports(self, sport_name):
         return str(sport_name).strip().lower() == "football"
+
+    def _tournament_matches(self, event_name, league_name):
+        keys = [str(league_name).strip().lower(), str(event_name).strip().lower()]
+        if self.exclude_tournaments:
+            if any(fnmatchcase(k, pat) for k in keys for pat in self.exclude_tournaments):
+                return False
+        if self.tournaments:
+            return any(fnmatchcase(k, pat) for k in keys for pat in self.tournaments)
+        return True
 
     # -- Core endpoints ----------------------------------------------------
 
@@ -98,12 +154,12 @@ class APIFootballProvider(Provider):
         if not self.supports(sport_name):
             return []
 
-        from datetime import date, timedelta
-        today = date.today()
+        today = datetime.now(self.local_tz).date()
+        effective_max = max(0, self.max_days_ahead)
         days = (
-            [days_ahead]
+            [min(days_ahead, effective_max)]
             if new_day_only
-            else range(0, min(days_ahead, 7) + 1)
+            else range(0, min(days_ahead, effective_max) + 1)
         )
 
         all_events = []
@@ -122,11 +178,37 @@ class APIFootballProvider(Provider):
                         )
                         raw_fixtures.extend(fixtures)
                     except ProviderError as exc:
+                        if _is_plan_limit_error(exc):
+                            logger.info(
+                                "API-Football plan date limit reached for league %s on %s: %s",
+                                league_id,
+                                target_date,
+                                exc,
+                            )
+                            break
                         logger.warning("Failed fetching league %s on %s: %s", league_id, target_date, exc)
             else:
-                raw_fixtures = self._get("/fixtures", params)
+                try:
+                    raw_fixtures = self._get("/fixtures", params)
+                except ProviderError as exc:
+                    if _is_plan_limit_error(exc):
+                        logger.info(
+                            "API-Football plan date limit reached on %s: %s. Returning retrieved fixtures.",
+                            target_date,
+                            exc,
+                        )
+                        break
+                    raise
 
             for item in raw_fixtures:
+                league_obj = item.get("league", {})
+                league_name = league_obj.get("name") or "Football"
+                country = league_obj.get("country")
+                event_name = f"{country}: {league_name}" if country else league_name
+
+                if not self._tournament_matches(event_name, league_name):
+                    continue
+
                 event = self._to_event(item)
                 if event:
                     if event.external_id in odds_map:
@@ -146,8 +228,12 @@ class APIFootballProvider(Provider):
         if not self.supports(sport_name):
             return {}
 
-        from datetime import date, timedelta
-        target_date = (date.today() + timedelta(days=indent_days)).isoformat()
+        effective_max = max(0, self.max_days_ahead)
+        if indent_days > effective_max:
+            return {}
+
+        today = datetime.now(self.local_tz).date()
+        target_date = (today + timedelta(days=indent_days)).isoformat()
         try:
             data = self._get("/odds", {"date": target_date})
         except ProviderError as exc:

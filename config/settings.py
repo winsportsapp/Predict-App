@@ -265,6 +265,14 @@ GOOGLE_CLIENT_SECRET = (
 API_FOOTBALL_KEY = env('API_FOOTBALL_KEY', default='').strip().strip('"\'').strip()
 API_FOOTBALL_HOST = env('API_FOOTBALL_HOST', default='v3.football.api-sports.io').strip()
 API_FOOTBALL_LEAGUES = env.list('API_FOOTBALL_LEAGUES', default=[])
+# Maximum days ahead to query fixtures. Default 1 for Free plans (today + 1 day).
+# Set higher only if on a paid plan with wider date range access.
+API_FOOTBALL_DAYS_AHEAD = env.int('API_FOOTBALL_DAYS_AHEAD', default=1)
+# Optional tournament names or wildcards to import (e.g. "*Premier League*", "*Champions League*").
+# Empty = import all matches returned by API-Football.
+API_FOOTBALL_TOURNAMENTS = env.list('API_FOOTBALL_TOURNAMENTS', default=[])
+# Optional tournaments to exclude (e.g. "*Res.*", "*U20*").
+API_FOOTBALL_EXCLUDE_TOURNAMENTS = env.list('API_FOOTBALL_EXCLUDE_TOURNAMENTS', default=[])
 
 # RapidAPI key for the FlashLive Sports API (Flashscore data). Unset = the
 # import is disabled.
