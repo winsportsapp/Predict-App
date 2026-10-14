@@ -36,11 +36,15 @@ def _patterns(values):
         return set()
     if isinstance(values, str):
         values = [
-            p.strip()
+            p.strip().strip('"\'')
             for p in values.replace("\r\n", "\n").replace("\n", ",").split(",")
-            if p.strip()
+            if p.strip().strip('"\'')
         ]
-    return {str(v).strip().lower() for v in values if str(v).strip()}
+    return {
+        str(v).strip().strip('"\'').lower()
+        for v in values
+        if str(v).strip().strip('"\'')
+    }
 
 
 def _is_plan_limit_error(exc):
@@ -126,10 +130,18 @@ class APIFootballProvider(Provider):
         includes = self.tournaments if tournaments is None else tournaments
 
         if excludes:
-            if any(fnmatchcase(k, pat) for k in keys for pat in excludes):
+            if any(
+                fnmatchcase(k, pat) or ("*" not in pat and "?" not in pat and pat in k)
+                for k in keys
+                for pat in excludes
+            ):
                 return False
         if includes:
-            return any(fnmatchcase(k, pat) for k in keys for pat in includes)
+            return any(
+                fnmatchcase(k, pat) or ("*" not in pat and "?" not in pat and pat in k)
+                for k in keys
+                for pat in includes
+            )
         return True
 
     # -- Core endpoints ----------------------------------------------------

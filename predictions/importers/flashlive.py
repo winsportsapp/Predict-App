@@ -641,11 +641,15 @@ def _patterns(values):
         return set()
     if isinstance(values, str):
         values = [
-            p.strip()
+            p.strip().strip('"\'')
             for p in values.replace("\r\n", "\n").replace("\n", ",").split(",")
-            if p.strip()
+            if p.strip().strip('"\'')
         ]
-    return {str(v).strip().lower() for v in values if str(v).strip()}
+    return {
+        str(v).strip().strip('"\'').lower()
+        for v in values
+        if str(v).strip().strip('"\'')
+    }
 
 
 def _tournament_keys(group):
@@ -664,8 +668,15 @@ def _tournament_keys(group):
 
 
 def _matches_any(keys, patterns):
-    """True if any key equals a pattern, or fits one with "*" wildcards."""
-    return any(fnmatchcase(key, pattern) for key in keys for pattern in patterns)
+    """True if any key equals a pattern, fits one with "*" wildcards,
+    or contains the pattern as a substring if no wildcards were specified."""
+    for key in keys:
+        for pat in patterns:
+            if fnmatchcase(key, pat):
+                return True
+            if "*" not in pat and "?" not in pat and pat in key:
+                return True
+    return False
 
 
 def _plays(raw, teams):

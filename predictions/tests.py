@@ -7745,6 +7745,64 @@ class BadmintonTournamentFilterTests(TestCase):
         self.assertEqual(fixtures[0].external_id, "wimb1")
         self.assertEqual(fixtures[0].home, "Carlos Alcaraz")
 
+    def test_patterns_strips_quotes_and_splits_newlines(self):
+        from predictions.importers.flashlive import _patterns as fl_patterns
+        from predictions.importers.api_football import _patterns as af_patterns
+
+        raw_input = '"Premier League"\n\'La Liga\'\n*ATP*\nSuper 1000'
+        parsed_fl = fl_patterns(raw_input)
+        parsed_af = af_patterns(raw_input)
+
+        expected = {"premier league", "la liga", "*atp*", "super 1000"}
+        self.assertEqual(parsed_fl, expected)
+        self.assertEqual(parsed_af, expected)
+
+    def test_matching_without_asterisks_matches_substring(self):
+        from unittest import mock
+        from predictions.importers.flashlive import FlashLiveProvider
+        from predictions.models import Sport
+
+        sport = Sport.objects.get(name="Tennis")
+        # Admin entered 'ATP' (NO asterisks) and 'Doubles' (NO asterisks)
+        sport.tournaments_filter = "ATP"
+        sport.exclude_tournaments_filter = "Doubles"
+        sport.save()
+
+        provider = FlashLiveProvider(
+            api_key="mock-key",
+            tournaments=[],
+        )
+        fake_events = [
+            # Group 1: Chengdu ATP Singles -> should MATCH even though user wrote 'ATP' without '*'
+            {
+                "NAME": "China: Chengdu ATP, hard",
+                "EVENTS": [
+                    {
+                        "EVENT_ID": "atp1",
+                        "START_TIME": 1792000000,
+                        "HOME_NAME": "Player 1",
+                        "AWAY_NAME": "Player 2",
+                    }
+                ],
+            },
+            # Group 2: Chengdu ATP Doubles -> should be EXCLUDED even though user wrote 'Doubles' without '*'
+            {
+                "NAME": "China: Chengdu ATP Doubles, hard",
+                "EVENTS": [
+                    {
+                        "EVENT_ID": "atp2",
+                        "START_TIME": 1792000000,
+                        "HOME_NAME": "Pair 1",
+                        "AWAY_NAME": "Pair 2",
+                    }
+                ],
+            },
+        ]
+        with mock.patch.object(provider, "_list_events", return_value=fake_events):
+            fixtures = provider.fetch_fixtures("Tennis", days_ahead=0)
+
+        self.assertEqual(len(fixtures), 1)
+        self.assertEqual(fixtures[0].external_id, "atp1")
 
 
 class AdminManualSyncTests(TestCase):
