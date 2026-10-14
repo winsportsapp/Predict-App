@@ -7648,6 +7648,103 @@ class BadmintonTournamentFilterTests(TestCase):
         self.assertEqual(fixtures[0].home, "Viktor Axelsen")
         self.assertEqual(fixtures[0].away, "Lee Zii Jia")
 
+    def test_super_1000_tier_auto_expansion_includes_indonesia_open(self):
+        from unittest import mock
+        from predictions.importers.flashlive import FlashLiveProvider
+        from predictions.models import Sport
+
+        sport = Sport.objects.get(name="Badminton")
+        # User configures ONLY the tier *Super 1000*, without typing Indonesia Open
+        sport.tournaments_filter = "*Super 1000*"
+        sport.exclude_tournaments_filter = ""
+        sport.save()
+
+        provider = FlashLiveProvider(
+            api_key="mock-key",
+            tournaments=["*Badminton*"],
+        )
+        fake_events = [
+            # Indonesia Open (Super 1000)
+            {
+                "NAME": "Indonesia: Indonesia Open Men",
+                "EVENTS": [
+                    {
+                        "EVENT_ID": "indo1",
+                        "START_TIME": 1792000000,
+                        "HOME_NAME": "Jonatan Christie",
+                        "AWAY_NAME": "Shi Yuqi",
+                    }
+                ],
+            },
+            # Obscure local tournament
+            {
+                "NAME": "Czech Republic: Prague Open",
+                "EVENTS": [
+                    {
+                        "EVENT_ID": "prague1",
+                        "START_TIME": 1792000000,
+                        "HOME_NAME": "Player A",
+                        "AWAY_NAME": "Player B",
+                    }
+                ],
+            },
+        ]
+        with mock.patch.object(provider, "_list_events", return_value=fake_events):
+            fixtures = provider.fetch_fixtures("Badminton", days_ahead=0)
+
+        # Indonesia Open is automatically imported via Super 1000 tier auto-expansion!
+        self.assertEqual(len(fixtures), 1)
+        self.assertEqual(fixtures[0].external_id, "indo1")
+        self.assertEqual(fixtures[0].home, "Jonatan Christie")
+        self.assertEqual(fixtures[0].away, "Shi Yuqi")
+
+    def test_tennis_grand_slam_auto_expansion(self):
+        from unittest import mock
+        from predictions.importers.flashlive import FlashLiveProvider
+        from predictions.models import Sport
+
+        sport = Sport.objects.get(name="Tennis")
+        # User configures ONLY *Grand Slam*, without typing Wimbledon
+        sport.tournaments_filter = "*Grand Slam*"
+        sport.exclude_tournaments_filter = ""
+        sport.save()
+
+        provider = FlashLiveProvider(
+            api_key="mock-key",
+            tournaments=["*Tennis*"],
+        )
+        fake_events = [
+            {
+                "NAME": "United Kingdom: Wimbledon Men",
+                "EVENTS": [
+                    {
+                        "EVENT_ID": "wimb1",
+                        "START_TIME": 1792000000,
+                        "HOME_NAME": "Carlos Alcaraz",
+                        "AWAY_NAME": "Novak Djokovic",
+                    }
+                ],
+            },
+            {
+                "NAME": "Italy: Olbia Challenger",
+                "EVENTS": [
+                    {
+                        "EVENT_ID": "olb1",
+                        "START_TIME": 1792000000,
+                        "HOME_NAME": "Player C",
+                        "AWAY_NAME": "Player D",
+                    }
+                ],
+            },
+        ]
+        with mock.patch.object(provider, "_list_events", return_value=fake_events):
+            fixtures = provider.fetch_fixtures("Tennis", days_ahead=0)
+
+        # Wimbledon is automatically imported via Grand Slam auto-expansion!
+        self.assertEqual(len(fixtures), 1)
+        self.assertEqual(fixtures[0].external_id, "wimb1")
+        self.assertEqual(fixtures[0].home, "Carlos Alcaraz")
+
 
 
 class AdminManualSyncTests(TestCase):

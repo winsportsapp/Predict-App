@@ -49,6 +49,49 @@ MAX_INDENT_DAYS = 7
 
 CALLED_OFF_STAGES = {"POSTPONED", "CANCELED", "CANCELLED", "ABANDONED"}
 
+# Auto-expansion of series/tier names to constituent tournaments so an admin
+# can simply enter "*Super 1000*" or "*Grand Slam*" without needing to type every open.
+BWF_TIER_EXPANSIONS = {
+    "super 1000": {
+        "*all england*",
+        "*china open*",
+        "*indonesia open*",
+        "*malaysia open*",
+        "*super 1000*",
+    },
+    "super 750": {
+        "*denmark open*",
+        "*india open*",
+        "*french open*",
+        "*singapore open*",
+        "*japan open*",
+        "*china masters*",
+        "*super 750*",
+    },
+    "super 500": {
+        "*malaysia masters*",
+        "*indonesia masters*",
+        "*thailand open*",
+        "*hong kong open*",
+        "*arctic open*",
+        "*korea open*",
+        "*kumamoto masters*",
+        "*australian open*",
+        "*canada open*",
+        "*super 500*",
+    },
+}
+
+TENNIS_TIER_EXPANSIONS = {
+    "grand slam": {
+        "*wimbledon*",
+        "*us open*",
+        "*french open*",
+        "*australian open*",
+        "*grand slam*",
+    },
+}
+
 
 class FlashLiveProvider(Provider):
     name = "flashlive"
@@ -144,6 +187,23 @@ class FlashLiveProvider(Provider):
                     active_exclude_tournaments = db_exc | set(self.exclude_tournaments)
         except Exception:
             pass
+
+        # Auto-expand tier aliases (e.g. Badminton Super 1000/750/500, Tennis Grand Slam)
+        sport_key = str(sport_name).strip().lower()
+        if sport_key == "badminton" and active_tournaments:
+            expanded = set(active_tournaments)
+            for pat in active_tournaments:
+                for tier_key, opens in BWF_TIER_EXPANSIONS.items():
+                    if tier_key in pat:
+                        expanded.update(opens)
+            active_tournaments = expanded
+        elif sport_key == "tennis" and active_tournaments:
+            expanded = set(active_tournaments)
+            for pat in active_tournaments:
+                for tier_key, opens in TENNIS_TIER_EXPANSIONS.items():
+                    if tier_key in pat:
+                        expanded.update(opens)
+            active_tournaments = expanded
 
         if not (active_tournaments or teams):
             # Without a filter this would import every match in the world.

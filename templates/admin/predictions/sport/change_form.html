@@ -26,6 +26,15 @@
 
   {% if sport_popular_chips %}
   <div style="margin-bottom:20px;">
+    {% if original.name|lower == "badminton" %}
+    <div style="background:#e8f4fd; border-left:4px solid #007bff; padding:8px 12px; border-radius:4px; font-size:12px; color:#0c5460; margin-bottom:12px;">
+      💡 <strong>Smart Tier Auto-Expansion:</strong> Entering <code>*Super 1000*</code>, <code>*Super 750*</code>, or <code>*Super 500*</code> automatically includes all official BWF tournaments for that tier (e.g. <code>*Super 1000*</code> automatically includes <em>Indonesia Open</em>, <em>All England</em>, <em>China Open</em>, and <em>Malaysia Open</em> without needing to select them individually).
+    </div>
+    {% elif original.name|lower == "tennis" %}
+    <div style="background:#e8f4fd; border-left:4px solid #007bff; padding:8px 12px; border-radius:4px; font-size:12px; color:#0c5460; margin-bottom:12px;">
+      💡 <strong>Tip for Tennis:</strong> Entering <code>*ATP*</code> and <code>*WTA*</code> matches all tour events worldwide! Entering <code>*Grand Slam*</code> automatically expands to include Wimbledon, US Open, French Open, and Australian Open. Add <code>*Doubles*</code> to Exclusions to get singles only.
+    </div>
+    {% endif %}
     <div style="font-size:13px; font-weight:600; color:var(--body-fg, #333); margin-bottom:8px;">
       Popular {{ original.name }} Competitions (1-Click Include):
     </div>
