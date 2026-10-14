@@ -6920,6 +6920,45 @@ class MultiSportAPISyncAndH2HTests(TestCase):
         self.assertIn("Select your Prediction", content)
         self.assertIn("+10", content)
         self.assertIn("+25", content)
+        # Upcoming fixture question mark (?) badge is present in form:
+        self.assertIn("Upcoming: vs Chelsea", content)
+        self.assertIn("Upcoming: vs Arsenal", content)
+
+    def test_upcoming_question_mark_badge_visibility(self):
+        from django.urls import reverse
+        from predictions.models import MatchStats
+
+        m = sport_match("Football", "Liverpool", "Everton")
+        m.is_published = True
+        m.save()
+
+        MatchStats.objects.create(
+            match=m,
+            team_a_recent=[{"result": "W", "opponent": "Fulham", "score": "3 - 1", "date": "2025-05-01"}],
+            team_b_recent=[{"result": "L", "opponent": "Brighton", "score": "0 - 1", "date": "2025-05-01"}],
+        )
+
+        # 1. When match is upcoming (not has_result), question mark (?) badge is rendered:
+        resp = self.client.get(reverse("sport_matches", kwargs={"sport_slug": "football"}))
+        self.assertEqual(resp.status_code, 200)
+        content = resp.content.decode()
+        self.assertIn("Upcoming: vs Everton", content)
+        self.assertIn("Upcoming: vs Liverpool", content)
+
+        resp_detail = self.client.get(reverse("match_detail", kwargs={"pk": m.pk}))
+        self.assertEqual(resp_detail.status_code, 200)
+        detail_content = resp_detail.content.decode()
+        self.assertIn("Upcoming: vs Everton", detail_content)
+        self.assertIn("Upcoming: vs Liverpool", detail_content)
+
+        # 2. When match is finished (winner is set), question mark (?) is hidden:
+        m.winner = m.team_a
+        m.save()
+        resp_finished = self.client.get(reverse("match_detail", kwargs={"pk": m.pk}))
+        finished_content = resp_finished.content.decode()
+        self.assertNotIn("Upcoming: vs Everton", finished_content)
+        self.assertNotIn("Upcoming: vs Liverpool", finished_content)
+
 
     def test_match_detail_never_calls_external_api_when_stats_missing(self):
         from django.urls import reverse

@@ -110,6 +110,13 @@
                   <!-- Team A Recent Form (Outside and directly above tile box) -->
                   <div class="d-flex align-items-center justify-content-center gap-1 mb-1" style="min-height: 20px;">
                     {% if match.stats and match.stats.team_a_recent %}
+                      {% if not match.has_result %}
+                        <span class="badge rounded-circle p-0 d-inline-flex align-items-center justify-content-center bg-secondary-subtle text-secondary-emphasis border border-secondary-subtle"
+                              style="width: 17px; height: 17px; font-size: 0.65rem; line-height: 1; font-weight: 700;"
+                              title="Upcoming: vs {{ match.team_b }} ({{ match.start_time|date:'M j, H:i' }})">
+                          ?
+                        </span>
+                      {% endif %}
                       {% for r in match.stats.team_a_recent %}
                         <span class="badge rounded-circle p-0 d-inline-flex align-items-center justify-content-center {% if r.result == 'W' %}bg-success text-white{% elif r.result == 'L' %}bg-danger text-white{% else %}bg-secondary text-white{% endif %}"
                               style="width: 17px; height: 17px; font-size: 0.6rem; line-height: 1;"
@@ -182,6 +189,13 @@
                   <!-- Team B Recent Form (Outside and directly above tile box) -->
                   <div class="d-flex align-items-center justify-content-center gap-1 mb-1" style="min-height: 20px;">
                     {% if match.stats and match.stats.team_b_recent %}
+                      {% if not match.has_result %}
+                        <span class="badge rounded-circle p-0 d-inline-flex align-items-center justify-content-center bg-secondary-subtle text-secondary-emphasis border border-secondary-subtle"
+                              style="width: 17px; height: 17px; font-size: 0.65rem; line-height: 1; font-weight: 700;"
+                              title="Upcoming: vs {{ match.team_a }} ({{ match.start_time|date:'M j, H:i' }})">
+                          ?
+                        </span>
+                      {% endif %}
                       {% for r in match.stats.team_b_recent %}
                         <span class="badge rounded-circle p-0 d-inline-flex align-items-center justify-content-center {% if r.result == 'W' %}bg-success text-white{% elif r.result == 'L' %}bg-danger text-white{% else %}bg-secondary text-white{% endif %}"
                               style="width: 17px; height: 17px; font-size: 0.6rem; line-height: 1;"
