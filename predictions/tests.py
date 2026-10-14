@@ -6745,6 +6745,132 @@ class MultiSportAPISyncAndH2HTests(TestCase):
             self.assertEqual(summary.team_a_form[0]["result"], "W")
             self.assertEqual(summary.team_b_form[0]["result"], "W")
 
+    def test_resolve_side_and_clean_team_name_utility(self):
+        from predictions.importers.base import clean_team_name, match_score, resolve_side
+
+        self.assertEqual(clean_team_name("Pohankova M. (Svk)"), "pohankova m.")
+        self.assertEqual(clean_team_name("Last Matches: Sakkari M."), "sakkari m.")
+        self.assertEqual(clean_team_name("Arsenal FC"), "arsenal")
+        self.assertEqual(clean_team_name("*Ivory Coast W"), "ivory coast w")
+
+        self.assertEqual(resolve_side("Pohankova M. (Svk)", "Sakkari M. (Gre)", "Last Matches: Pohankova M."), "A")
+        self.assertEqual(resolve_side("Pohankova M. (Svk)", "Sakkari M. (Gre)", "Last Matches: Sakkari M."), "B")
+        self.assertEqual(resolve_side("Mia Pohankova", "Maria Sakkari", "Pohankova M."), "A")
+        self.assertEqual(resolve_side("Mia Pohankova", "Maria Sakkari", "Sakkari M."), "B")
+        self.assertEqual(resolve_side("Manchester United", "Manchester City", "Manchester United FC"), "A")
+        self.assertEqual(resolve_side("Manchester United", "Manchester City", "Manchester City FC"), "B")
+
+    def test_flashlive_fetch_h2h_with_country_codes_and_correct_opponents(self):
+        from predictions.importers.flashlive import FlashLiveProvider
+
+        provider = FlashLiveProvider(api_key="key1", stats_api_key="key2")
+        m = sport_match("Tennis", "Pohankova M. (Svk)", "Sakkari M. (Gre)")
+        m.external_id = "flash-tennis-pohankova-sakkari"
+        m.save()
+
+        mock_h2h_data = [
+            {
+                "TAB_NAME": "Overall",
+                "GROUPS": [
+                    {
+                        "GROUP_LABEL": "Last Matches: Pohankova M.",
+                        "ITEMS": [
+                            {
+                                "HOME_PARTICIPANT": "*Pohankova M.",
+                                "AWAY_PARTICIPANT": "Wang Xiy.",
+                                "TEAM_MARK": "home",
+                                "WIS": "w",
+                                "H_RESULT": "WIN",
+                                "CURRENT_RESULT": "2:1",
+                                "START_TIME": 1710000000,
+                                "EVENT_NAME": "Wuhan",
+                            },
+                            {
+                                "HOME_PARTICIPANT": "Bondar A.",
+                                "AWAY_PARTICIPANT": "*Pohankova M.",
+                                "TEAM_MARK": "away",
+                                "WIS": "w",
+                                "H_RESULT": "WIN",
+                                "CURRENT_RESULT": "0:2",
+                                "START_TIME": 1709900000,
+                                "EVENT_NAME": "Wuhan",
+                            },
+                        ],
+                    },
+                    {
+                        "GROUP_LABEL": "Last Matches: Sakkari M.",
+                        "ITEMS": [
+                            {
+                                "HOME_PARTICIPANT": "*Sakkari M.",
+                                "AWAY_PARTICIPANT": "Kostyuk M.",
+                                "TEAM_MARK": "home",
+                                "WIS": "w",
+                                "H_RESULT": "WIN",
+                                "CURRENT_RESULT": "2:1",
+                                "START_TIME": 1710000000,
+                                "EVENT_NAME": "Wuhan",
+                            },
+                            {
+                                "HOME_PARTICIPANT": "*Raducanu E.",
+                                "AWAY_PARTICIPANT": "Sakkari M.",
+                                "TEAM_MARK": "away",
+                                "WIS": "l",
+                                "H_RESULT": "LOST",
+                                "CURRENT_RESULT": "2:0",
+                                "START_TIME": 1709900000,
+                                "EVENT_NAME": "Washington",
+                            },
+                        ],
+                    },
+                    {
+                        "GROUP_LABEL": "Head-to-head matches",
+                        "ITEMS": [
+                            {
+                                "HOME_PARTICIPANT": "*Pohankova M.",
+                                "AWAY_PARTICIPANT": "Sakkari M.",
+                                "CURRENT_RESULT": "2:0",
+                                "HOME_SCORE_FULL": "2",
+                                "AWAY_SCORE_FULL": "0",
+                                "START_TIME": 1709000000,
+                                "EVENT_NAME": "US Open",
+                            }
+                        ],
+                    },
+                ],
+            }
+        ]
+
+        with mock.patch.object(provider, "_get_stats", return_value=mock_h2h_data):
+            summary = provider.fetch_h2h_and_form(m)
+            self.assertIsNotNone(summary)
+
+            # Head to Head: Pohankova (Team A) won against Sakkari (Team B)
+            self.assertEqual(summary.team_a_wins, 1)
+            self.assertEqual(summary.team_b_wins, 0)
+            self.assertEqual(summary.past_matches[0]["winner"], "Pohankova M.")
+            self.assertEqual(summary.past_matches[0]["winner_side"], "A")
+
+            # Pohankova Recent Form
+            self.assertEqual(len(summary.team_a_form), 2)
+            # Match 1: vs Wang Xiy. (home win) -> result must be 'W', opponent 'Wang Xiy.'
+            self.assertEqual(summary.team_a_form[0]["result"], "W")
+            self.assertEqual(summary.team_a_form[0]["opponent"], "Wang Xiy.")
+            self.assertNotEqual(summary.team_a_form[0]["opponent"], "Pohankova M.")
+            # Match 2: vs Bondar A. (away win) -> result must be 'W', opponent 'Bondar A.'
+            self.assertEqual(summary.team_a_form[1]["result"], "W")
+            self.assertEqual(summary.team_a_form[1]["opponent"], "Bondar A.")
+
+            # Sakkari Recent Form
+            self.assertEqual(len(summary.team_b_form), 2)
+            # Match 1: vs Kostyuk M. (home win) -> result must be 'W', opponent 'Kostyuk M.'
+            self.assertEqual(summary.team_b_form[0]["result"], "W")
+            self.assertEqual(summary.team_b_form[0]["opponent"], "Kostyuk M.")
+            self.assertNotEqual(summary.team_b_form[0]["opponent"], "Sakkari M.")
+            # Match 2: vs Raducanu E. (away loss) -> result must be 'L', opponent 'Raducanu E.'
+            self.assertEqual(summary.team_b_form[1]["result"], "L")
+            self.assertEqual(summary.team_b_form[1]["opponent"], "Raducanu E.")
+
+
     def test_match_detail_view_renders_stats_without_odds(self):
         from django.urls import reverse
         from predictions.models import MatchStats

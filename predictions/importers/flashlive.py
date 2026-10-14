@@ -23,6 +23,8 @@ from .base import (
     Provider,
     ProviderError,
     make_session,
+    match_score,
+    resolve_side,
 )
 
 logger = logging.getLogger(__name__)
@@ -350,17 +352,21 @@ class FlashLiveProvider(Provider):
         for g in groups:
             if not isinstance(g, dict):
                 continue
-            label = str(g.get("GROUP_LABEL") or g.get("NAME") or "").lower()
+            label = str(g.get("GROUP_LABEL") or g.get("NAME") or "")
+            label_lower = label.lower()
             evs = g.get("ITEMS") or g.get("EVENTS") or []
-            if "head-to-head" in label or "h2h" in label:
+            if "head-to-head" in label_lower or "h2h" in label_lower:
                 h2h_events.extend(evs)
-            elif team_a_lower in label:
+                continue
+
+            side = resolve_side(match.team_a.name, match.team_b.name, label)
+            if side == "A":
                 team_a_events.extend(evs)
-            elif team_b_lower in label:
+            elif side == "B":
                 team_b_events.extend(evs)
-            elif not team_a_events and "last matches" in label:
+            elif not team_a_events and "last matches" in label_lower:
                 team_a_events.extend(evs)
-            elif not team_b_events and "last matches" in label:
+            elif not team_b_events and "last matches" in label_lower:
                 team_b_events.extend(evs)
 
         past_matches = []
@@ -390,7 +396,14 @@ class FlashLiveProvider(Provider):
                     pass
 
             winner_outcome = _determine_flashlive_winner(raw, hs, aws)
-            is_team_a_home = team_a_lower in home.lower()
+            side_home = resolve_side(match.team_a.name, match.team_b.name, home)
+            side_away = resolve_side(match.team_a.name, match.team_b.name, away)
+            if side_home == "A" or side_away == "B":
+                is_team_a_home = True
+            elif side_home == "B" or side_away == "A":
+                is_team_a_home = False
+            else:
+                is_team_a_home = team_a_lower in home.lower()
 
             if winner_outcome == "HOME":
                 winner_name = home
@@ -794,13 +807,16 @@ def _determine_flashlive_winner(raw, hs, aws):
     elif winner_code == "2":
         return "AWAY"
 
+    tm = str(raw.get("TEAM_MARK") or "").strip().lower()
     wis = str(raw.get("WIS") or "").strip().lower()
-    if wis == "w":
-        return "HOME"
-    elif wis == "l":
-        return "AWAY"
-    elif wis == "d":
-        return "DRAW"
+    hr = str(raw.get("H_RESULT") or "").strip().upper()
+    if tm in ("home", "away"):
+        if wis == "w" or hr == "WIN":
+            return "HOME" if tm == "home" else "AWAY"
+        elif wis == "l" or hr == "LOST":
+            return "AWAY" if tm == "home" else "HOME"
+        elif wis == "d" or hr == "DRAW":
+            return "DRAW"
 
     if hs is not None and aws is not None:
         try:
@@ -820,7 +836,6 @@ def _determine_flashlive_winner(raw, hs, aws):
 
 def _parse_flashlive_recent_form(raw_events, team_name):
     form_list = []
-    team_name_lower = team_name.lower()
     for ev in raw_events:
         if not isinstance(ev, dict):
             continue
@@ -842,16 +857,35 @@ def _parse_flashlive_recent_form(raw_events, team_name):
             except (ValueError, TypeError):
                 pass
 
-        is_home = team_name_lower in home.lower()
-        opponent = away if is_home else home
-
-        winner_outcome = _determine_flashlive_winner(ev, hs, aws)
-        if winner_outcome == "HOME":
-            res = "W" if is_home else "L"
-        elif winner_outcome == "AWAY":
-            res = "L" if is_home else "W"
+        tm = str(ev.get("TEAM_MARK") or "").strip().lower()
+        if tm == "home":
+            is_home = True
+            opponent = away
+        elif tm == "away":
+            is_home = False
+            opponent = home
         else:
+            s_home = match_score(team_name, home)
+            s_away = match_score(team_name, away)
+            is_home = (s_home >= s_away)
+            opponent = away if is_home else home
+
+        wis = str(ev.get("WIS") or "").strip().lower()
+        hr = str(ev.get("H_RESULT") or "").strip().upper()
+        if wis == "w" or hr == "WIN":
+            res = "W"
+        elif wis == "l" or hr == "LOST":
+            res = "L"
+        elif wis == "d" or hr == "DRAW":
             res = "D"
+        else:
+            winner_outcome = _determine_flashlive_winner(ev, hs, aws)
+            if winner_outcome == "HOME":
+                res = "W" if is_home else "L"
+            elif winner_outcome == "AWAY":
+                res = "L" if is_home else "W"
+            else:
+                res = "D"
 
         score_str = str(ev.get("CURRENT_RESULT") or "").strip()
         if not score_str and (hs is not None and aws is not None):
@@ -867,4 +901,5 @@ def _parse_flashlive_recent_form(raw_events, team_name):
             "competition": ev.get("EVENT_NAME") or ev.get("TOURNAMENT_NAME") or ev.get("SHORT_NAME") or "",
         })
     return form_list
+
 

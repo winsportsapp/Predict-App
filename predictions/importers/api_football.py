@@ -18,6 +18,8 @@ from .base import (
     Provider,
     ProviderError,
     make_session,
+    match_score,
+    resolve_side,
 )
 
 logger = logging.getLogger(__name__)
@@ -461,7 +463,14 @@ def _parse_h2h_encounter(item, team_a_name, team_b_name):
     winner_side = "D"
 
     # Identify whether home or away corresponds to team_a
-    is_team_a_home = team_a_name.lower() in home_name.lower()
+    side_home = resolve_side(team_a_name, team_b_name, home_name)
+    side_away = resolve_side(team_a_name, team_b_name, away_name)
+    if side_home == "A" or side_away == "B":
+        is_team_a_home = True
+    elif side_home == "B" or side_away == "A":
+        is_team_a_home = False
+    else:
+        is_team_a_home = team_a_name.lower() in home_name.lower()
 
     if hg > ag:
         winner_name = home_name
@@ -496,7 +505,9 @@ def _parse_form_fixture(item, target_team_name):
     if hg is None or ag is None:
         return None
 
-    is_home = target_team_name.lower() in home_name.lower()
+    s_home = match_score(target_team_name, home_name)
+    s_away = match_score(target_team_name, away_name)
+    is_home = (s_home >= s_away)
     opponent = away_name if is_home else home_name
     my_goals = hg if is_home else ag
     opp_goals = ag if is_home else hg

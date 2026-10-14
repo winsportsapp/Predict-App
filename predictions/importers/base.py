@@ -5,6 +5,7 @@ A provider turns its source's data into ExternalEvent objects, so the sync
 logic in predictions.services never depends on any one provider's format.
 """
 
+import re
 from dataclasses import dataclass, field
 from datetime import datetime
 
@@ -13,6 +14,68 @@ from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
 REQUEST_TIMEOUT = 15  # seconds
+
+GENERIC_TOKENS = {
+    "united", "city", "town", "club", "women", "men", "team", "national",
+    "real", "inter", "athletic", "atletico", "sporting", "racing", "deportivo",
+    "st", "saint", "north", "south", "east", "west", "central", "state",
+    "u20", "u21", "u19", "u18", "u23",
+}
+
+
+def clean_team_name(name):
+    """Normalize a team or player name by stripping country suffixes (e.g. '(Svk)', '(Gre)'),
+    group label prefixes ('Last matches:'), asterisks, club abbreviations, and excess whitespace.
+    """
+    if not name:
+        return ""
+    s = str(name).strip().lstrip("*").strip()
+    s = re.sub(r"\s*\([A-Za-z0-9/ ]+\)\s*", " ", s)
+    s = re.sub(r"^(?:last\s+matches\s*:?\s*)", "", s, flags=re.IGNORECASE)
+    s = re.sub(r"\b(?:fc|cf|sc|ac|fk|sk|bk)\b", "", s, flags=re.IGNORECASE)
+    s = re.sub(r"\s+", " ", s).strip()
+    return s.lower()
+
+
+def match_score(team_name, candidate_name):
+    """Score how well candidate_name matches team_name (0 to 100).
+    Handles exact matches, substring containment, and distinctive word token overlap.
+    """
+    t = clean_team_name(team_name)
+    c = clean_team_name(candidate_name)
+    if not t or not c:
+        return 0
+    if t == c:
+        return 100
+    if t in c or c in t:
+        return 80
+
+    t_tokens = set(re.findall(r"[a-z0-9]{3,}", t))
+    c_tokens = set(re.findall(r"[a-z0-9]{3,}", c))
+    if not t_tokens or not c_tokens:
+        return 0
+
+    overlap = t_tokens & c_tokens
+    distinctive_overlap = overlap - GENERIC_TOKENS
+    if distinctive_overlap:
+        return 60 + 10 * len(distinctive_overlap)
+    elif overlap:
+        return 20 + 5 * len(overlap)
+    return 0
+
+
+def resolve_side(team_a_name, team_b_name, candidate_name):
+    """Determine whether candidate_name refers to Team A or Team B.
+    Returns 'A', 'B', or None if unresolved.
+    """
+    sa = match_score(team_a_name, candidate_name)
+    sb = match_score(team_b_name, candidate_name)
+    if sa > sb and sa >= 30:
+        return "A"
+    elif sb > sa and sb >= 30:
+        return "B"
+    return None
+
 
 
 class ProviderError(Exception):
