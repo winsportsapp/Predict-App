@@ -1,5 +1,6 @@
 import datetime
 import json
+from django.http import JsonResponse
 
 from django import forms
 from django.contrib import admin, messages
@@ -46,9 +47,132 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+SPORT_TOURNAMENT_PRESETS = {
+    "football": {
+        "popular_chips": [
+            "Premier League",
+            "UEFA Champions League",
+            "UEFA Europa League",
+            "UEFA Conference League",
+            "La Liga",
+            "Serie A",
+            "Bundesliga",
+            "Ligue 1",
+            "Major League Soccer",
+            "Indian Super League",
+            "FIFA World Cup",
+            "UEFA Nations League",
+            "FA Cup",
+            "Copa del Rey",
+        ],
+        "exclusion_presets": [
+            "*Res*",
+            "*Reserve*",
+            "*U20*",
+            "*U21*",
+            "*U19*",
+            "*Women*",
+            "*Youth*",
+            "*Amateur*",
+        ],
+    },
+    "badminton": {
+        "popular_chips": [
+            "*Super 1000*",
+            "*Super 750*",
+            "*Super 500*",
+            "*World Tour Finals*",
+            "*All England*",
+            "*China Open*",
+            "*Indonesia Open*",
+            "*Malaysia Open*",
+            "*Denmark Open*",
+            "*India Open*",
+            "*Singapore Open*",
+            "*Japan Open*",
+            "*China Masters*",
+            "*French Open*",
+            "*Malaysia Masters*",
+            "*Indonesia Masters*",
+            "*Thailand Open*",
+            "*Hong Kong Open*",
+            "*Arctic Open*",
+            "*Korea Open*",
+            "*BWF World Championship*",
+            "*Olympic*",
+            "*Thomas Cup*",
+            "*Uber Cup*",
+            "*Sudirman Cup*",
+        ],
+        "exclusion_presets": [
+            "*Doubles*",
+            "*Mixed*",
+            "*Junior*",
+            "*Qualifying*",
+        ],
+    },
+    "cricket": {
+        "popular_chips": [
+            "*IPL*",
+            "*Indian Premier League*",
+            "*World Cup*",
+            "*T20 World Cup*",
+            "*Big Bash*",
+            "*BBL*",
+            "*PSL*",
+            "*Asia Cup*",
+            "*Ranji Trophy*",
+            "*The Hundred*",
+            "*Twenty20 International*",
+            "*One Day International*",
+        ],
+        "exclusion_presets": [
+            "*Test*",
+            "*Women*",
+            "*U19*",
+        ],
+    },
+    "tennis": {
+        "popular_chips": [
+            "*ATP*",
+            "*WTA*",
+            "*Wimbledon*",
+            "*US Open*",
+            "*French Open*",
+            "*Australian Open*",
+            "*Grand Slam*",
+            "*Masters*",
+            "*ATP Finals*",
+            "*WTA Finals*",
+        ],
+        "exclusion_presets": [
+            "*Doubles*",
+            "*Mixed*",
+            "*Qualification*",
+            "*ITF*",
+            "*Challenger*",
+        ],
+    },
+    "hockey": {
+        "popular_chips": [
+            "*FIH World Cup*",
+            "*Olympic*",
+            "*Pro League*",
+            "*Asian Games*",
+            "*Hockey India League*",
+            "*Sultan Azlan Shah*",
+        ],
+        "exclusion_presets": [
+            "*Junior*",
+            "*U21*",
+        ],
+    },
+}
+
 
 @admin.register(Sport)
 class SportAdmin(admin.ModelAdmin):
+    change_form_template = "admin/predictions/sport/change_form.html"
     list_display = (
         "name",
         "is_active",
@@ -71,6 +195,62 @@ class SportAdmin(admin.ModelAdmin):
     @admin.display(boolean=True, description="Exclusion filter")
     def has_exclude_filter(self, obj):
         return bool(obj.exclude_tournaments_filter and obj.exclude_tournaments_filter.strip())
+
+    def get_urls(self):
+        urls = super().get_urls()
+        custom_urls = [
+            path(
+                "<path:object_id>/live-tournaments/",
+                self.admin_site.admin_view(self.live_tournaments_view),
+                name="predictions_sport_live_tournaments",
+            ),
+        ]
+        return custom_urls + urls
+
+    def live_tournaments_view(self, request, object_id):
+        if not self.has_change_permission(request):
+            return JsonResponse({"error": "Forbidden: change permission required."}, status=403)
+        sport = self.get_object(request, object_id)
+        if not sport:
+            return JsonResponse({"error": "Sport not found."}, status=404)
+
+        try:
+            day = int(request.GET.get("day", 0))
+        except (TypeError, ValueError):
+            day = 0
+
+        providers = get_providers()
+        provider = provider_for(sport.name, providers)
+        if not provider or not hasattr(provider, "list_tournaments"):
+            return JsonResponse(
+                {"error": f"No active provider with tournament discovery for {sport.name}."},
+                status=400,
+            )
+
+        try:
+            tournaments = provider.list_tournaments(sport.name, day=day)
+            return JsonResponse({
+                "sport": sport.name,
+                "day": day,
+                "provider": getattr(provider, "name", "unknown"),
+                "tournaments": [{"name": name, "count": count} for name, count in tournaments],
+            })
+        except ProviderError as exc:
+            return JsonResponse({"error": str(exc)}, status=502)
+        except Exception as exc:
+            logger.exception("Error listing live tournaments for %s: %s", sport.name, exc)
+            return JsonResponse({"error": f"Failed to fetch live tournaments: {exc}"}, status=500)
+
+    def change_view(self, request, object_id, form_url="", extra_context=None):
+        sport = self.get_object(request, object_id)
+        extra = extra_context or {}
+        if sport:
+            key = sport.name.strip().lower()
+            presets = SPORT_TOURNAMENT_PRESETS.get(key, {})
+            extra["sport_popular_chips"] = presets.get("popular_chips", [])
+            extra["sport_exclusion_presets"] = presets.get("exclusion_presets", [])
+            extra["sport_object_id"] = sport.pk
+        return super().change_view(request, object_id, form_url=form_url, extra_context=extra)
 
 
 @admin.register(Team)

@@ -7443,6 +7443,49 @@ class APIFootballProviderTests(TestCase):
         events = p.fetch_fixtures("Football", days_ahead=0, new_day_only=False, with_odds=False)
         self.assertEqual({e.external_id for e in events}, {"1"})
 
+    def test_list_tournaments_returns_sorted_names_and_counts(self):
+        from unittest import mock
+
+        p = self._provider(max_days_ahead=1)
+        fixture_payload = {
+            "response": [
+                {
+                    "fixture": {"id": 1},
+                    "league": {"name": "Premier League", "country": "England"},
+                },
+                {
+                    "fixture": {"id": 2},
+                    "league": {"name": "Premier League", "country": "England"},
+                },
+                {
+                    "fixture": {"id": 3},
+                    "league": {"name": "La Liga", "country": "Spain"},
+                },
+            ]
+        }
+        resp = mock.Mock()
+        resp.status_code = 200
+        resp.json.return_value = fixture_payload
+        p.session.get.return_value = resp
+
+        tournaments = p.list_tournaments("Football", day=0)
+        self.assertEqual(
+            tournaments,
+            [("England: Premier League", 2), ("Spain: La Liga", 1)],
+        )
+
+    def test_list_tournaments_handles_plan_limit_error(self):
+        from unittest import mock
+
+        p = self._provider(max_days_ahead=1)
+        resp = mock.Mock()
+        resp.status_code = 200
+        resp.json.return_value = {"errors": {"plan": "Free plan date limit reached"}}
+        p.session.get.return_value = resp
+
+        tournaments = p.list_tournaments("Football", day=0)
+        self.assertEqual(tournaments, [])
+
 
 class SportAdminTournamentFilterTests(TestCase):
     def setUp(self):
@@ -7479,6 +7522,132 @@ class SportAdminTournamentFilterTests(TestCase):
         self.assertEqual(resp.status_code, 200)
         self.assertContains(resp, "Inclusion filter")
         self.assertContains(resp, "Exclusion filter")
+
+    def test_sport_admin_change_form_renders_sport_chips_and_presets(self):
+        from predictions.models import Sport
+        # Check Football change form
+        football = Sport.objects.get(name="Football")
+        resp = self.client.get(reverse("admin:predictions_sport_change", args=[football.pk]))
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "Smart Tournament &amp; Exclusion Assistant (Football)")
+        self.assertContains(resp, "Premier League")
+        self.assertContains(resp, "UEFA Champions League")
+        self.assertContains(resp, "Insert Recommended Exclusions")
+
+        # Check Badminton change form
+        badminton = Sport.objects.get(name="Badminton")
+        resp_badm = self.client.get(reverse("admin:predictions_sport_change", args=[badminton.pk]))
+        self.assertEqual(resp_badm.status_code, 200)
+        self.assertContains(resp_badm, "Smart Tournament &amp; Exclusion Assistant (Badminton)")
+        self.assertContains(resp_badm, "*Super 1000*")
+        self.assertContains(resp_badm, "*Super 750*")
+        self.assertContains(resp_badm, "*Super 500*")
+        self.assertContains(resp_badm, "*All England*")
+        self.assertContains(resp_badm, "*Denmark Open*")
+
+    def test_live_tournaments_endpoint_requires_permission(self):
+        from django.contrib.auth.models import User
+        from predictions.models import Sport
+        sport = Sport.objects.get(name="Football")
+        url = reverse("admin:predictions_sport_live_tournaments", args=[sport.pk])
+
+        # Anonymous user
+        self.client.logout()
+        resp = self.client.get(url)
+        self.assertEqual(resp.status_code, 302)
+
+        # Regular user without staff permission
+        regular_user = User.objects.create_user("reguser", "reg@example.com", "pass123")
+        self.client.force_login(regular_user)
+        resp = self.client.get(url)
+        self.assertEqual(resp.status_code, 302)
+
+    def test_live_tournaments_endpoint_returns_json(self):
+        from unittest import mock
+        from predictions.models import Sport
+        sport = Sport.objects.get(name="Football")
+        url = reverse("admin:predictions_sport_live_tournaments", args=[sport.pk])
+
+        mock_provider = mock.Mock()
+        mock_provider.name = "mock-football"
+        mock_provider.list_tournaments.return_value = [
+            ("England: Premier League", 5),
+            ("Spain: La Liga", 4),
+        ]
+        with mock.patch("predictions.admin.get_providers", return_value=[mock_provider]):
+            with mock.patch("predictions.admin.provider_for", return_value=mock_provider):
+                resp = self.client.get(f"{url}?day=0")
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        self.assertEqual(data["sport"], "Football")
+        self.assertEqual(len(data["tournaments"]), 2)
+        self.assertEqual(data["tournaments"][0]["name"], "England: Premier League")
+        self.assertEqual(data["tournaments"][0]["count"], 5)
+
+
+class BadmintonTournamentFilterTests(TestCase):
+    def test_badminton_super_series_and_doubles_exclusion(self):
+        from unittest import mock
+        from predictions.importers.flashlive import FlashLiveProvider
+        from predictions.models import Sport
+
+        sport = Sport.objects.get(name="Badminton")
+        # Admin configures inclusion for Super 750 / Denmark Open, and excludes Doubles
+        sport.tournaments_filter = "*Super 750*\n*Denmark Open*"
+        sport.exclude_tournaments_filter = "*Doubles*"
+        sport.save()
+
+        provider = FlashLiveProvider(
+            api_key="mock-key",
+            tournaments=["*Badminton*"],  # base fallback
+        )
+        fake_events = [
+            # Group 1: Denmark Open Men (Singles) -> Super 750 event
+            {
+                "NAME": "Denmark: Denmark Open Men",
+                "EVENTS": [
+                    {
+                        "EVENT_ID": "b1",
+                        "START_TIME": 1792000000,
+                        "HOME_NAME": "Viktor Axelsen",
+                        "AWAY_NAME": "Lee Zii Jia",
+                    }
+                ],
+            },
+            # Group 2: Denmark Open Doubles Men -> matches inclusion but DROPPED by *Doubles* exclusion
+            {
+                "NAME": "Denmark: Denmark Open Doubles Men",
+                "EVENTS": [
+                    {
+                        "EVENT_ID": "b2",
+                        "START_TIME": 1792000000,
+                        "HOME_NAME": "Pair A",
+                        "AWAY_NAME": "Pair B",
+                    }
+                ],
+            },
+            # Group 3: Obscure local tournament -> dropped because not in inclusion
+            {
+                "NAME": "Iceland: Reykjavik Junior Cup",
+                "EVENTS": [
+                    {
+                        "EVENT_ID": "b3",
+                        "START_TIME": 1792000000,
+                        "HOME_NAME": "Player X",
+                        "AWAY_NAME": "Player Y",
+                    }
+                ],
+            },
+        ]
+        with mock.patch.object(provider, "_list_events", return_value=fake_events):
+            fixtures = provider.fetch_fixtures("Badminton", days_ahead=0)
+
+        # Only the Singles match from Denmark Open was imported!
+        self.assertEqual(len(fixtures), 1)
+        self.assertEqual(fixtures[0].external_id, "b1")
+        self.assertEqual(fixtures[0].home, "Viktor Axelsen")
+        self.assertEqual(fixtures[0].away, "Lee Zii Jia")
+
 
 
 class AdminManualSyncTests(TestCase):

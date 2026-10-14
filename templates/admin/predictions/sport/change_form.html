@@ -1,0 +1,273 @@
+{% extends "admin/change_form.html" %}
+{% load i18n admin_urls static %}
+
+{% block after_field_sets %}
+{{ block.super }}
+
+{% if original %}
+<div class="tournament-assistant-card" style="margin-top:24px; padding:20px; background:var(--darkened-bg, #f8f9fa); border:1px solid var(--border-color, #ddd); border-radius:8px; font-family:inherit;">
+  <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:14px; flex-wrap:wrap; gap:10px;">
+    <div>
+      <h3 style="margin:0; font-size:16px; font-weight:700; color:var(--body-fg, #333); display:flex; align-items:center; gap:8px;">
+        <span style="font-size:18px;">✨</span> Smart Tournament &amp; Exclusion Assistant ({{ original.name }})
+      </h3>
+      <p style="margin:4px 0 0; font-size:12px; color:var(--body-quiet-color, #666);">
+        Click any tournament to populate exact spelling into the fields above without typing errors.
+      </p>
+    </div>
+    {% if sport_exclusion_presets %}
+    <div>
+      <button type="button" id="btn-apply-exclusions" class="button" style="background:#dc3545; color:#fff; border:none; padding:6px 12px; border-radius:4px; font-size:12px; font-weight:600; cursor:pointer;">
+        ⚡ Insert Recommended Exclusions
+      </button>
+    </div>
+    {% endif %}
+  </div>
+
+  {% if sport_popular_chips %}
+  <div style="margin-bottom:20px;">
+    <div style="font-size:13px; font-weight:600; color:var(--body-fg, #333); margin-bottom:8px;">
+      Popular {{ original.name }} Competitions (1-Click Include):
+    </div>
+    <div id="popular-chips-container" style="display:flex; flex-wrap:wrap; gap:6px;">
+      {% for chip in sport_popular_chips %}
+      <button type="button" class="preset-chip" data-chip="{{ chip }}" style="background:var(--body-bg, #fff); border:1px solid var(--border-color, #ccc); color:var(--body-fg, #333); padding:4px 10px; border-radius:14px; font-size:12px; cursor:pointer; transition:all 0.15s ease; display:inline-flex; align-items:center; gap:4px;">
+        <span style="color:#007bff; font-weight:700;">+</span> {{ chip }}
+      </button>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+
+  <div style="border-top:1px solid var(--hairline-color, #e0e0e0); padding-top:16px; margin-top:16px;">
+    <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px; margin-bottom:12px;">
+      <div>
+        <div style="font-size:14px; font-weight:700; color:var(--body-fg, #333); display:flex; align-items:center; gap:6px;">
+          <span>🔍</span> Inspect Live Tournaments from Provider
+        </div>
+        <div style="font-size:12px; color:var(--body-quiet-color, #666); margin-top:2px;">
+          Fetch live tournament names and match counts currently available from the provider today or tomorrow.
+        </div>
+      </div>
+      <div style="display:flex; align-items:center; gap:8px;">
+        <div style="display:inline-flex; border:1px solid var(--border-color, #ccc); border-radius:4px; overflow:hidden;">
+          <button type="button" class="day-tab active" data-day="0" style="padding:5px 12px; border:none; background:#007bff; color:#fff; font-size:12px; font-weight:600; cursor:pointer;">
+            Today
+          </button>
+          <button type="button" class="day-tab" data-day="1" style="padding:5px 12px; border:none; background:var(--body-bg, #fff); color:var(--body-fg, #333); font-size:12px; font-weight:600; cursor:pointer;">
+            Tomorrow
+          </button>
+        </div>
+        <button type="button" id="btn-fetch-live" class="button" style="background:#28a745; color:#fff; border:none; padding:6px 14px; border-radius:4px; font-size:12px; font-weight:600; cursor:pointer; display:inline-flex; align-items:center; gap:5px;">
+          <span>⚡</span> Fetch Tournaments
+        </button>
+      </div>
+    </div>
+
+    <div id="inspector-status" style="display:none; font-size:12px; padding:8px 12px; border-radius:4px; margin-bottom:10px;"></div>
+
+    <div id="inspector-results-wrap" style="display:none;">
+      <div style="margin-bottom:8px;">
+        <input type="text" id="inspector-filter" placeholder="Filter tournaments list..." style="width:100%; max-width:360px; padding:6px 10px; font-size:12px; border:1px solid var(--border-color, #ccc); border-radius:4px;">
+      </div>
+      <div style="max-height:320px; overflow-y:auto; border:1px solid var(--hairline-color, #e0e0e0); border-radius:4px; background:var(--body-bg, #fff);">
+        <table id="inspector-table" style="width:100%; border-collapse:collapse; font-size:12px; text-align:left;">
+          <thead style="background:var(--darkened-bg, #f1f1f1); position:sticky; top:0;">
+            <tr>
+              <th style="padding:8px 12px; border-bottom:1px solid var(--border-color, #ccc);">Tournament Name (API)</th>
+              <th style="padding:8px 12px; border-bottom:1px solid var(--border-color, #ccc); width:90px;">Matches</th>
+              <th style="padding:8px 12px; border-bottom:1px solid var(--border-color, #ccc); width:180px; text-align:right;">Actions</th>
+            </tr>
+          </thead>
+          <tbody id="inspector-tbody">
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+{{ sport_exclusion_presets|json_script:"exclusion-presets-data" }}
+
+<script>
+(function() {
+  const sportId = "{{ sport_object_id|default:'' }}";
+  const tournamentsField = document.getElementById("id_tournaments_filter");
+  const excludeField = document.getElementById("id_exclude_tournaments_filter");
+
+  function appendPattern(field, pattern) {
+    if (!field || !pattern) return;
+    const trimmed = pattern.trim();
+    if (!trimmed) return;
+    const current = field.value.split(/\r?\n/).map(s => s.trim()).filter(Boolean);
+    if (!current.includes(trimmed)) {
+      current.push(trimmed);
+      field.value = current.join("\n");
+      field.dispatchEvent(new Event("change", { bubbles: true }));
+    }
+  }
+
+  // 1. Popular Chips Click
+  document.querySelectorAll(".preset-chip").forEach(btn => {
+    btn.addEventListener("click", function() {
+      const chip = this.getAttribute("data-chip");
+      appendPattern(tournamentsField, chip);
+      const originalText = this.innerHTML;
+      this.innerHTML = '<span style="color:#28a745; font-weight:700;">✓</span> Added';
+      this.style.borderColor = '#28a745';
+      setTimeout(() => {
+        this.innerHTML = originalText;
+        this.style.borderColor = '';
+      }, 1200);
+    });
+  });
+
+  // 2. Recommended Exclusions
+  const applyExclusionsBtn = document.getElementById("btn-apply-exclusions");
+  if (applyExclusionsBtn) {
+    applyExclusionsBtn.addEventListener("click", function() {
+      const dataEl = document.getElementById("exclusion-presets-data");
+      if (!dataEl) return;
+      try {
+        const presets = JSON.parse(dataEl.textContent);
+        if (Array.isArray(presets)) {
+          presets.forEach(p => appendPattern(excludeField, p));
+          const orig = applyExclusionsBtn.textContent;
+          applyExclusionsBtn.textContent = "✓ Exclusions Inserted!";
+          applyExclusionsBtn.style.background = "#28a745";
+          setTimeout(() => {
+            applyExclusionsBtn.textContent = orig;
+            applyExclusionsBtn.style.background = "#dc3545";
+          }, 1500);
+        }
+      } catch (err) {
+        console.error("Error loading exclusions", err);
+      }
+    });
+  }
+
+  // 3. Live Inspector
+  let activeDay = 0;
+  const dayTabs = document.querySelectorAll(".day-tab");
+  dayTabs.forEach(tab => {
+    tab.addEventListener("click", function() {
+      dayTabs.forEach(t => {
+        t.classList.remove("active");
+        t.style.background = "var(--body-bg, #fff)";
+        t.style.color = "var(--body-fg, #333)";
+      });
+      this.classList.add("active");
+      this.style.background = "#007bff";
+      this.style.color = "#fff";
+      activeDay = parseInt(this.getAttribute("data-day") || "0", 10);
+    });
+  });
+
+  const fetchBtn = document.getElementById("btn-fetch-live");
+  const statusEl = document.getElementById("inspector-status");
+  const resultsWrap = document.getElementById("inspector-results-wrap");
+  const tbody = document.getElementById("inspector-tbody");
+  const filterInput = document.getElementById("inspector-filter");
+  let loadedTournaments = [];
+
+  function renderRows(items) {
+    tbody.innerHTML = "";
+    if (!items || items.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="3" style="padding:16px; text-align:center; color:var(--body-quiet-color, #888);">No tournaments found for this date.</td></tr>';
+      return;
+    }
+    items.forEach(item => {
+      const tr = document.createElement("tr");
+      tr.style.borderBottom = "1px solid var(--hairline-color, #eee)";
+      tr.innerHTML = `
+        <td style="padding:8px 12px; font-weight:500; color:var(--body-fg, #222);">${item.name}</td>
+        <td style="padding:8px 12px; color:var(--body-quiet-color, #666);">${item.count} match${item.count === 1 ? '' : 'es'}</td>
+        <td style="padding:8px 12px; text-align:right;">
+          <button type="button" class="btn-row-include" style="background:#28a745; color:#fff; border:none; padding:3px 8px; border-radius:3px; font-size:11px; font-weight:600; cursor:pointer; margin-right:4px;">
+            + Include
+          </button>
+          <button type="button" class="btn-row-exclude" style="background:#dc3545; color:#fff; border:none; padding:3px 8px; border-radius:3px; font-size:11px; font-weight:600; cursor:pointer;">
+            − Exclude
+          </button>
+        </td>
+      `;
+
+      tr.querySelector(".btn-row-include").addEventListener("click", function() {
+        appendPattern(tournamentsField, item.name);
+        this.textContent = "✓ Added";
+        this.style.background = "#155724";
+        setTimeout(() => {
+          this.textContent = "+ Include";
+          this.style.background = "#28a745";
+        }, 1200);
+      });
+
+      tr.querySelector(".btn-row-exclude").addEventListener("click", function() {
+        appendPattern(excludeField, item.name);
+        this.textContent = "✓ Excluded";
+        this.style.background = "#721c24";
+        setTimeout(() => {
+          this.textContent = "− Exclude";
+          this.style.background = "#dc3545";
+        }, 1200);
+      });
+
+      tbody.appendChild(tr);
+    });
+  }
+
+  if (filterInput) {
+    filterInput.addEventListener("input", function() {
+      const q = this.value.toLowerCase().trim();
+      const filtered = loadedTournaments.filter(t => t.name.toLowerCase().includes(q));
+      renderRows(filtered);
+    });
+  }
+
+  if (fetchBtn && sportId) {
+    fetchBtn.addEventListener("click", function() {
+      fetchBtn.disabled = true;
+      fetchBtn.innerHTML = '<span>⏳</span> Fetching...';
+      statusEl.style.display = "block";
+      statusEl.style.background = "var(--darkened-bg, #f1f1f1)";
+      statusEl.style.color = "var(--body-fg, #333)";
+      statusEl.textContent = "Connecting to provider for live tournaments (consumes 1 API request)...";
+
+      const url = `../live-tournaments/?day=${activeDay}`;
+      fetch(url)
+        .then(resp => {
+          if (!resp.ok) {
+            return resp.json().then(j => { throw new Error(j.error || `HTTP ${resp.status}`); });
+          }
+          return resp.json();
+        })
+        .then(data => {
+          fetchBtn.disabled = false;
+          fetchBtn.innerHTML = '<span>⚡</span> Fetch Tournaments';
+          if (data.error) {
+            statusEl.style.background = "#f8d7da";
+            statusEl.style.color = "#721c24";
+            statusEl.textContent = "Error: " + data.error;
+            return;
+          }
+          loadedTournaments = data.tournaments || [];
+          statusEl.style.background = "#d4edda";
+          statusEl.style.color = "#155724";
+          statusEl.textContent = `Provider (${data.provider}): Found ${loadedTournaments.length} active tournaments for ${activeDay === 0 ? 'Today' : 'Tomorrow'}.`;
+          resultsWrap.style.display = "block";
+          if (filterInput) filterInput.value = "";
+          renderRows(loadedTournaments);
+        })
+        .catch(err => {
+          fetchBtn.disabled = false;
+          fetchBtn.innerHTML = '<span>⚡</span> Fetch Tournaments';
+          statusEl.style.background = "#f8d7da";
+          statusEl.style.color = "#721c24";
+          statusEl.textContent = "Failed to fetch tournaments: " + err.message;
+        });
+    });
+  }
+})();
+</script>
+{% endif %}
+{% endblock %}

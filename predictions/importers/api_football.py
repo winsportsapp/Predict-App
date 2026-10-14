@@ -264,6 +264,35 @@ class APIFootballProvider(Provider):
 
         return all_events
 
+    def list_tournaments(self, sport_name, day=0):
+        """[(tournament_name, match_count), ...] for one day (e.g. day=0 today, day=1 tomorrow).
+        Matches the FlashLiveProvider.list_tournaments interface.
+        """
+        if not self.supports(sport_name):
+            return []
+
+        effective_max = max(0, self.max_days_ahead)
+        clamped_day = min(day, effective_max)
+        today = datetime.now(self.local_tz).date()
+        target_date = (today + timedelta(days=clamped_day)).isoformat()
+
+        try:
+            raw_fixtures = self._get("/fixtures", {"date": target_date})
+        except ProviderError as exc:
+            if _is_plan_limit_error(exc):
+                return []
+            raise
+
+        counts = {}
+        for item in raw_fixtures:
+            league_obj = item.get("league", {})
+            league_name = league_obj.get("name") or "Football"
+            country = league_obj.get("country")
+            full_name = f"{country}: {league_name}" if country else league_name
+            counts[full_name] = counts.get(full_name, 0) + 1
+
+        return sorted(counts.items(), key=lambda x: x[0].lower())
+
     def fetch_odds(self, sport_name, indent_days=0):
         """{external_id: (home_odds, away_odds, draw_odds)} for fixtures on target date."""
         if not self.supports(sport_name):

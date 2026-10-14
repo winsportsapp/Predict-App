@@ -56,10 +56,11 @@ class Command(BaseCommand):
             return
 
         if options["list_tournaments"]:
-            provider = FlashLiveProvider()
             sport_name = (options["sport"] or "Football").title()
-            if not provider.supports(sport_name):
-                raise CommandError(f"No FlashLive sport ID for {sport_name}.")
+            providers = get_providers()
+            provider = provider_for(sport_name, providers)
+            if not provider or not hasattr(provider, "list_tournaments"):
+                raise CommandError(f"No configured provider with list_tournaments support for {sport_name}.")
             try:
                 for name, count in provider.list_tournaments(sport_name, options["day"]):
                     plural = "es" if count != 1 else ""
