@@ -25,15 +25,21 @@ from .models import (
     UserPredictionCount,
     VoucherRedemption,
 )
+from django.db import transaction
+from django.shortcuts import redirect, render
+from django.urls import path, reverse
+from .importers.base import ProviderError
 from .importers.registry import get_providers, provider_for
 from .services import (
     apply_odds_and_points,
     confirm_suggested_result,
     fulfill_redemption,
     get_or_fetch_match_stats,
+    import_fixtures,
     reject_redemption,
     score_match,
     sync_match_statuses,
+    sync_results,
 )
 
 import logging
@@ -387,10 +393,135 @@ class MatchAdmin(admin.ModelAdmin):
         "publish_matches",
         "unpublish_matches",
         "confirm_suggested_results",
+        "fetch_suggested_results_for_matches",
         "fetch_odds_and_calculate_points",
         "fetch_h2h_and_recent_form",
     )
     change_list_template = "admin/predictions/match/change_list.html"
+
+    def get_urls(self):
+        urls = super().get_urls()
+        custom_urls = [
+            path(
+                "sync/",
+                self.admin_site.admin_view(self.sync_matches_view),
+                name="predictions_match_sync",
+            ),
+        ]
+        return custom_urls + urls
+
+    def sync_matches_view(self, request):
+        if not self.has_change_permission(request):
+            from django.core.exceptions import PermissionDenied
+            raise PermissionDenied
+
+        sports = Sport.objects.filter(is_active=True).order_by("name")
+
+        if request.method == "POST":
+            sync_fixtures = bool(request.POST.get("sync_fixtures"))
+            sync_results_flag = bool(request.POST.get("sync_results"))
+            sport_name = request.POST.get("sport", "").strip()
+            scope = request.POST.get("scope", "new_day")
+            new_day_only = (scope == "new_day")
+            dry_run = bool(request.POST.get("dry_run"))
+
+            if not (sync_fixtures or sync_results_flag):
+                self.message_user(
+                    request,
+                    "Please select at least one option: Import upcoming fixtures or Fetch match results.",
+                    messages.WARNING,
+                )
+                return redirect("admin:predictions_match_sync")
+
+            providers = get_providers()
+            if not providers:
+                self.message_user(
+                    request,
+                    "No sports data provider configured: API_FOOTBALL_KEY or RAPIDAPI_KEY is required.",
+                    messages.ERROR,
+                )
+                return redirect("admin:predictions_match_sync")
+
+            target_sports = sports
+            if sport_name:
+                target_sports = sports.filter(name__iexact=sport_name)
+                if not target_sports.exists():
+                    self.message_user(
+                        request, f"Sport '{sport_name}' not found or inactive.", messages.ERROR
+                    )
+                    return redirect("admin:predictions_match_sync")
+
+            total_fixtures_created = 0
+            total_fixtures_updated = 0
+            total_odds_filled = 0
+            total_results_suggested = 0
+            errors = []
+
+            with transaction.atomic():
+                for sport in target_sports:
+                    provider = provider_for(sport.name, providers)
+                    if not provider:
+                        continue
+                    try:
+                        if sync_fixtures:
+                            summary = import_fixtures(
+                                provider,
+                                sport,
+                                days_ahead=7,
+                                download_images=not dry_run,
+                                new_day_only=new_day_only,
+                                with_odds=True,
+                                force=True,
+                            )
+                            total_fixtures_created += summary.get("created", 0)
+                            total_fixtures_updated += summary.get("updated", 0)
+                            total_odds_filled += summary.get("odds_filled", 0)
+
+                        if sync_results_flag:
+                            res_summary = sync_results(provider, sport, force=True)
+                            total_results_suggested += res_summary.get("suggested", 0)
+
+                    except ProviderError as exc:
+                        errors.append(f"{sport.name}: {exc}")
+                    except Exception as exc:
+                        logger.exception("Error syncing sport %s: %s", sport.name, exc)
+                        errors.append(f"{sport.name}: {exc}")
+
+                if dry_run:
+                    transaction.set_rollback(True)
+
+            used_requests = sum(getattr(p, "requests_made", 0) for p in providers)
+            dry_label = "[Dry Run - Nothing Saved] " if dry_run else ""
+
+            msg_parts = []
+            if sync_fixtures:
+                odds_note = (
+                    f" ({total_odds_filled} with odds & points)" if total_odds_filled else ""
+                )
+                msg_parts.append(
+                    f"{total_fixtures_created} fixture(s) created, {total_fixtures_updated} updated{odds_note}"
+                )
+            if sync_results_flag:
+                msg_parts.append(f"{total_results_suggested} suggested result(s) found")
+
+            summary_text = (
+                f"{dry_label}{' and '.join(msg_parts) if msg_parts else 'No fixtures or results changed'}. "
+                f"API requests used: {used_requests}."
+            )
+            if errors:
+                summary_text += f" Encountered errors: {'; '.join(errors)}"
+                self.message_user(request, summary_text, messages.WARNING)
+            else:
+                self.message_user(request, summary_text, messages.SUCCESS)
+
+            return redirect("admin:predictions_match_changelist")
+
+        context = {
+            **self.admin_site.each_context(request),
+            "title": "Sync External Matches & Results",
+            "sports": sports,
+        }
+        return render(request, "admin/predictions/match/sync_matches.html", context)
 
     def changelist_view(self, request, extra_context=None):
         # Links for the "Filter by ..." rows under the date hierarchy.
@@ -592,6 +723,80 @@ class MatchAdmin(admin.ModelAdmin):
             )
         for error in failed:
             self.message_user(request, error, messages.ERROR)
+
+    @admin.action(description="Fetch suggested results from provider (API-Football / Flashscore)")
+    def fetch_suggested_results_for_matches(self, request, queryset):
+        providers = get_providers()
+        if not providers:
+            self.message_user(request, "No sports data provider is configured.", messages.ERROR)
+            return
+
+        sync_match_statuses()
+        by_sport = {}
+        for m in queryset.select_related("sport", "team_a", "team_b"):
+            if not m.external_id:
+                continue
+            if m.has_result or m.status not in (Match.Status.AWAITING_RESULT, Match.Status.SCHEDULED):
+                continue
+            by_sport.setdefault(m.sport, []).append(m)
+
+        if not by_sport:
+            self.message_user(
+                request,
+                "No selected matches are awaiting a result with an external provider ID.",
+                messages.WARNING,
+            )
+            return
+
+        suggested_count = 0
+        called_off_count = 0
+        from .constants import DRAW_SPORTS
+        for sport, matches in by_sport.items():
+            provider = provider_for(sport.name, providers)
+            if not provider:
+                continue
+            kickoffs = {m.external_id: m.start_time for m in matches}
+            try:
+                results_map = provider.fetch_results(sport.name, kickoffs)
+            except Exception as exc:
+                self.message_user(request, f"{sport.name}: Error fetching results ({exc})", messages.ERROR)
+                continue
+
+            for m in matches:
+                event = results_map.get(m.external_id)
+                if not event:
+                    continue
+                if event.called_off:
+                    called_off_count += 1
+                    continue
+                if event.result is None:
+                    continue
+                m.suggested_winner = {"home": m.team_a, "away": m.team_b}.get(event.result)
+                m.suggested_is_draw = (event.result == "draw" and sport.name in DRAW_SPORTS)
+                m.suggested_team_a_score = event.home_score
+                m.suggested_team_b_score = event.away_score
+                m.suggested_at = timezone.now()
+                m.save(update_fields=[
+                    "suggested_winner",
+                    "suggested_is_draw",
+                    "suggested_team_a_score",
+                    "suggested_team_b_score",
+                    "suggested_at",
+                ])
+                suggested_count += 1
+
+        if suggested_count:
+            self.message_user(
+                request,
+                f"{suggested_count} suggested result(s) imported. Review and confirm them with 'Confirm suggested results' to score predictions.",
+                messages.SUCCESS,
+            )
+        else:
+            self.message_user(
+                request,
+                "No new results found from the provider for the selected matches.",
+                messages.INFO,
+            )
 
     @admin.action(description="Fetch live odds & calculate points (API-Football / Flashscore)")
     def fetch_odds_and_calculate_points(self, request, queryset):

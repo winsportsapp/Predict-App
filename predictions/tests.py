@@ -7333,6 +7333,139 @@ class APIFootballProviderTests(TestCase):
         self.assertEqual(p.session.get.call_count, 0)
 
 
+class AdminManualSyncTests(TestCase):
+    def setUp(self):
+        from django.contrib.auth.models import User
+        self.admin = User.objects.create_superuser("adminuser", "admin@example.com", "pass123")
+        self.client.force_login(self.admin)
+
+    def test_sync_view_requires_permission(self):
+        from django.contrib.auth.models import User
+        regular_user = User.objects.create_user("reguser", "reg@example.com", "pass123")
+        self.client.force_login(regular_user)
+        resp = self.client.get(reverse("admin:predictions_match_sync"))
+        self.assertEqual(resp.status_code, 302)
+
+        # Staff user without change permission gets 403
+        staff_user = User.objects.create_user("staffuser", "staff@example.com", "pass123", is_staff=True)
+        self.client.force_login(staff_user)
+        resp = self.client.get(reverse("admin:predictions_match_sync"))
+        self.assertEqual(resp.status_code, 403)
+
+    def test_sync_view_renders_form_with_sports(self):
+        resp = self.client.get(reverse("admin:predictions_match_sync"))
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "Sync External Matches &amp; Results")
+        self.assertContains(resp, "All Active Sports")
+        self.assertContains(resp, "Football")
+
+    def test_sync_view_post_requires_selection(self):
+        resp = self.client.post(
+            reverse("admin:predictions_match_sync"),
+            {"sport": "Football"},
+            follow=True,
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "Please select at least one option")
+
+    def test_sync_view_post_executes_fixtures(self):
+        from unittest import mock
+        from datetime import timedelta
+        from predictions.importers.base import ExternalEvent
+
+        ev = ExternalEvent(
+            source="fake",
+            external_id="sync_fx_1",
+            sport="Football",
+            event_name="Premier League",
+            home="Team Alpha",
+            away="Team Beta",
+            start_time=timezone.now() + timedelta(days=1),
+        )
+        fake_provider = FakeProvider([ev])
+        with mock.patch("predictions.admin.get_providers", return_value=[fake_provider]):
+            with mock.patch("predictions.admin.provider_for", return_value=fake_provider):
+                resp = self.client.post(
+                    reverse("admin:predictions_match_sync"),
+                    {
+                        "sync_fixtures": "1",
+                        "sport": "Football",
+                        "scope": "new_day",
+                    },
+                    follow=True,
+                )
+        self.assertEqual(resp.status_code, 200)
+        self.assertTrue(Match.objects.filter(external_id="sync_fx_1").exists())
+        self.assertContains(resp, "fixture(s) created")
+
+    def test_sync_view_dry_run_saves_nothing(self):
+        from unittest import mock
+        from datetime import timedelta
+        from predictions.importers.base import ExternalEvent
+
+        ev = ExternalEvent(
+            source="fake",
+            external_id="sync_fx_dry",
+            sport="Football",
+            event_name="Premier League",
+            home="Dry Alpha",
+            away="Dry Beta",
+            start_time=timezone.now() + timedelta(days=1),
+        )
+        fake_provider = FakeProvider([ev])
+        with mock.patch("predictions.admin.get_providers", return_value=[fake_provider]):
+            with mock.patch("predictions.admin.provider_for", return_value=fake_provider):
+                resp = self.client.post(
+                    reverse("admin:predictions_match_sync"),
+                    {
+                        "sync_fixtures": "1",
+                        "sport": "Football",
+                        "scope": "new_day",
+                        "dry_run": "1",
+                    },
+                    follow=True,
+                )
+        self.assertEqual(resp.status_code, 200)
+        self.assertFalse(Match.objects.filter(external_id="sync_fx_dry").exists())
+        self.assertContains(resp, "Dry Run - Nothing Saved")
+
+    def test_action_fetch_suggested_results_for_matches(self):
+        from unittest import mock
+        from django.contrib import admin
+        from predictions.importers.base import ExternalEvent
+
+        m = awaiting_external_match()
+        ev = ExternalEvent(
+            source="fake",
+            external_id=m.external_id,
+            sport="Football",
+            event_name="League",
+            home="Team A",
+            away="Team B",
+            start_time=m.start_time,
+            result="home",
+            home_score="2",
+            away_score="1",
+        )
+        fake_provider = FakeProvider(results={m.external_id: ev})
+        with mock.patch("predictions.admin.get_providers", return_value=[fake_provider]):
+            with mock.patch("predictions.admin.provider_for", return_value=fake_provider):
+                resp = self.client.post(
+                    reverse("admin:predictions_match_changelist"),
+                    {
+                        "action": "fetch_suggested_results_for_matches",
+                        admin.helpers.ACTION_CHECKBOX_NAME: [m.pk],
+                    },
+                    follow=True,
+                )
+        self.assertEqual(resp.status_code, 200)
+        m.refresh_from_db()
+        self.assertEqual(m.suggested_winner, m.team_a)
+        self.assertEqual(m.suggested_team_a_score, "2")
+        self.assertEqual(m.suggested_team_b_score, "1")
+        self.assertContains(resp, "suggested result(s) imported")
+
+
 
 
 

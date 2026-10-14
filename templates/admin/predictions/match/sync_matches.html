@@ -1,0 +1,190 @@
+{% extends "admin/base_site.html" %}
+{% load i18n static %}
+
+{% block extrahead %}
+{{ block.super }}
+<style>
+  .sync-card {
+    background: var(--body-bg, #fff);
+    border: 1px solid var(--hairline-color, #e0e0e0);
+    border-radius: 8px;
+    padding: 24px;
+    max-width: 680px;
+    margin-top: 16px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+  }
+  .sync-section {
+    margin-bottom: 22px;
+  }
+  .sync-section label.section-title {
+    display: block;
+    font-weight: 600;
+    font-size: 14px;
+    margin-bottom: 8px;
+    color: var(--body-fg, #333);
+  }
+  .sync-help {
+    font-size: 12px;
+    color: var(--body-quiet-color, #666);
+    margin-top: 4px;
+    line-height: 1.4;
+  }
+  .checkbox-group, .radio-group {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-top: 6px;
+  }
+  .option-label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    cursor: pointer;
+  }
+  .sync-select {
+    width: 100%;
+    max-width: 380px;
+    padding: 8px 12px;
+    border-radius: 4px;
+    border: 1px solid var(--border-color, #ccc);
+    background: var(--body-bg, #fff);
+    color: var(--body-fg, #333);
+    font-size: 13px;
+  }
+  .sync-actions {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-top: 28px;
+    padding-top: 16px;
+    border-top: 1px solid var(--hairline-color, #eee);
+  }
+  .btn-submit {
+    background: var(--primary, #0052cc);
+    color: #fff;
+    border: none;
+    padding: 10px 20px;
+    font-size: 13px;
+    font-weight: 600;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: background 0.15s;
+  }
+  .btn-submit:hover {
+    background: #0041a8;
+  }
+  .btn-cancel {
+    color: var(--body-quiet-color, #666);
+    text-decoration: none;
+    font-size: 13px;
+  }
+  .btn-cancel:hover {
+    text-decoration: underline;
+  }
+  .info-badge {
+    display: inline-block;
+    padding: 3px 8px;
+    border-radius: 4px;
+    font-size: 11px;
+    background: rgba(0, 82, 204, 0.1);
+    color: #0052cc;
+    font-weight: 600;
+    margin-left: 6px;
+  }
+</style>
+{% endblock %}
+
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+<a href="{% url 'admin:index' %}">{% translate 'Home' %}</a>
+&rsaquo; <a href="{% url 'admin:app_list' app_label='predictions' %}">Predictions</a>
+&rsaquo; <a href="{% url 'admin:predictions_match_changelist' %}">Matches</a>
+&rsaquo; Sync Matches &amp; Results
+</div>
+{% endblock %}
+
+{% block content %}
+<div id="content-main">
+  <h1>⚡ Sync External Matches &amp; Results</h1>
+  <p class="sync-help" style="font-size: 13px; margin-bottom: 20px;">
+    Import upcoming fixtures from data providers (as unpublished matches) and pull suggested results for finished matches awaiting scoring.
+  </p>
+
+  <form method="post" action="">
+    {% csrf_token %}
+    <div class="sync-card">
+
+      <!-- Mode selection -->
+      <div class="sync-section">
+        <label class="section-title">1. What would you like to sync?</label>
+        <div class="checkbox-group">
+          <label class="option-label">
+            <input type="checkbox" name="sync_fixtures" value="1" checked id="id_sync_fixtures">
+            <strong>Import upcoming fixtures</strong> (creates unpublished matches with odds &amp; points)
+          </label>
+          <label class="option-label">
+            <input type="checkbox" name="sync_results" value="1" checked id="id_sync_results">
+            <strong>Fetch match results</strong> (pulls suggested scores for finished matches awaiting results)
+          </label>
+        </div>
+      </div>
+
+      <!-- Sport selection -->
+      <div class="sync-section">
+        <label class="section-title" for="id_sport">2. Select Sport</label>
+        <select name="sport" id="id_sport" class="sync-select">
+          <option value="">All Active Sports</option>
+          {% for sport in sports %}
+            <option value="{{ sport.name }}">{{ sport.name }}</option>
+          {% endfor %}
+        </select>
+        <div class="sync-help">
+          Filter by a specific sport to save API credits, or leave on <em>All Active Sports</em>.
+        </div>
+      </div>
+
+      <!-- Scope selection for fixtures -->
+      <div class="sync-section" id="scope_section">
+        <label class="section-title">3. Fixture Window Scope</label>
+        <div class="radio-group">
+          <label class="option-label">
+            <input type="radio" name="scope" value="new_day" checked>
+            <span><strong>Tomorrow only</strong> (1 API request per sport &mdash; fast daily sync)</span>
+          </label>
+          <label class="option-label">
+            <input type="radio" name="scope" value="full">
+            <span><strong>Full upcoming window</strong> (Today + tomorrow for Football, up to 7 days for others)</span>
+          </label>
+        </div>
+        <div class="sync-help">
+          Football uses API-Football (max 1 day lookahead on Free tier). Other sports use FlashLive (up to 7 days lookahead).
+        </div>
+      </div>
+
+      <!-- Dry Run -->
+      <div class="sync-section">
+        <label class="section-title">4. Execution Mode</label>
+        <label class="option-label">
+          <input type="checkbox" name="dry_run" value="1" id="id_dry_run">
+          <span><strong>Dry run preview</strong> (checks provider and calculates changes without saving to the database)</span>
+        </label>
+      </div>
+
+      <!-- Actions -->
+      <div class="sync-actions">
+        <button type="submit" class="btn-submit">Run Sync Now</button>
+        <a href="{% url 'admin:predictions_match_changelist' %}" class="btn-cancel">Cancel</a>
+      </div>
+    </div>
+  </form>
+</div>
+
+<script>
+  // Hide scope section if fixtures are unchecked
+  document.getElementById('id_sync_fixtures').addEventListener('change', function() {
+    var scopeSection = document.getElementById('scope_section');
+    scopeSection.style.display = this.checked ? 'block' : 'none';
+  });
+</script>
+{% endblock %}
