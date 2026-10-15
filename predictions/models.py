@@ -154,7 +154,7 @@ class Sport(models.Model):
 
     monthly_match_limit = models.PositiveIntegerField(
         default=50,
-        verbose_name="Limit for current month",
+        verbose_name="Limit for Current Month H2H",
         help_text="Target limit of published matches for the current month set by admin.",
     )
     order = models.PositiveSmallIntegerField(
@@ -188,19 +188,21 @@ class Sport(models.Model):
 
     class Meta:
         ordering = ["order", "name"]
+        verbose_name = "Manage Credit"
+        verbose_name_plural = "Manage Credits"
 
     def __str__(self):
         return self.name
 
 
 class MatchCountCredit(Sport):
-    """Proxy of Sport for the admin: a dedicated 'Matches Counts and Credits'
-    dashboard listing monthly published matches, admin limit, and balance available."""
+    """Proxy of Sport for the admin: a dedicated 'Manage Tournaments'
+    dashboard for configuring tournament inclusion and exclusion filters."""
 
     class Meta:
         proxy = True
-        verbose_name = "Matches Count and Credit"
-        verbose_name_plural = "Matches Counts and Credits"
+        verbose_name = "Manage Tournament"
+        verbose_name_plural = "Manage Tournaments"
 
 
 class Team(models.Model):

@@ -4,7 +4,7 @@
 {% block extrahead %}
 {{ block.super }}
 <style>
-  /* Non-sortable clean headers */
+  /* Non-sortable clean headers for upper table */
   #result_list th {
     cursor: default !important;
   }
@@ -56,6 +56,153 @@
   .odds-disabled-grey input[type="checkbox"] {
     pointer-events: none !important;
     cursor: not-allowed !important;
+  }
+
+  /* ========================================================
+     Merged Matches Counts & Credits Section (Table 2)
+     ======================================================== */
+  .match-credits-merged-section {
+    margin-top: 32px;
+    border-top: 2px dashed var(--hairline-color, #e2e8f0);
+    padding-top: 24px;
+  }
+  .match-credits-summary-card {
+    background: var(--darkened-bg, #f8fafc);
+    border: 1px solid var(--border-color, #e2e8f0);
+    border-radius: 8px;
+    padding: 16px 20px;
+    margin-bottom: 16px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  }
+  .match-credits-title {
+    margin: 0 0 6px 0;
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--body-fg, #1e293b);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .match-credits-desc {
+    margin: 0;
+    font-size: 13px;
+    color: var(--body-quiet-color, #64748b);
+    line-height: 1.4;
+  }
+
+  /* Table 2 Styling */
+  .match-credits-table {
+    width: 100% !important;
+    border-collapse: collapse !important;
+    margin-bottom: 8px !important;
+  }
+  .match-credits-table th {
+    cursor: default !important;
+    text-align: center !important;
+    vertical-align: middle !important;
+    padding: 10px 12px !important;
+    background: var(--darkened-bg, #f1f5f9) !important;
+    font-weight: 700 !important;
+    color: var(--body-fg, #334155) !important;
+    border-bottom: 1px solid var(--border-color, #cbd5e1) !important;
+  }
+  .match-credits-table th.column-mc-sport {
+    text-align: left !important;
+  }
+  .match-credits-table th.column-mc-limit {
+    white-space: normal !important;
+    line-height: 1.25 !important;
+    width: 170px !important;
+  }
+  .match-credits-table td {
+    vertical-align: middle !important;
+    padding: 8px 12px !important;
+    border-bottom: 1px solid var(--hairline-color, #f1f5f9) !important;
+  }
+  .match-credits-table td.field-mc-serial {
+    text-align: center !important;
+    font-weight: 700 !important;
+    color: var(--body-quiet-color, #666) !important;
+    width: 60px !important;
+  }
+  .match-credits-table td.field-mc-sport {
+    font-size: 14px !important;
+    font-weight: 700 !important;
+  }
+  .match-credits-table td.field-mc-published {
+    text-align: center !important;
+    width: 180px !important;
+  }
+  .published-badge {
+    display: inline-block;
+    padding: 3px 12px;
+    font-weight: 700;
+    background: #e0f2fe;
+    color: #0369a1;
+    border-radius: 12px;
+    font-size: 13px;
+  }
+  .match-credits-table td.field-mc-limit {
+    text-align: center !important;
+    width: 170px !important;
+  }
+  .monthly-limit-input {
+    width: 85px !important;
+    text-align: center !important;
+    font-weight: 700 !important;
+    font-size: 13px !important;
+    padding: 5px 8px !important;
+    border: 1px solid var(--border-color, #ccc) !important;
+    border-radius: 4px !important;
+    color: var(--body-fg, #1e293b) !important;
+    background: var(--body-bg, #fff) !important;
+  }
+  .match-credits-table td.field-mc-balance {
+    text-align: center !important;
+    width: 170px !important;
+  }
+
+  /* Totals Section above Pagination */
+  .match-credits-totals-container {
+    background: var(--darkened-bg, #f8fafc);
+    border: 1px solid var(--border-color, #e2e8f0);
+    border-radius: 8px;
+    padding: 14px 18px;
+    margin-top: 16px;
+    margin-bottom: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+  }
+  .match-credits-total-line {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 13.5px;
+    color: var(--body-fg, #334155);
+  }
+  .match-credits-total-line .total-label {
+    font-weight: 600;
+  }
+  .total-badge {
+    display: inline-block;
+    padding: 3px 12px;
+    font-weight: 700;
+    border-radius: 12px;
+    font-size: 13px;
+  }
+  .total-badge.badge-ok {
+    color: #16a34a;
+    background: #dcfce7;
+  }
+  .total-badge.badge-low {
+    color: #d97706;
+    background: #fef3c7;
+  }
+  .total-badge.badge-exceeded {
+    color: #dc2626;
+    background: #fee2e2;
   }
 </style>
 
@@ -137,4 +284,71 @@ document.addEventListener("DOMContentLoaded", function() {
   }
 });
 </script>
+{% endblock %}
+
+{% block result_list %}
+{{ block.super }}
+
+<!-- Matches Counts and Credits Section Merged Beneath Existing Content -->
+<div class="match-credits-merged-section">
+  <div class="match-credits-summary-card">
+    <div class="match-credits-title">
+      <span>📊</span> Matches Counts &amp; Credits Dashboard — {{ current_month_name }}
+    </div>
+    <p class="match-credits-desc">
+      Monitor published matches for the current calendar month against admin-defined monthly limits.
+      <strong>Balance Available</strong> is automatically computed as <em>(Limit for Current Month H2H − Published for current month)</em>.
+      You can adjust the limits directly in the table below and click <strong>Save</strong>.
+    </p>
+  </div>
+
+  <div class="results">
+    <table id="match_credits_table" class="match-credits-table">
+      <thead>
+        <tr>
+          <th scope="col" class="column-mc-serial">Sl.No</th>
+          <th scope="col" class="column-mc-sport">Sport</th>
+          <th scope="col" class="column-mc-published">Published for current month</th>
+          <th scope="col" class="column-mc-limit">Limit for Current Month<br>H2H</th>
+          <th scope="col" class="column-mc-balance">Balance available</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in match_credits_rows %}
+        <tr class="{% cycle 'row1' 'row2' %}">
+          <td class="field-mc-serial">{{ row.serial_number }}</td>
+          <td class="field-mc-sport"><strong>{{ row.sport_name }}</strong></td>
+          <td class="field-mc-published">
+            <span class="published-badge">{{ row.published_count }}</span>
+          </td>
+          <td class="field-mc-limit">
+            <input type="number" name="monthly_match_limit_{{ row.id }}" value="{{ row.monthly_match_limit }}" min="0" class="monthly-limit-input">
+          </td>
+          <td class="field-mc-balance">
+            <span class="total-badge {{ row.badge_class }}">{{ row.badge_text }}</span>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}
+
+{% block pagination %}
+<div class="match-credits-totals-container">
+  <div class="match-credits-total-line">
+    <span class="total-label">Total Balance available for Football API:</span>
+    <span class="total-badge {% if football_balance < 0 %}badge-exceeded{% elif football_balance <= 5 %}badge-low{% else %}badge-ok{% endif %}">
+      {{ football_balance }}{% if football_balance < 0 %} (Exceeded){% elif football_balance <= 5 %} (Low){% endif %}
+    </span>
+  </div>
+  <div class="match-credits-total-line">
+    <span class="total-label">Total Balance available for Other sports (Flashlive):</span>
+    <span class="total-badge {% if flashlive_balance < 0 %}badge-exceeded{% elif flashlive_balance <= 20 %}badge-low{% else %}badge-ok{% endif %}">
+      {{ flashlive_balance }}{% if flashlive_balance < 0 %} (Exceeded){% elif flashlive_balance <= 20 %} (Low){% endif %}
+    </span>
+  </div>
+</div>
+{{ block.super }}
 {% endblock %}

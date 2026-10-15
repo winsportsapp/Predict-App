@@ -4,54 +4,8 @@
 {% block extrahead %}
 {{ block.super }}
 <style>
-  /* Header styling */
-  #result_list th {
-    cursor: default !important;
-    text-align: center !important;
-    vertical-align: middle !important;
-    padding: 10px 12px !important;
-  }
-  #result_list th.column-sport_name {
-    text-align: left !important;
-  }
-  #result_list td {
-    vertical-align: middle !important;
-    padding: 8px 12px !important;
-  }
-  #result_list td.field-serial_number {
-    text-align: center !important;
-    font-weight: 700 !important;
-    color: var(--body-quiet-color, #666) !important;
-    width: 60px !important;
-  }
-  #result_list td.field-sport_name {
-    font-size: 14px !important;
-    font-weight: 700 !important;
-  }
-  #result_list td.field-published_for_current_month {
-    text-align: center !important;
-    width: 180px !important;
-  }
-  #result_list td.field-monthly_match_limit {
-    text-align: center !important;
-    width: 170px !important;
-  }
-  #result_list td.field-monthly_match_limit input[type="number"] {
-    width: 85px !important;
-    text-align: center !important;
-    font-weight: 700 !important;
-    font-size: 13px !important;
-    padding: 5px 8px !important;
-    border: 1px solid var(--border-color, #ccc) !important;
-    border-radius: 4px !important;
-  }
-  #result_list td.field-balance_available {
-    text-align: center !important;
-    width: 170px !important;
-  }
-
-  /* Summary Card Banner */
-  .match-credits-summary-card {
+  /* Manage Tournaments Dashboard Styling */
+  .tournaments-summary-card {
     background: var(--darkened-bg, #f8fafc);
     border: 1px solid var(--border-color, #e2e8f0);
     border-radius: 8px;
@@ -59,7 +13,7 @@
     margin-bottom: 20px;
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
   }
-  .match-credits-title {
+  .tournaments-title {
     margin: 0 0 6px 0;
     font-size: 16px;
     font-weight: 700;
@@ -68,25 +22,286 @@
     align-items: center;
     gap: 8px;
   }
-  .match-credits-desc {
-    margin: 0;
+  .tournaments-desc {
+    margin: 0 0 8px 0;
     font-size: 13px;
     color: var(--body-quiet-color, #64748b);
-    line-height: 1.4;
+    line-height: 1.45;
+  }
+  .tournaments-tips {
+    display: flex;
+    gap: 16px;
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px dashed var(--hairline-color, #e2e8f0);
+    font-size: 12px;
+    color: var(--body-quiet-color, #64748b);
+    flex-wrap: wrap;
+  }
+  .tournaments-tip-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .tournaments-tip-item code {
+    background: rgba(0, 0, 0, 0.05);
+    padding: 1px 5px;
+    border-radius: 3px;
+    font-size: 11.5px;
+  }
+
+  /* Table Styling */
+  .tournaments-table {
+    width: 100% !important;
+    border-collapse: collapse !important;
+    margin-bottom: 20px !important;
+  }
+  .tournaments-table th {
+    cursor: default !important;
+    text-align: left !important;
+    vertical-align: middle !important;
+    padding: 10px 14px !important;
+    background: var(--darkened-bg, #f1f5f9) !important;
+    font-weight: 700 !important;
+    color: var(--body-fg, #334155) !important;
+    border-bottom: 1px solid var(--border-color, #cbd5e1) !important;
+    font-size: 13px !important;
+  }
+  .tournaments-table th.th-center {
+    text-align: center !important;
+  }
+  .tournaments-table th small {
+    display: block;
+    font-weight: 400;
+    color: var(--body-quiet-color, #64748b);
+    font-size: 11px;
+    margin-top: 2px;
+  }
+  .tournaments-table td {
+    vertical-align: top !important;
+    padding: 12px 14px !important;
+    border-bottom: 1px solid var(--hairline-color, #f1f5f9) !important;
+  }
+  .tournaments-table td.td-center {
+    text-align: center !important;
+  }
+  .tournaments-table td.field-serial {
+    font-weight: 700 !important;
+    color: var(--body-quiet-color, #666) !important;
+    width: 50px !important;
+    padding-top: 18px !important;
+  }
+  .tournaments-table td.field-sport {
+    width: 140px !important;
+    padding-top: 16px !important;
+  }
+  .sport-badge {
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--body-fg, #1e293b);
+  }
+  .tournaments-table td.field-filter {
+    min-width: 280px;
+  }
+  .filter-textarea {
+    width: 100% !important;
+    box-sizing: border-box !important;
+    font-family: inherit !important;
+    font-size: 12.5px !important;
+    padding: 8px 10px !important;
+    border: 1px solid var(--border-color, #cbd5e1) !important;
+    border-radius: 6px !important;
+    color: var(--body-fg, #1e293b) !important;
+    background: var(--body-bg, #ffffff) !important;
+    line-height: 1.4 !important;
+    resize: vertical !important;
+  }
+  .filter-meta {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 4px;
+    font-size: 11.5px;
+    color: var(--body-quiet-color, #64748b);
+  }
+  .filter-count-badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-weight: 600;
+    font-size: 11px;
+  }
+  .filter-count-badge.badge-inc {
+    background: #e0f2fe;
+    color: #0369a1;
+  }
+  .filter-count-badge.badge-exc {
+    background: #fee2e2;
+    color: #dc2626;
+  }
+  .filter-count-badge.badge-empty {
+    background: #f1f5f9;
+    color: #64748b;
+  }
+
+  .tournaments-table td.field-action {
+    width: 160px !important;
+    text-align: center !important;
+    padding-top: 16px !important;
+  }
+  .btn-assistant {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 7px 14px;
+    background: var(--darkened-bg, #f1f5f9);
+    color: #0d6efd !important;
+    border: 1px solid #0d6efd;
+    border-radius: 6px;
+    font-size: 12.5px;
+    font-weight: 600;
+    text-decoration: none !important;
+    transition: all 0.15s ease;
+  }
+  .btn-assistant:hover {
+    background: #0d6efd;
+    color: #ffffff !important;
+  }
+
+  /* Actions Footer */
+  .tournaments-actions-bar {
+    background: var(--darkened-bg, #f8fafc);
+    border: 1px solid var(--border-color, #e2e8f0);
+    border-radius: 8px;
+    padding: 14px 20px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+  }
+  .save-tournaments-btn {
+    padding: 10px 24px !important;
+    font-size: 14px !important;
+    font-weight: 700 !important;
+    border-radius: 6px !important;
+    cursor: pointer !important;
+  }
+  .actions-note {
+    font-size: 12.5px;
+    color: var(--body-quiet-color, #64748b);
   }
 </style>
 {% endblock %}
 
-{% block result_list %}
-<div class="match-credits-summary-card">
-  <div class="match-credits-title">
-    <span>📊</span> Matches Counts &amp; Credits Dashboard — {{ current_month_name }}
-  </div>
-  <p class="match-credits-desc">
-    Monitor published matches for the current calendar month against admin-defined monthly limits.
-    <strong>Balance Available</strong> is automatically computed as <em>(Limit for current month − Published for current month)</em>.
-    You can adjust the limits directly in the table below and click <strong>Save</strong>.
-  </p>
+{% block content %}
+<div id="content-main">
+  <form method="post" id="tournament-filters-form">
+    {% csrf_token %}
+
+    <div class="tournaments-summary-card">
+      <div class="tournaments-title">
+        <span>🏆</span> Manage Tournaments — Inclusion &amp; Exclusion Filters
+      </div>
+      <p class="tournaments-desc">
+        Configure tournament filtering rules for each sport below. Edit patterns directly in the textareas and click
+        <strong>Save Tournament Filters</strong> to apply changes across all sports at once.
+      </p>
+      <div class="tournaments-tips">
+        <div class="tournaments-tip-item">
+          <span>🎯</span> <strong>Inclusion:</strong> Matches must match at least one pattern. Leave blank to include <em>all</em> competitions.
+        </div>
+        <div class="tournaments-tip-item">
+          <span>🚫</span> <strong>Exclusion:</strong> Any match matching an exclusion is dropped even if included (e.g. <code>*Res.*</code>, <code>*U21*</code>).
+        </div>
+        <div class="tournaments-tip-item">
+          <span>✨</span> <strong>Smart Assistant:</strong> Click <em>Smart Assistant</em> for 1-click popular competition chips and live tournament discovery.
+        </div>
+      </div>
+    </div>
+
+    <div class="results">
+      <table class="tournaments-table" id="tournaments_table">
+        <thead>
+          <tr>
+            <th class="th-center" style="width: 50px;">Sl.No</th>
+            <th style="width: 140px;">Sport</th>
+            <th class="field-filter">
+              Inclusion Filter (Tournaments)
+              <small>One competition per line or comma-separated • Wildcards supported (e.g. <code>*Premier League*</code>)</small>
+            </th>
+            <th class="field-filter">
+              Exclusion Filter
+              <small>Dropped if matching any pattern (e.g. <code>*Res.*</code>, <code>*U20*</code>, <code>*Doubles*</code>)</small>
+            </th>
+            <th class="th-center" style="width: 160px;">
+              Smart Assistant
+              <small>Chips &amp; Live Discovery</small>
+            </th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in tournament_rows %}
+          <tr class="{% cycle 'row1' 'row2' %}">
+            <td class="td-center field-serial">{{ row.serial_number }}</td>
+            <td class="field-sport">
+              <span class="sport-badge">{{ row.sport_name }}</span>
+            </td>
+            <td class="field-filter">
+              <textarea
+                name="tournaments_filter_{{ row.id }}"
+                rows="3"
+                class="filter-textarea"
+                placeholder="All competitions included (leave blank) or enter allowed patterns..."
+              >{{ row.tournaments_filter }}</textarea>
+              <div class="filter-meta">
+                <span>
+                  {% if row.inc_count > 0 %}
+                    <span class="filter-count-badge badge-inc">{{ row.inc_count }} active pattern(s)</span>
+                  {% else %}
+                    <span class="filter-count-badge badge-empty">All competitions included</span>
+                  {% endif %}
+                </span>
+                <span>Enter exact name or <code>*pattern*</code></span>
+              </div>
+            </td>
+            <td class="field-filter">
+              <textarea
+                name="exclude_tournaments_filter_{{ row.id }}"
+                rows="3"
+                class="filter-textarea"
+                placeholder="No exclusions (leave blank) or enter excluded patterns like *Res.*, *U21*..."
+              >{{ row.exclude_tournaments_filter }}</textarea>
+              <div class="filter-meta">
+                <span>
+                  {% if row.exc_count > 0 %}
+                    <span class="filter-count-badge badge-exc">{{ row.exc_count }} exclusion pattern(s)</span>
+                  {% else %}
+                    <span class="filter-count-badge badge-empty">No exclusions active</span>
+                  {% endif %}
+                </span>
+                <span>Matches dropped if matched</span>
+              </div>
+            </td>
+            <td class="field-action">
+              <a href="{{ row.change_url }}" class="btn-assistant" title="Open {{ row.sport_name }} Smart Tournament Assistant">
+                <span>✨</span> Smart Assistant
+              </a>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    <div class="tournaments-actions-bar">
+      <div class="actions-note">
+        <span>💡</span> Changes apply immediately to upcoming automated fixture sync schedules.
+      </div>
+      <div>
+        <input type="submit" name="_save_tournaments" class="default save-tournaments-btn" value="💾 Save Tournament Filters">
+      </div>
+    </div>
+
+  </form>
 </div>
-{{ block.super }}
 {% endblock %}

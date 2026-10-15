@@ -232,7 +232,87 @@ class SportAdmin(admin.ModelAdmin):
         return ()
 
     def get_queryset(self, request):
-        return super().get_queryset(request).order_by("order", "name")
+        from .constants import SUPPORTED_SPORTS
+
+        now_ist = timezone.now().astimezone(timezone.get_fixed_timezone(330))
+        return (
+            super()
+            .get_queryset(request)
+            .filter(name__in=SUPPORTED_SPORTS)
+            .annotate(
+                published_month_count=Count(
+                    "matches",
+                    filter=Q(
+                        matches__is_published=True,
+                        matches__start_time__year=now_ist.year,
+                        matches__start_time__month=now_ist.month,
+                    ),
+                )
+            )
+            .order_by("order", "name")
+        )
+
+    def changelist_view(self, request, extra_context=None):
+        extra_context = extra_context or {}
+        now_ist = timezone.now().astimezone(timezone.get_fixed_timezone(330))
+        extra_context["current_month_name"] = now_ist.strftime("%B %Y")
+
+        if request.method == "POST" and "_save" in request.POST:
+            from .constants import SUPPORTED_SPORTS
+            for sport in Sport.objects.filter(name__in=SUPPORTED_SPORTS):
+                val = request.POST.get(f"monthly_match_limit_{sport.id}")
+                if val is not None:
+                    try:
+                        new_limit = max(0, int(val))
+                        if sport.monthly_match_limit != new_limit:
+                            sport.monthly_match_limit = new_limit
+                            sport.save(update_fields=["monthly_match_limit"])
+                    except (ValueError, TypeError):
+                        pass
+
+        # Prepare data for Matches Counts & Credits Table (Table 2)
+        qs = self.get_queryset(request)
+        match_credits_rows = []
+        football_balance = 0
+        flashlive_balance = 0
+
+        for sport in qs:
+            serial_number = sport.order if sport.order and sport.order < 99 else "-"
+            published = getattr(sport, "published_month_count", 0)
+            limit = sport.monthly_match_limit
+            balance = limit - published
+
+            if balance < 0:
+                badge_class = "badge-exceeded"
+                badge_text = f"{balance} (Exceeded)"
+            elif balance <= 5:
+                badge_class = "badge-low"
+                badge_text = f"{balance} (Low)"
+            else:
+                badge_class = "badge-ok"
+                badge_text = str(balance)
+
+            if sport.name == "Football":
+                football_balance += balance
+            else:
+                flashlive_balance += balance
+
+            match_credits_rows.append({
+                "id": sport.id,
+                "serial_number": serial_number,
+                "sport_name": sport.name,
+                "published_count": published,
+                "monthly_match_limit": limit,
+                "balance_available": balance,
+                "badge_class": badge_class,
+                "badge_text": badge_text,
+            })
+
+        extra_context["match_credits_rows"] = match_credits_rows
+        extra_context["football_balance"] = football_balance
+        extra_context["flashlive_balance"] = flashlive_balance
+
+        return super().changelist_view(request, extra_context=extra_context)
 
     def get_urls(self):
         urls = super().get_urls()
@@ -1468,15 +1548,6 @@ class MatchStatsAdmin(admin.ModelAdmin):
 class MatchCountCreditAdmin(admin.ModelAdmin):
     actions = None
     change_list_template = "admin/predictions/matchcountcredit/change_list.html"
-    list_display = (
-        "serial_number",
-        "sport_name",
-        "published_for_current_month",
-        "monthly_match_limit",
-        "balance_available",
-    )
-    list_editable = ("monthly_match_limit",)
-    list_display_links = ("sport_name",)
 
     def has_add_permission(self, request):
         return False
@@ -1484,76 +1555,54 @@ class MatchCountCreditAdmin(admin.ModelAdmin):
     def has_delete_permission(self, request, obj=None):
         return False
 
-    ordering = ("order", "name")
-
-    def get_sortable_by(self, request):
-        return ()
-
-    def get_queryset(self, request):
+    def changelist_view(self, request, extra_context=None):
         from .constants import SUPPORTED_SPORTS
 
-        now_ist = timezone.now().astimezone(timezone.get_fixed_timezone(330))
-        return (
-            super()
-            .get_queryset(request)
-            .filter(name__in=SUPPORTED_SPORTS)
-            .annotate(
-                published_month_count=Count(
-                    "matches",
-                    filter=Q(
-                        matches__is_published=True,
-                        matches__start_time__year=now_ist.year,
-                        matches__start_time__month=now_ist.month,
-                    ),
-                )
-            )
-            .order_by("order", "name")
-        )
-
-    @admin.display(description="Sl.No")
-    def serial_number(self, obj):
-        return obj.order if obj.order and obj.order < 99 else "-"
-
-    @admin.display(description="Sport")
-    def sport_name(self, obj):
-        return obj.name
-
-    @admin.display(description="Published for current month")
-    def published_for_current_month(self, obj):
-        count = getattr(obj, "published_month_count", 0)
-        return format_html(
-            '<span style="display:inline-block; padding:3px 12px; font-weight:700; background:#e0f2fe; color:#0369a1; border-radius:12px; font-size:13px;">{}</span>',
-            count,
-        )
-
-    @admin.display(description="Balance available")
-    def balance_available(self, obj):
-        published = getattr(obj, "published_month_count", 0)
-        limit = obj.monthly_match_limit
-        balance = limit - published
-        if balance < 0:
-            color = "#dc2626"
-            bg = "#fee2e2"
-            badge = f"{balance} (Exceeded)"
-        elif balance <= 5:
-            color = "#d97706"
-            bg = "#fef3c7"
-            badge = f"{balance} (Low)"
-        else:
-            color = "#16a34a"
-            bg = "#dcfce7"
-            badge = str(balance)
-        return format_html(
-            '<span style="display:inline-block; padding:3px 12px; font-weight:700; color:{}; background:{}; border-radius:12px; font-size:13px;">{}</span>',
-            color,
-            bg,
-            badge,
-        )
-
-    def changelist_view(self, request, extra_context=None):
         extra_context = extra_context or {}
-        now_ist = timezone.now().astimezone(timezone.get_fixed_timezone(330))
-        extra_context["current_month_name"] = now_ist.strftime("%B %Y")
+
+        if request.method == "POST" and "_save_tournaments" in request.POST:
+            updated_count = 0
+            for sport in Sport.objects.filter(name__in=SUPPORTED_SPORTS):
+                inc_val = request.POST.get(f"tournaments_filter_{sport.id}")
+                exc_val = request.POST.get(f"exclude_tournaments_filter_{sport.id}")
+                fields_to_update = []
+                new_inc = inc_val.strip() if inc_val is not None else ""
+                new_exc = exc_val.strip() if exc_val is not None else ""
+                if (sport.tournaments_filter or "").strip() != new_inc:
+                    sport.tournaments_filter = new_inc
+                    fields_to_update.append("tournaments_filter")
+                if (sport.exclude_tournaments_filter or "").strip() != new_exc:
+                    sport.exclude_tournaments_filter = new_exc
+                    fields_to_update.append("exclude_tournaments_filter")
+                if fields_to_update:
+                    sport.save(update_fields=fields_to_update)
+                    updated_count += 1
+
+            if updated_count:
+                messages.success(request, f"Successfully saved tournament filters for {updated_count} sport(s).")
+            else:
+                messages.info(request, "No tournament filter changes detected.")
+            return redirect(request.get_full_path())
+
+        sports_qs = Sport.objects.filter(name__in=SUPPORTED_SPORTS).order_by("order", "name")
+        tournament_rows = []
+        for sport in sports_qs:
+            serial_number = sport.order if sport.order and sport.order < 99 else "-"
+            change_url = reverse("admin:predictions_sport_change", args=[sport.pk])
+            inc_lines = [line.strip() for line in (sport.tournaments_filter or "").splitlines() if line.strip()]
+            exc_lines = [line.strip() for line in (sport.exclude_tournaments_filter or "").splitlines() if line.strip()]
+            tournament_rows.append({
+                "id": sport.id,
+                "serial_number": serial_number,
+                "sport_name": sport.name,
+                "tournaments_filter": sport.tournaments_filter or "",
+                "exclude_tournaments_filter": sport.exclude_tournaments_filter or "",
+                "inc_count": len(inc_lines),
+                "exc_count": len(exc_lines),
+                "change_url": change_url,
+            })
+
+        extra_context["tournament_rows"] = tournament_rows
         return super().changelist_view(request, extra_context=extra_context)
 
 
@@ -1562,11 +1611,11 @@ class MatchCountCreditAdmin(admin.ModelAdmin):
 # (a stable sort keeps those in their alphabetical order).
 PREDICTIONS_MENU_ORDER = (
     "Match",
+    "Sport",
     "MatchCountCredit",
     "MatchStats",
     "Team",
     "TeamAlias",
-    "Sport",
     "Profile",
     "UserPredictionCount",
     "Prediction",
