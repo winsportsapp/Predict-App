@@ -5256,6 +5256,18 @@ class ImportFixturesTests(TestCase):
             match.prediction_deadline, moved.start_time - timedelta(minutes=30)
         )
 
+    def test_excluded_tournaments_and_teams_are_skipped(self):
+        provider = FakeProvider([
+            external_event("u21", home="Everton U21", away="Middlesbrough U21", event_name="Premier League 2"),
+            external_event("championship", home="Leeds", away="Sunderland", event_name="Championship"),
+            external_event("valid", home="Arsenal", away="Chelsea", event_name="Premier League"),
+        ])
+        summary = import_fixtures(provider, self.football)
+        self.assertEqual(summary["skipped"], 2)
+        self.assertEqual(summary["created"], 1)
+        self.assertTrue(Match.objects.filter(external_id="valid").exists())
+        self.assertFalse(Match.objects.filter(external_id__in=["u21", "championship"]).exists())
+
 
 class SyncResultsTests(TestCase):
     def setUp(self):
@@ -5494,6 +5506,26 @@ class FlashLiveProviderTests(SimpleTestCase):
         self.assertEqual(event.home_image, "https://img.example/a.png")
         self.assertIsNone(event.result)
         self.assertEqual(session.get.call_args_list[0].kwargs["params"]["sport_id"], 1)
+
+    def test_fixtures_exclude_u21_and_second_division_matches(self):
+        provider, session = self._provider([
+            flashlive_response([
+                flashlive_group(
+                    [flashlive_event("u21_ev", HOME_NAME="Everton U21", AWAY_NAME="Middlesbrough U21")],
+                    name="England: Premier League 2 Division One",
+                ),
+                flashlive_group(
+                    [flashlive_event("champ_ev", HOME_NAME="Leeds", AWAY_NAME="Sunderland")],
+                    name="England: Championship",
+                ),
+                flashlive_group(
+                    [flashlive_event("pl_ev", HOME_NAME="Arsenal", AWAY_NAME="Chelsea")],
+                    name="England: Premier League",
+                ),
+            ]),
+        ], tournaments=("England: Premier League", "*Championship*"))
+        events = provider.fetch_fixtures("Football", days_ahead=0)
+        self.assertEqual([e.external_id for e in events], ["pl_ev"])
 
     def test_wildcards_pick_all_atp_and_wta_singles(self):
         provider, _ = self._provider(
@@ -7861,6 +7893,73 @@ class APIFootballProviderTests(TestCase):
 
         events = p.fetch_fixtures("Football", days_ahead=0, new_day_only=False, with_odds=False)
         self.assertEqual({e.external_id for e in events}, {"1"})
+
+    def test_fetch_fixtures_excludes_u21_teams_and_second_division(self):
+        from unittest import mock
+        from predictions.models import Sport
+
+        sport = Sport.objects.get(name="Football")
+        sport.tournaments_filter = "England: Premier League"
+        sport.exclude_tournaments_filter = "*U21*"
+        sport.save()
+
+        p = self._provider(max_days_ahead=0)
+        fixture_payload = {
+            "response": [
+                {
+                    "fixture": {"id": 101, "date": "2026-10-14T15:00:00+00:00", "status": {"short": "NS"}},
+                    "teams": {"home": {"name": "Arsenal"}, "away": {"name": "Chelsea"}},
+                    "league": {"name": "Premier League", "country": "England"},
+                },
+                {
+                    "fixture": {"id": 102, "date": "2026-10-14T15:00:00+00:00", "status": {"short": "NS"}},
+                    "teams": {"home": {"name": "Everton U21"}, "away": {"name": "Middlesbrough U21"}},
+                    "league": {"name": "Premier League 2 Division One", "country": "England"},
+                },
+                {
+                    "fixture": {"id": 103, "date": "2026-10-14T15:00:00+00:00", "status": {"short": "NS"}},
+                    "teams": {"home": {"name": "Leeds United"}, "away": {"name": "Sunderland"}},
+                    "league": {"name": "Championship", "country": "England"},
+                },
+                {
+                    "fixture": {"id": 104, "date": "2026-10-14T15:00:00+00:00", "status": {"short": "NS"}},
+                    "teams": {"home": {"name": "Hamburger SV"}, "away": {"name": "Hertha BSC"}},
+                    "league": {"name": "2. Bundesliga", "country": "Germany"},
+                },
+            ]
+        }
+        resp = mock.Mock()
+        resp.status_code = 200
+        resp.json.return_value = fixture_payload
+        p.session.get.return_value = resp
+
+        events = p.fetch_fixtures("Football", days_ahead=0, new_day_only=False, with_odds=False)
+        self.assertEqual({e.external_id for e in events}, {"101"})
+
+    def test_is_fixture_excluded_helper(self):
+        from predictions.constants import is_fixture_excluded
+
+        # Youth teams
+        self.assertTrue(is_fixture_excluded("Football", ["Premier League", "Everton U21", "Middlesbrough"]))
+        self.assertTrue(is_fixture_excluded("Football", ["Premier League", "Everton", "Chelsea U19"]))
+        self.assertTrue(is_fixture_excluded("Football", ["Premier League", "Bayern Munich II", "Arsenal"]))
+
+        # Second tier tournaments
+        self.assertTrue(is_fixture_excluded("Football", ["Premier League 2 Division One", "Everton", "Middlesbrough"]))
+        self.assertTrue(is_fixture_excluded("Football", ["2. Bundesliga", "Hamburger SV", "Hertha BSC"]))
+        self.assertTrue(is_fixture_excluded("Football", ["England: Championship", "Leeds", "Sunderland"]))
+        self.assertTrue(is_fixture_excluded("Football", ["Spain: LaLiga 2", "Espanyol", "Gijon"]))
+        self.assertTrue(is_fixture_excluded("Football", ["France: Ligue 2", "Bordeaux", "Metz"]))
+        self.assertTrue(is_fixture_excluded("Football", ["Italy: Serie B", "Parma", "Como"]))
+
+        # Legitimate top-tier tournaments & teams must NOT be excluded
+        self.assertFalse(is_fixture_excluded("Football", ["England: Premier League", "Arsenal", "Chelsea"]))
+        self.assertFalse(is_fixture_excluded("Football", ["Spain: LaLiga", "Real Madrid", "Barcelona"]))
+        self.assertFalse(is_fixture_excluded("Football", ["Germany: Bundesliga", "Bayern Munich", "Dortmund"]))
+        self.assertFalse(is_fixture_excluded("Football", ["Italy: Serie A", "Inter", "Milan"]))
+        self.assertFalse(is_fixture_excluded("Football", ["France: Ligue 1", "PSG", "Marseille"]))
+        self.assertFalse(is_fixture_excluded("Football", ["FIFA World Cup 2026", "Brazil", "Argentina"]))
+        self.assertFalse(is_fixture_excluded("Football", ["UEFA Euro 2024", "England", "Spain"]))
 
     def test_list_tournaments_returns_sorted_names_and_counts(self):
         from unittest import mock

@@ -7,11 +7,13 @@ Provides fixtures, bookmaker odds, head-to-head (H2H), and recent form for Footb
 """
 
 import logging
+import re
 from datetime import datetime, timedelta, timezone as dt_timezone
 from fnmatch import fnmatchcase
 import requests
 from django.conf import settings
 
+from predictions.constants import DEFAULT_FOOTBALL_SECOND_DIV_EXCLUDES
 from .base import (
     REQUEST_TIMEOUT,
     ExternalEvent,
@@ -181,27 +183,55 @@ class APIFootballProvider(Provider):
         return str(sport_name).strip().lower() == "football"
 
     def _tournament_matches(
-        self, event_name, league_name, tournaments=None, exclude_tournaments=None
+        self,
+        event_name,
+        league_name,
+        tournaments=None,
+        exclude_tournaments=None,
+        home_team=None,
+        away_team=None,
     ):
-        keys = [str(league_name).strip().lower(), str(event_name).strip().lower()]
+        league_str = str(league_name).strip().lower()
+        event_str = str(event_name).strip().lower()
+        tournament_keys = [league_str, event_str]
+
+        exclude_keys = [league_str, event_str]
+        if home_team:
+            exclude_keys.append(str(home_team).strip().lower())
+        if away_team:
+            exclude_keys.append(str(away_team).strip().lower())
+
         excludes = (
             self.exclude_tournaments if exclude_tournaments is None else exclude_tournaments
         )
+        all_excludes = set(excludes) | DEFAULT_FOOTBALL_SECOND_DIV_EXCLUDES
         includes = self.tournaments if tournaments is None else tournaments
 
-        if excludes:
-            if any(
-                fnmatchcase(k, pat) or ("*" not in pat and "?" not in pat and pat in k)
-                for k in keys
-                for pat in excludes
-            ):
-                return False
+        if all_excludes:
+            for pat in all_excludes:
+                p = str(pat).strip().lower()
+                if not p:
+                    continue
+                for k in exclude_keys:
+                    if fnmatchcase(k, p):
+                        return False
+                    if "*" not in p and "?" not in p and p in k:
+                        return False
+
         if includes:
-            return any(
-                fnmatchcase(k, pat) or ("*" not in pat and "?" not in pat and pat in k)
-                for k in keys
-                for pat in includes
-            )
+            for pat in includes:
+                p = str(pat).strip().lower()
+                if not p:
+                    continue
+                for k in tournament_keys:
+                    if fnmatchcase(k, p):
+                        return True
+                    if "*" not in p and "?" not in p:
+                        if p == k:
+                            return True
+                        if re.search(rf"(?:^|:\s*){re.escape(p)}(?:\s*\(|\s*$)", k, re.IGNORECASE):
+                            return True
+            return False
         return True
 
     # -- Core endpoints ----------------------------------------------------
@@ -325,11 +355,17 @@ class APIFootballProvider(Provider):
                 country = league_obj.get("country")
                 event_name = f"{country}: {league_name}" if country else league_name
 
+                teams = item.get("teams", {})
+                home_team = teams.get("home", {}).get("name")
+                away_team = teams.get("away", {}).get("name")
+
                 if not self._tournament_matches(
                     event_name,
                     league_name,
                     tournaments=active_tournaments,
                     exclude_tournaments=active_exclude_tournaments,
+                    home_team=home_team,
+                    away_team=away_team,
                 ):
                     continue
 

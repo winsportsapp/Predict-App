@@ -10,12 +10,14 @@ not change the number of requests.
 """
 
 import logging
+import re
 from fnmatch import fnmatchcase
 from datetime import datetime, timedelta, timezone as dt_timezone
 
 import requests
 from django.conf import settings
 
+from predictions.constants import DEFAULT_FOOTBALL_SECOND_DIV_EXCLUDES
 from .base import (
     REQUEST_TIMEOUT,
     ExternalEvent,
@@ -221,15 +223,17 @@ class FlashLiveProvider(Provider):
                     if tier_key in pat:
                         expanded.update(opens)
             active_tournaments = expanded
-        elif sport_key == "football" and active_tournaments:
-            expanded = set()
-            for pat in active_tournaments:
-                p_lower = pat.lower().strip()
-                if p_lower in FOOTBALL_TIER_EXPANSIONS:
-                    expanded.update(FOOTBALL_TIER_EXPANSIONS[p_lower])
-                else:
-                    expanded.add(pat)
-            active_tournaments = expanded
+        elif sport_key == "football":
+            active_exclude_tournaments = set(active_exclude_tournaments) | DEFAULT_FOOTBALL_SECOND_DIV_EXCLUDES
+            if active_tournaments:
+                expanded = set()
+                for pat in active_tournaments:
+                    p_lower = pat.lower().strip()
+                    if p_lower in FOOTBALL_TIER_EXPANSIONS:
+                        expanded.update(FOOTBALL_TIER_EXPANSIONS[p_lower])
+                    else:
+                        expanded.add(pat)
+                active_tournaments = expanded
 
         if not (active_tournaments or teams):
             # Without a filter this would import every match in the world.
@@ -245,9 +249,13 @@ class FlashLiveProvider(Provider):
                 keys = _tournament_keys(group)
                 if _matches_any(keys, active_exclude_tournaments):
                     continue
-                whole_tournament = _matches_any(keys, active_tournaments)
+                whole_tournament = _matches_inclusion(keys, active_tournaments)
                 for raw in group.get("EVENTS") or []:
                     if not whole_tournament and not _plays(raw, teams):
+                        continue
+                    home_name = str(raw.get("HOME_NAME") or "").strip().lower()
+                    away_name = str(raw.get("AWAY_NAME") or "").strip().lower()
+                    if _matches_any([home_name, away_name], active_exclude_tournaments):
                         continue
                     event = self._to_event(sport_name, group, raw)
                     if event:
@@ -698,10 +706,30 @@ def _matches_any(keys, patterns):
     or contains the pattern as a substring if no wildcards were specified."""
     for key in keys:
         for pat in patterns:
-            if fnmatchcase(key, pat):
+            p = str(pat).strip().lower()
+            if not p:
+                continue
+            if fnmatchcase(key, p):
                 return True
-            if "*" not in pat and "?" not in pat and pat in key:
+            if "*" not in p and "?" not in p and p in key:
                 return True
+    return False
+
+
+def _matches_inclusion(keys, patterns):
+    """True if any key matches an inclusion pattern, respecting word/delimiter boundaries."""
+    for key in keys:
+        for pat in patterns:
+            p = str(pat).strip().lower()
+            if not p:
+                continue
+            if fnmatchcase(key, p):
+                return True
+            if "*" not in p and "?" not in p:
+                if p == key:
+                    return True
+                if re.search(rf"(?:^|:\s*){re.escape(p)}(?:\s*\(|\s*$)", key, re.IGNORECASE):
+                    return True
     return False
 
 

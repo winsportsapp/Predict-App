@@ -12,7 +12,7 @@ from django.template.loader import render_to_string
 from django.utils import timezone
 from django.utils.text import slugify
 
-from .constants import DRAW_SPORTS, SUPPORTED_SPORTS
+from .constants import DRAW_SPORTS, SUPPORTED_SPORTS, is_fixture_excluded
 from .models import (
     CreditLedger,
     Match,
@@ -400,6 +400,13 @@ def import_fixtures(
 
         if match is None:
             if event.called_off or event.result or event.start_time <= now:
+                summary["skipped"] += 1
+                continue
+            if is_fixture_excluded(
+                sport.name,
+                [event.event_name, event.home, event.away],
+                sport.exclude_tournaments_filter,
+            ):
                 summary["skipped"] += 1
                 continue
             team_a = _resolve_team(
