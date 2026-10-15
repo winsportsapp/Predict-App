@@ -40,11 +40,11 @@ To stay strictly within the 500 RapidAPI requests/month limit (~14 requests/day)
 
 ### Server Timezone: UTC (Default on Railway, AWS, DigitalOcean, Heroku)
 ```cron
-# 1. Daily Fixtures & Odds (Runs once daily at 05:00 IST / 23:30 UTC):
-30 23 * * * cd /path/to/project && /path/to/venv/bin/python manage.py sync_external_matches --fixtures --new-day-only
-
-# 2. Results Fetch #1 at 06:30 IST (01:00 UTC):
+# 1. Results Fetch #1 at 06:30 IST (01:00 UTC):
 0 1 * * * cd /path/to/project && /path/to/venv/bin/python manage.py sync_external_matches --results
+
+# 2. Morning Fixtures & Odds at 06:35 IST (01:05 UTC):
+5 1 * * * cd /path/to/project && /path/to/venv/bin/python manage.py sync_external_matches --fixtures --new-day-only
 
 # 3. Results Fetch #2 at 20:30 IST (15:00 UTC):
 0 15 * * * cd /path/to/project && /path/to/venv/bin/python manage.py sync_external_matches --results
@@ -55,11 +55,11 @@ To stay strictly within the 500 RapidAPI requests/month limit (~14 requests/day)
 
 ### Server Timezone: IST (`Asia/Kolkata`)
 ```cron
-# 1. Daily Fixtures & Odds (05:00 IST):
-0 5 * * * cd /path/to/project && /path/to/venv/bin/python manage.py sync_external_matches --fixtures --new-day-only
-
-# 2. Results Fetch #1 at 06:30 IST:
+# 1. Results Fetch #1 at 06:30 IST:
 30 6 * * * cd /path/to/project && /path/to/venv/bin/python manage.py sync_external_matches --results
+
+# 2. Morning Fixtures & Odds at 06:35 IST:
+35 6 * * * cd /path/to/project && /path/to/venv/bin/python manage.py sync_external_matches --fixtures --new-day-only
 
 # 3. Results Fetch #2 at 20:30 IST:
 30 20 * * * cd /path/to/project && /path/to/venv/bin/python manage.py sync_external_matches --results
@@ -67,5 +67,6 @@ To stay strictly within the 500 RapidAPI requests/month limit (~14 requests/day)
 # 4. Evening Next-Day Fixtures & Odds at 20:35 IST [All sports, including Football]:
 35 20 * * * cd /path/to/project && /path/to/venv/bin/python manage.py sync_external_matches --fixtures --days-ahead 1 --new-day-only
 ```
+
 
 
