@@ -97,6 +97,38 @@ class Sport(models.Model):
             "odds, results, H2H, and recent form will consume zero API credits."
         ),
     )
+    # Granular auto-sync controls for 06:30 and 20:30 IST schedules
+    auto_fixture_0630 = models.BooleanField(
+        default=True,
+        verbose_name="Auto Fixture 06:30",
+        help_text="Import fixtures at 06:30/06:35 IST.",
+    )
+    auto_fixture_2030 = models.BooleanField(
+        default=True,
+        verbose_name="Auto Fixture 20:30",
+        help_text="Import next-day fixtures at 20:30/20:35 IST.",
+    )
+    auto_odds_0630 = models.BooleanField(
+        default=True,
+        verbose_name="Auto Odds 06:30",
+        help_text="Fetch bookmaker odds at 06:30/06:35 IST.",
+    )
+    auto_odds_2030 = models.BooleanField(
+        default=True,
+        verbose_name="Auto Odds 20:30",
+        help_text="Fetch bookmaker odds at 20:30/20:35 IST.",
+    )
+    auto_results_0630 = models.BooleanField(
+        default=True,
+        verbose_name="Auto Results 06:30",
+        help_text="Fetch match results at 06:30 IST.",
+    )
+    auto_results_2030 = models.BooleanField(
+        default=True,
+        verbose_name="Auto Results 20:30",
+        help_text="Fetch match results at 20:30 IST.",
+    )
+
     tournaments_filter = models.TextField(
         blank=True,
         default="",

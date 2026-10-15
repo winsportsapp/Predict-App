@@ -173,18 +173,47 @@ class SportAdmin(admin.ModelAdmin):
     change_form_template = "admin/predictions/sport/change_form.html"
     list_display = (
         "name",
-        "is_active",
+        "auto_fixture_0630",
+        "auto_fixture_2030",
+        "auto_odds_0630",
+        "auto_odds_2030",
+        "auto_results_0630",
+        "auto_results_2030",
         "has_tournaments_filter",
         "has_exclude_filter",
     )
-    list_editable = ("is_active",)
-    search_fields = ("name",)
-    fields = (
-        "name",
-        "is_active",
-        "tournaments_filter",
-        "exclude_tournaments_filter",
+    list_editable = (
+        "auto_fixture_0630",
+        "auto_fixture_2030",
+        "auto_odds_0630",
+        "auto_odds_2030",
+        "auto_results_0630",
+        "auto_results_2030",
     )
+    search_fields = ("name",)
+    fieldsets = (
+        (None, {"fields": ("name", "is_active")}),
+        (
+            "Automated Sync Schedules (Credits Control)",
+            {
+                "fields": (
+                    ("auto_fixture_0630", "auto_odds_0630", "auto_results_0630"),
+                    ("auto_fixture_2030", "auto_odds_2030", "auto_results_2030"),
+                ),
+                "description": (
+                    "Check or uncheck boxes to control API requests for each specific schedule. "
+                    "Unchecked features consume 0 API credits during that run."
+                ),
+            },
+        ),
+        (
+            "Tournament Filters",
+            {
+                "fields": ("tournaments_filter", "exclude_tournaments_filter"),
+            },
+        ),
+    )
+
 
     @admin.display(boolean=True, description="Inclusion filter")
     def has_tournaments_filter(self, obj):

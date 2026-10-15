@@ -5617,10 +5617,88 @@ class SyncExternalMatchesCommandTests(TestCase):
         output = self._run(provider, "--fixtures", "--sport", "Football", "--force")
         self.assertTrue(Match.objects.filter(external_id="e1").exists())
 
-    def test_sport_admin_has_is_active_editable(self):
+    def tearDown(self):
+        Sport.objects.filter(name="Football").update(
+            is_active=True,
+            auto_fixture_0630=True,
+            auto_fixture_2030=True,
+            auto_odds_0630=True,
+            auto_odds_2030=True,
+            auto_results_0630=True,
+            auto_results_2030=True,
+        )
+        super().tearDown()
+
+    def test_sport_admin_has_auto_sync_columns_editable(self):
         from predictions.admin import SportAdmin
-        self.assertIn("is_active", SportAdmin.list_display)
-        self.assertIn("is_active", SportAdmin.list_editable)
+
+        schedule_cols = [
+            "auto_fixture_0630",
+            "auto_fixture_2030",
+            "auto_odds_0630",
+            "auto_odds_2030",
+            "auto_results_0630",
+            "auto_results_2030",
+        ]
+        for col in schedule_cols:
+            self.assertIn(col, SportAdmin.list_display)
+            self.assertIn(col, SportAdmin.list_editable)
+
+    def test_slot_filters_fixtures_when_disabled_for_slot(self):
+        sport = Sport.objects.get(name="Football")
+        sport.is_active = True
+        sport.auto_fixture_2030 = False
+        sport.save()
+
+        provider = FakeProvider([external_event()])
+        output = self._run(provider, "--fixtures", "--slot", "20:30")
+        self.assertNotIn("Football fixtures:", output)
+        self.assertFalse(Match.objects.filter(external_id="e1").exists())
+
+        # But it runs for 06:30 slot
+        output_morning = self._run(provider, "--fixtures", "--slot", "06:30")
+        self.assertIn("Football fixtures: 1 created", output_morning)
+        self.assertTrue(Match.objects.filter(external_id="e1").exists())
+
+    def test_slot_odds_disabled_passes_with_odds_false(self):
+        sport = Sport.objects.get(name="Football")
+        sport.is_active = True
+        sport.auto_fixture_2030 = True
+        sport.auto_odds_2030 = False
+        sport.save()
+
+        provider = FakeProvider([external_event()])
+        with mock.patch("predictions.management.commands.sync_external_matches.import_fixtures") as mock_import:
+            mock_import.return_value = {
+                "created": 1,
+                "updated": 0,
+                "skipped": 0,
+                "new_teams": [],
+                "called_off": [],
+            }
+            self._run(provider, "--fixtures", "--slot", "20:30")
+            self.assertTrue(mock_import.called)
+            fb_calls = [c for c in mock_import.call_args_list if c.args[1].name == "Football"]
+            self.assertTrue(len(fb_calls) > 0)
+            self.assertFalse(fb_calls[0].kwargs.get("with_odds"))
+
+    def test_slot_filters_results_when_disabled_for_slot(self):
+        sport = Sport.objects.get(name="Football")
+        sport.is_active = True
+        sport.auto_results_0630 = False
+        sport.save()
+
+        provider = FakeProvider(results={"e1": external_event(result="away")})
+        with mock.patch("predictions.management.commands.sync_external_matches.sync_results") as mock_sync_results:
+            self._run(provider, "--results", "--slot", "06:30")
+            called_sports = [call.args[1].name for call in mock_sync_results.call_args_list]
+            self.assertNotIn("Football", called_sports)
+
+            sport.auto_results_2030 = True
+            sport.save()
+            self._run(provider, "--results", "--slot", "20:30")
+            called_sports_evening = [call.args[1].name for call in mock_sync_results.call_args_list]
+            self.assertIn("Football", called_sports_evening)
 
     def test_exclude_sport_skips_matching_sports(self):
         provider = FakeProvider([external_event()])

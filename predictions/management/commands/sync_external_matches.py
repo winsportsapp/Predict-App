@@ -1,6 +1,7 @@
 from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
 from django.db.models import Q
+from django.utils import timezone
 
 from predictions.importers.base import ProviderError
 from predictions.importers.flashlive import FlashLiveProvider
@@ -26,6 +27,11 @@ class Command(BaseCommand):
         parser.add_argument(
             "--exclude-sport",
             help="Exclude this sport (or comma-separated list, e.g. Hockey).",
+        )
+        parser.add_argument(
+            "--slot",
+            choices=["06:30", "20:30"],
+            help="Scheduled run slot to apply sport-level auto-sync controls (06:30 or 20:30).",
         )
         parser.add_argument("--days-ahead", type=int, default=7, help="Fixture window in days (max 7).")
         parser.add_argument(
@@ -103,6 +109,14 @@ class Command(BaseCommand):
             for name in exclude_names:
                 sports = sports.exclude(name__iexact=name)
 
+        slot = options.get("slot")
+        if not slot:
+            if options["fixtures"]:
+                slot = "20:30" if options.get("days_ahead") == 1 else "06:30"
+            elif options["results"]:
+                now_ist = timezone.now().astimezone(timezone.get_fixed_timezone(330))
+                slot = "20:30" if now_ist.hour >= 13 else "06:30"
+
         failed = False
         with transaction.atomic():
             for sport in sports:
@@ -119,22 +133,48 @@ class Command(BaseCommand):
                     continue
                 try:
                     if options["fixtures"]:
-                        self._report_fixtures(
-                            sport,
-                            import_fixtures(
-                                provider,
+                        should_sync_fixtures = (
+                            options["force"]
+                            or bool(options["sport"])
+                            or (slot == "06:30" and getattr(sport, "auto_fixture_0630", True))
+                            or (slot == "20:30" and getattr(sport, "auto_fixture_2030", True))
+                            or (not slot and sport.is_active)
+                        )
+                        if should_sync_fixtures:
+                            with_odds = (
+                                not options["no_odds"]
+                                and (
+                                    options["force"]
+                                    or bool(options["sport"])
+                                    or (slot == "06:30" and getattr(sport, "auto_odds_0630", True))
+                                    or (slot == "20:30" and getattr(sport, "auto_odds_2030", True))
+                                    or (not slot)
+                                )
+                            )
+                            self._report_fixtures(
                                 sport,
-                                days_ahead=options["days_ahead"],
-                                download_images=not options["dry_run"],
-                                new_day_only=options["new_day_only"],
-                                with_odds=not options["no_odds"],
-                                force=options["force"],
-                            ),
-                        )
+                                import_fixtures(
+                                    provider,
+                                    sport,
+                                    days_ahead=options["days_ahead"],
+                                    download_images=not options["dry_run"],
+                                    new_day_only=options["new_day_only"],
+                                    with_odds=with_odds,
+                                    force=options["force"],
+                                ),
+                            )
                     if options["results"]:
-                        self._report_results(
-                            sport, sync_results(provider, sport, force=options["force"])
+                        should_sync_results = (
+                            options["force"]
+                            or bool(options["sport"])
+                            or (slot == "06:30" and getattr(sport, "auto_results_0630", True))
+                            or (slot == "20:30" and getattr(sport, "auto_results_2030", True))
+                            or (not slot and sport.is_active)
                         )
+                        if should_sync_results:
+                            self._report_results(
+                                sport, sync_results(provider, sport, force=options["force"])
+                            )
 
                 except ProviderError as exc:
                     # Keep going: one sport failing shouldn't block the rest.
