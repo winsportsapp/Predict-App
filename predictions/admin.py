@@ -170,6 +170,8 @@ SPORT_TOURNAMENT_PRESETS = {
 
 @admin.register(Sport)
 class SportAdmin(admin.ModelAdmin):
+    actions = None
+    change_list_template = "admin/predictions/sport/change_list.html"
     change_form_template = "admin/predictions/sport/change_form.html"
     list_display = (
         "name",

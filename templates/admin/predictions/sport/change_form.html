@@ -1,6 +1,61 @@
 {% extends "admin/change_form.html" %}
 {% load i18n admin_urls static %}
 
+{% block extrahead %}
+{{ block.super }}
+<style>
+  .odds-disabled-grey {
+    opacity: 0.35 !important;
+    filter: grayscale(100%) !important;
+    cursor: not-allowed !important;
+  }
+  .odds-disabled-grey input[type="checkbox"] {
+    pointer-events: none !important;
+    cursor: not-allowed !important;
+  }
+</style>
+<script>
+document.addEventListener("DOMContentLoaded", function() {
+  function bindSlot(fixId, oddsId) {
+    const fixEl = document.getElementById(fixId);
+    const oddsEl = document.getElementById(oddsId);
+    if (!fixEl || !oddsEl) return;
+
+    const row = oddsEl.closest('.form-row, div') || oddsEl.parentElement;
+
+    function update() {
+      if (!fixEl.checked) {
+        oddsEl.checked = false;
+        oddsEl.disabled = true;
+        if (row) row.classList.add('odds-disabled-grey');
+        oddsEl.classList.add('odds-disabled-grey');
+      } else {
+        oddsEl.disabled = false;
+        if (row) row.classList.remove('odds-disabled-grey');
+        oddsEl.classList.remove('odds-disabled-grey');
+      }
+    }
+
+    fixEl.addEventListener("change", update);
+    update();
+  }
+
+  bindSlot("id_auto_fixture_0630", "id_auto_odds_0630");
+  bindSlot("id_auto_fixture_2030", "id_auto_odds_2030");
+
+  const form = document.getElementById("sport_form") || document.querySelector("form");
+  if (form) {
+    form.addEventListener("submit", function() {
+      const o1 = document.getElementById("id_auto_odds_0630");
+      const o2 = document.getElementById("id_auto_odds_2030");
+      if (o1 && o1.disabled) { o1.disabled = false; o1.checked = false; }
+      if (o2 && o2.disabled) { o2.disabled = false; o2.checked = false; }
+    });
+  }
+});
+</script>
+{% endblock %}
+
 {% block after_field_sets %}
 {{ block.super }}
 

@@ -152,6 +152,20 @@ class Sport(models.Model):
     )
 
 
+    def clean(self):
+        super().clean()
+        if not self.auto_fixture_0630:
+            self.auto_odds_0630 = False
+        if not self.auto_fixture_2030:
+            self.auto_odds_2030 = False
+
+    def save(self, *args, **kwargs):
+        if not self.auto_fixture_0630:
+            self.auto_odds_0630 = False
+        if not self.auto_fixture_2030:
+            self.auto_odds_2030 = False
+        super().save(*args, **kwargs)
+
     class Meta:
         ordering = ["name"]
 

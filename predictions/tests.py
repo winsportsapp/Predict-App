@@ -5632,6 +5632,9 @@ class SyncExternalMatchesCommandTests(TestCase):
     def test_sport_admin_has_auto_sync_columns_editable(self):
         from predictions.admin import SportAdmin
 
+        self.assertIsNone(SportAdmin.actions)
+        self.assertEqual(SportAdmin.change_list_template, "admin/predictions/sport/change_list.html")
+
         schedule_cols = [
             "auto_fixture_0630",
             "auto_fixture_2030",
@@ -5643,6 +5646,18 @@ class SyncExternalMatchesCommandTests(TestCase):
         for col in schedule_cols:
             self.assertIn(col, SportAdmin.list_display)
             self.assertIn(col, SportAdmin.list_editable)
+
+    def test_sport_model_save_resets_odds_when_fixture_is_false(self):
+        sport = Sport.objects.get(name="Football")
+        sport.auto_fixture_0630 = False
+        sport.auto_odds_0630 = True
+        sport.auto_fixture_2030 = False
+        sport.auto_odds_2030 = True
+        sport.save()
+
+        sport.refresh_from_db()
+        self.assertFalse(sport.auto_odds_0630)
+        self.assertFalse(sport.auto_odds_2030)
 
     def test_slot_filters_fixtures_when_disabled_for_slot(self):
         sport = Sport.objects.get(name="Football")

@@ -1,0 +1,133 @@
+{% extends "admin/change_list.html" %}
+{% load static %}
+
+{% block extrahead %}
+{{ block.super }}
+<style>
+  /* Wrap and compact schedule column headers */
+  #result_list th[class*="column-auto_"] {
+    white-space: normal !important;
+    text-align: center !important;
+    vertical-align: middle !important;
+    min-width: 84px !important;
+    max-width: 104px !important;
+    padding: 8px 4px !important;
+  }
+  #result_list th[class*="column-auto_"] .text {
+    padding-right: 0 !important;
+    display: block !important;
+    text-align: center !important;
+  }
+  #result_list th[class*="column-auto_"] a {
+    display: inline-block !important;
+    line-height: 1.3 !important;
+    text-align: center !important;
+    text-decoration: none !important;
+  }
+  #result_list th[class*="column-auto_"] .time-slot-badge {
+    display: block;
+    margin-top: 4px;
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--primary, #007bff);
+    background: rgba(0, 123, 255, 0.08);
+    border: 1px solid rgba(0, 123, 255, 0.2);
+    border-radius: 4px;
+    padding: 1px 4px;
+  }
+  #result_list td[class*="field-auto_"] {
+    text-align: center !important;
+    vertical-align: middle !important;
+  }
+  /* Greying and disabling odds inputs when corresponding fixture is unchecked */
+  .odds-disabled-grey {
+    opacity: 0.35 !important;
+    filter: grayscale(100%) !important;
+    cursor: not-allowed !important;
+  }
+  .odds-disabled-grey input[type="checkbox"] {
+    pointer-events: none !important;
+    cursor: not-allowed !important;
+  }
+</style>
+
+<script>
+document.addEventListener("DOMContentLoaded", function() {
+  // 1. Column header wrapping: format "06:30" and "20:30" beneath feature title
+  document.querySelectorAll('#result_list th[class*="column-auto_"] a, #result_list th[class*="column-auto_"] .text').forEach(function(el) {
+    if (el.tagName === 'A' || el.children.length === 0) {
+      el.innerHTML = el.innerHTML.replace(
+        /\s*(06:30|20:30)/g,
+        '<span class="time-slot-badge">$1</span>'
+      );
+    }
+  });
+
+  // 2. Interactive Dependency: Fixture uncheck -> Odds uncheck & grey/disable
+  function bindScheduleDependencies() {
+    const fixture0630List = document.querySelectorAll('input[type="checkbox"][name$="-auto_fixture_0630"]');
+    fixture0630List.forEach(function(fixInput) {
+      const prefix = fixInput.name.replace(/auto_fixture_0630$/, '');
+      const oddsInput = document.querySelector('input[type="checkbox"][name="' + prefix + 'auto_odds_0630"]');
+      if (!oddsInput) return;
+
+      const oddsCell = oddsInput.closest('td');
+
+      function update0630() {
+        if (!fixInput.checked) {
+          oddsInput.checked = false;
+          oddsInput.disabled = true;
+          if (oddsCell) oddsCell.classList.add('odds-disabled-grey');
+          oddsInput.classList.add('odds-disabled-grey');
+        } else {
+          oddsInput.disabled = false;
+          if (oddsCell) oddsCell.classList.remove('odds-disabled-grey');
+          oddsInput.classList.remove('odds-disabled-grey');
+        }
+      }
+
+      fixInput.addEventListener('change', update0630);
+      update0630(); // Initial check on page load
+    });
+
+    const fixture2030List = document.querySelectorAll('input[type="checkbox"][name$="-auto_fixture_2030"]');
+    fixture2030List.forEach(function(fixInput) {
+      const prefix = fixInput.name.replace(/auto_fixture_2030$/, '');
+      const oddsInput = document.querySelector('input[type="checkbox"][name="' + prefix + 'auto_odds_2030"]');
+      if (!oddsInput) return;
+
+      const oddsCell = oddsInput.closest('td');
+
+      function update2030() {
+        if (!fixInput.checked) {
+          oddsInput.checked = false;
+          oddsInput.disabled = true;
+          if (oddsCell) oddsCell.classList.add('odds-disabled-grey');
+          oddsInput.classList.add('odds-disabled-grey');
+        } else {
+          oddsInput.disabled = false;
+          if (oddsCell) oddsCell.classList.remove('odds-disabled-grey');
+          oddsInput.classList.remove('odds-disabled-grey');
+        }
+      }
+
+      fixInput.addEventListener('change', update2030);
+      update2030(); // Initial check on page load
+    });
+  }
+
+  bindScheduleDependencies();
+
+  // Before changelist form submits, enable any disabled checkboxes so Django FormSet processes cleanly
+  const changelistForm = document.getElementById('changelist-form');
+  if (changelistForm) {
+    changelistForm.addEventListener('submit', function() {
+      document.querySelectorAll('.odds-disabled-grey input[type="checkbox"], input[type="checkbox"].odds-disabled-grey').forEach(function(cb) {
+        cb.disabled = false;
+        cb.checked = false;
+      });
+    });
+  }
+});
+</script>
+{% endblock %}
