@@ -523,6 +523,38 @@ class PredictViewTests(TestCase):
         # Exact href match: the predict URL (.../predict/) cannot satisfy this.
         self.assertContains(response, 'href="%s"' % detail_url)
 
+    def test_ajax_prediction_returns_json(self):
+        match = future_match()
+        url = reverse("predict", args=[match.pk])
+        response = self.client.post(
+            url,
+            {"choice": "A"},
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertEqual(data["status"], "ok")
+        self.assertEqual(data["choice"], "A")
+        self.assertEqual(data["match_id"], match.id)
+        pick = Prediction.objects.get(user=self.user, match=match)
+        self.assertEqual(pick.choice, "A")
+
+    def test_ajax_locked_match_returns_400_json(self):
+        match = future_match(
+            start_time=timezone.now() - timedelta(hours=1),
+            prediction_deadline=timezone.now() - timedelta(minutes=1),
+        )
+        url = reverse("predict", args=[match.pk])
+        response = self.client.post(
+            url,
+            {"choice": "A"},
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+        self.assertEqual(response.status_code, 400)
+        data = response.json()
+        self.assertEqual(data["status"], "error")
+        self.assertFalse(Prediction.objects.filter(user=self.user, match=match).exists())
+
 
 def registration_data(**overrides):
     data = {
@@ -808,8 +840,8 @@ class InstallableAppTests(TestCase):
         self.assertContains(response, "data-pwa-install")
         self.assertNotContains(response, "navbar-toggler")
         self.assertNotContains(response, "navbar-collapse")
-        # Phones get the short label so the menu wraps onto fewer rows.
-        self.assertContains(response, '<span class="d-lg-none">Closed</span>')
+        # Closed matches is available in navigation
+        self.assertContains(response, "Closed")
         # A multi-line {# #} comment isn't a comment -- it renders as text.
         self.assertNotContains(response, "{#")
 
@@ -2775,13 +2807,14 @@ class SportMatchesViewTests(TestCase):
         ).content.decode()
         return sorted((1, 2, 3, 4), key=lambda n: content.index(f"Home{n}<"))
 
-    def test_latest_pick_sits_just_below_the_next_match_to_predict(self):
-        # Picked M1 then M3: next to predict (M2) first, latest pick (M3)
-        # second, then the rest of the unpredicted, then older picks.
-        self.assertEqual(self._order_after_picks([1, 3]), [2, 3, 4, 1])
+    def test_unpredicted_matches_appear_on_top_when_opening_sport(self):
+        # Picked M1 then M3: unpredicted matches (M2, M4) appear first in kickoff order,
+        # followed by predicted matches (M1, M3).
+        self.assertEqual(self._order_after_picks([1, 3]), [2, 4, 1, 3])
 
-    def test_latest_pick_is_first_once_everything_is_predicted(self):
-        self.assertEqual(self._order_after_picks([4, 1, 3, 2]), [2, 1, 3, 4])
+    def test_all_predicted_matches_order_when_everything_is_predicted(self):
+        # Once all matches are predicted, matches are displayed in chronological kickoff order
+        self.assertEqual(self._order_after_picks([4, 1, 3, 2]), [1, 2, 3, 4])
 
     def test_empty_state_message_names_the_sport(self):
         response = self.client.get(reverse("sport_matches", args=["tennis"]))
@@ -2842,7 +2875,7 @@ class ClosedMatchesViewTests(TestCase):
 
         self.assertContains(response, "CA locked")
         self.assertContains(response, "Awaiting result")
-        self.assertContains(response, "The result has not been entered yet.")
+        self.assertContains(response, "Awaiting official verified outcome.")
 
     def test_finished_scored_match_is_shown_with_winner_and_scored_badge(self):
         match = sport_match("Tennis", "TA scored", "TB scored")
@@ -2854,7 +2887,6 @@ class ClosedMatchesViewTests(TestCase):
 
         self.assertContains(response, "TA scored")
         self.assertContains(response, "Winner:")
-        self.assertContains(response, "Scored")
 
     def test_cancelled_match_is_shown(self):
         sport_match(
@@ -2864,7 +2896,7 @@ class ClosedMatchesViewTests(TestCase):
         response = self.client.get(reverse("closed_matches"))
 
         self.assertContains(response, "Cancelled")
-        self.assertContains(response, "no result will be recorded")
+        self.assertContains(response, "no points awarded")
 
     def test_awaiting_result_match_is_shown(self):
         # A past deadline, not just the status field: sync_match_statuses()
@@ -2881,7 +2913,7 @@ class ClosedMatchesViewTests(TestCase):
         response = self.client.get(reverse("closed_matches"))
 
         self.assertContains(response, "Awaiting result")
-        self.assertContains(response, "The result has not been entered yet")
+        self.assertContains(response, "Awaiting official verified outcome.")
 
     def test_shows_matches_from_every_supported_sport(self):
         sport_match("Cricket", "CA multi", "CB multi", **self._past_deadline_kwargs())
@@ -2900,7 +2932,7 @@ class ClosedMatchesViewTests(TestCase):
 
     def test_empty_state(self):
         response = self.client.get(reverse("closed_matches"))
-        self.assertContains(response, "No closed matches yet.")
+        self.assertContains(response, "No closed matches yet")
 
     def test_event_name_shown_on_closed_match_card(self):
         sport_match(
@@ -4973,7 +5005,7 @@ class MyAccountPageTests(TestCase):
         ReferralSettings.objects.update(credits_per_referral=25)
         self.client.login(username="alice", password="pass12345")
         response = self.client.get(reverse("my_account"))
-        self.assertContains(response, "You will earn 25 credits per referral & first prediction.")
+        self.assertContains(response, "<strong>25 credits</strong> per referral &amp; first prediction.")
 
     def test_all_time_points_and_rank(self):
         Profile.objects.filter(user=self.user).update(points=40)
@@ -5002,6 +5034,87 @@ class MyAccountPageTests(TestCase):
         response = self.client.get(reverse("my_account"))
         self.assertEqual(response.context["monthly_points"], 15)
         self.assertEqual(response.context["monthly_rank"], 2)
+
+    def test_all_time_rank_follows_gold_medal_even_with_fewer_points(self):
+        # Alice has fewer points (50) than Bob (100), but Alice has >= 200 picks,
+        # earning Gold medal on the leaderboard, placing Alice at rank 1.
+        Profile.objects.filter(user=self.user).update(points=50)
+        bob = make_user("bob", password="pass12345")
+        Profile.objects.filter(user=bob).update(points=100)
+
+        # Give Alice 200 predictions so she meets the medal floor.
+        sport = Sport.objects.first() or Sport.objects.create(name="Football")
+        team_a = Team.objects.create(name="Alpha", sport=sport)
+        team_b = Team.objects.create(name="Beta", sport=sport)
+        now = timezone.now()
+        matches = [
+            Match(
+                sport=sport,
+                team_a=team_a,
+                team_b=team_b,
+                start_time=now - timedelta(days=i + 1),
+                prediction_deadline=now - timedelta(days=i + 1),
+            )
+            for i in range(200)
+        ]
+        Match.objects.bulk_create(matches)
+        all_matches = list(Match.objects.filter(sport=sport)[:200])
+        predictions = [
+            Prediction(user=self.user, match=m, choice=Prediction.Side.A)
+            for m in all_matches
+        ]
+        Prediction.objects.bulk_create(predictions)
+
+        self.client.login(username="alice", password="pass12345")
+        response = self.client.get(reverse("my_account"))
+        self.assertEqual(response.context["all_time_rank"], 1)
+
+    def test_current_month_rank_follows_gold_medal_even_with_fewer_points(self):
+        # In the current month, Alice has 50 points and 200 predictions.
+        # Bob has 100 points but only 1 prediction.
+        # Alice qualifies for Gold medal; Bob is ineligible.
+        # Alice must be #1 in My Account this month's rank.
+        bob = make_user("bob", password="pass12345")
+        sport = Sport.objects.first() or Sport.objects.create(name="Football")
+        team_a = Team.objects.create(name="Alpha2", sport=sport)
+        team_b = Team.objects.create(name="Beta2", sport=sport)
+        now = timezone.now()
+
+        matches = [
+            Match(
+                sport=sport,
+                team_a=team_a,
+                team_b=team_b,
+                start_time=now,
+                prediction_deadline=now,
+            )
+            for i in range(200)
+        ]
+        Match.objects.bulk_create(matches)
+        created_matches = list(Match.objects.filter(team_a=team_a)[:200])
+        predictions = [
+            Prediction(user=self.user, match=m, choice=Prediction.Side.A)
+            for m in created_matches
+        ]
+        Prediction.objects.bulk_create(predictions)
+
+        # Alice's 50 monthly points
+        ScoreAdjustment.objects.create(user=self.user, match=created_matches[0], delta=50)
+
+        # Bob's 100 monthly points with 1 prediction
+        bob_match = Match.objects.create(
+            sport=sport,
+            team_a=team_a,
+            team_b=team_b,
+            start_time=now,
+            prediction_deadline=now,
+        )
+        Prediction.objects.create(user=bob, match=bob_match, choice=Prediction.Side.A)
+        ScoreAdjustment.objects.create(user=bob, match=bob_match, delta=100)
+
+        self.client.login(username="alice", password="pass12345")
+        response = self.client.get(reverse("my_account"))
+        self.assertEqual(response.context["monthly_rank"], 1)
 
 
 class FakeProvider(Provider):

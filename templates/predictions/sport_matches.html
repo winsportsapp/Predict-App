@@ -3,30 +3,11 @@
 {% block title %}{{ sport_name }}{% endblock %}
 {% block full_title %}{% if is_home %}WinSports – Free Sports Predictions, Leaderboard &amp; Prizes{% else %}{{ sport_name }} · WinSports{% endif %}{% endblock %}
 {% block extra_head %}{% if is_home %}{% include "predictions/_home_styles.html" %}{% endif %}{% endblock %}
-{% block content %}
-<!-- Sports Horizontal Scrolling Pills Bar (APK Style) -->
-<div class="sports-pill-wrapper mb-4">
-  <div class="d-flex align-items-center gap-2 overflow-auto py-1 px-1 sports-pill-scroller">
-    {% for sport in nav_sports %}
-      <a href="{% url 'sport_matches' sport.slug %}"
-         class="btn btn-sm text-nowrap sports-tab-pill {% if sport.slug == sport_slug %}active-pill{% else %}inactive-pill{% endif %}">
-        <span class="pill-sport-name">
-          {% if sport.slug == 'football' %}⚽{% elif sport.slug == 'cricket' %}🏏{% elif sport.slug == 'tennis' %}🎾{% elif sport.slug == 'badminton' %}🏸{% elif sport.slug == 'hockey' %}🏑{% else %}🏆{% endif %}
-          <span class="ms-1">{{ sport.name }}</span>
-        </span>
-        {% if sport.has_open %}
-          <span class="badge text-bg-success predict-pill-badge mt-1">Predict</span>
-          <span class="visually-hidden">Predict now</span>
-        {% endif %}
-      </a>
-    {% endfor %}
-    <a href="{% url 'closed_matches' %}"
-       class="btn btn-sm text-nowrap sports-tab-pill inactive-pill">
-      <span class="pill-sport-name">🔒 Closed</span>
-    </a>
-  </div>
-</div>
+{% block sticky_subnav %}
+  {% include "predictions/_sports_pills.html" %}
+{% endblock %}
 
+{% block content %}
 {# Logged-out visitors on `/` get the intro instead of the match list. #}
 {% if is_home and not user.is_authenticated %}
   {% include "predictions/_home_intro.html" %}
@@ -128,17 +109,16 @@
                   </div>
 
                   {% if user.is_authenticated %}
-                    <form method="post" action="{% url 'predict' match.pk %}">
+                    <form method="post" action="{% url 'predict' match.pk %}" class="predict-form" data-match-id="{{ match.pk }}">
                       {% csrf_token %}
                       <input type="hidden" name="choice" value="A">
                       <button type="submit"
+                              data-choice="A"
                               class="btn w-100 pick-btn {% if match.user_pick.choice == 'A' %}pick-btn-selected{% else %}pick-btn-unselected{% endif %} shadow-sm">
                         <div class="pick-team-name mb-1">{% team_flag match.team_a %}{{ match.team_a }}</div>
                         <div class="pick-points-line">If Win get: <strong{% if match.team_a_win_points < 0 %} class="pts-negative"{% endif %}>{{ match.team_a_win_points|signed_points }}</strong></div>
                         <div class="pick-points-line">{% if match.allows_draw %}{% if match.sport.name == 'Football' or sport_slug == 'football' %}If not get{% else %}If Lose/Draw get{% endif %}{% else %}If Lose get{% endif %}: <strong{% if match.team_a_lose_points < 0 %} class="pts-negative"{% endif %}>{{ match.team_a_lose_points|signed_points }}</strong></div>
-                        {% if match.user_pick.choice == 'A' %}
-                          <div class="small mt-1"><span class="badge text-bg-success">Predicted</span></div>
-                        {% endif %}
+                        <div class="small mt-1 predicted-badge-container">{% if match.user_pick.choice == 'A' %}<span class="badge text-bg-success">Predicted</span>{% endif %}</div>
                       </button>
                     </form>
                   {% else %}
@@ -161,17 +141,16 @@
                     </div>
 
                     {% if user.is_authenticated %}
-                      <form method="post" action="{% url 'predict' match.pk %}">
+                      <form method="post" action="{% url 'predict' match.pk %}" class="predict-form" data-match-id="{{ match.pk }}">
                         {% csrf_token %}
                         <input type="hidden" name="choice" value="D">
                         <button type="submit"
+                                data-choice="D"
                                 class="btn w-100 pick-btn {% if match.user_pick.choice == 'D' %}pick-btn-selected{% else %}pick-btn-unselected{% endif %} shadow-sm">
                           <div class="pick-team-name mb-1">Draw</div>
                           <div class="pick-points-line">{% if match.sport.name == 'Football' or sport_slug == 'football' %}If Draw get{% else %}If Win get{% endif %}: <strong{% if match.draw_win_points < 0 %} class="pts-negative"{% endif %}>{{ match.draw_win_points|signed_points }}</strong></div>
                           <div class="pick-points-line">{% if match.sport.name == 'Football' or sport_slug == 'football' %}If not{% else %}If Lose{% endif %}: <strong{% if match.draw_lose_points < 0 %} class="pts-negative"{% endif %}>{{ match.draw_lose_points|signed_points }}</strong></div>
-                          {% if match.user_pick.choice == 'D' %}
-                            <div class="small mt-1"><span class="badge text-bg-success">Predicted</span></div>
-                          {% endif %}
+                          <div class="small mt-1 predicted-badge-container">{% if match.user_pick.choice == 'D' %}<span class="badge text-bg-success">Predicted</span>{% endif %}</div>
                         </button>
                       </form>
                     {% else %}
@@ -207,17 +186,16 @@
                   </div>
 
                   {% if user.is_authenticated %}
-                    <form method="post" action="{% url 'predict' match.pk %}">
+                    <form method="post" action="{% url 'predict' match.pk %}" class="predict-form" data-match-id="{{ match.pk }}">
                       {% csrf_token %}
                       <input type="hidden" name="choice" value="B">
                       <button type="submit"
+                              data-choice="B"
                               class="btn w-100 pick-btn {% if match.user_pick.choice == 'B' %}pick-btn-selected{% else %}pick-btn-unselected{% endif %} shadow-sm">
                         <div class="pick-team-name mb-1">{% team_flag match.team_b %}{{ match.team_b }}</div>
                         <div class="pick-points-line">If Win get: <strong{% if match.team_b_win_points < 0 %} class="pts-negative"{% endif %}>{{ match.team_b_win_points|signed_points }}</strong></div>
                         <div class="pick-points-line">{% if match.allows_draw %}{% if match.sport.name == 'Football' or sport_slug == 'football' %}If not get{% else %}If Lose/Draw get{% endif %}{% else %}If Lose get{% endif %}: <strong{% if match.team_b_lose_points < 0 %} class="pts-negative"{% endif %}>{{ match.team_b_lose_points|signed_points }}</strong></div>
-                        {% if match.user_pick.choice == 'B' %}
-                          <div class="small mt-1"><span class="badge text-bg-success">Predicted</span></div>
-                        {% endif %}
+                        <div class="small mt-1 predicted-badge-container">{% if match.user_pick.choice == 'B' %}<span class="badge text-bg-success">Predicted</span>{% endif %}</div>
                       </button>
                     </form>
                   {% else %}
@@ -366,10 +344,88 @@
       scroller.scrollLeft = Math.max(0, scrollTarget);
     }
 
+    function initAjaxPredictions() {
+      document.addEventListener('submit', function (e) {
+        var form = e.target.closest('.predict-form');
+        if (!form) return;
+        e.preventDefault();
+
+        var pickPanel = form.closest('.pick-panel');
+        var submitBtn = form.querySelector('button[type="submit"]');
+        var formData = new FormData(form);
+
+        if (submitBtn) submitBtn.disabled = true;
+
+        fetch(form.action, {
+          method: 'POST',
+          body: formData,
+          headers: {
+            'X-Requested-With': 'XMLHttpRequest',
+            'Accept': 'application/json'
+          }
+        })
+        .then(function (res) {
+          if (!res.ok) {
+            return res.json().then(function (data) {
+              throw new Error(data.message || 'Error saving prediction');
+            });
+          }
+          return res.json();
+        })
+        .then(function (data) {
+          if (data.status === 'ok' && pickPanel) {
+            var allForms = pickPanel.querySelectorAll('.predict-form');
+            allForms.forEach(function (f) {
+              var btn = f.querySelector('button[type="submit"]');
+              if (!btn) return;
+              var fChoice = f.querySelector('input[name="choice"]').value;
+              var badgeContainer = btn.querySelector('.predicted-badge-container');
+              if (fChoice === data.choice) {
+                btn.classList.remove('pick-btn-unselected');
+                btn.classList.add('pick-btn-selected');
+                if (badgeContainer) {
+                  badgeContainer.innerHTML = '<span class="badge text-bg-success">Predicted</span>';
+                }
+              } else {
+                btn.classList.remove('pick-btn-selected');
+                btn.classList.add('pick-btn-unselected');
+                if (badgeContainer) {
+                  badgeContainer.innerHTML = '';
+                }
+              }
+            });
+
+            // Update mobile navbar badge / PWA count if present
+            if (typeof data.open_prediction_count !== 'undefined') {
+              var badges = document.querySelectorAll('.mobile-nav-badge');
+              badges.forEach(function (b) {
+                if (data.open_prediction_count > 0) {
+                  b.textContent = data.open_prediction_count;
+                  b.style.display = '';
+                } else {
+                  b.style.display = 'none';
+                }
+              });
+            }
+          }
+        })
+        .catch(function (err) {
+          alert(err.message || 'Could not save prediction. Please try again.');
+        })
+        .finally(function () {
+          if (submitBtn) submitBtn.disabled = false;
+        });
+      });
+    }
+
     if (document.readyState === 'loading') {
-      document.addEventListener('DOMContentLoaded', centerActiveSportPill);
+      document.addEventListener('DOMContentLoaded', function () {
+        centerActiveSportPill();
+        initAjaxPredictions();
+      });
     } else {
       centerActiveSportPill();
+      initAjaxPredictions();
     }
   })();
 </script>

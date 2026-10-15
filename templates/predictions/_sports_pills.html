@@ -1,0 +1,24 @@
+<!-- Sports Horizontal Scrolling Pills Bar (APK Style) -->
+<div class="sports-pill-wrapper py-2">
+  <div class="container">
+    <div class="d-flex align-items-center gap-2 overflow-auto py-1 px-1 sports-pill-scroller">
+      {% for sport in nav_sports %}
+        <a href="{% url 'sport_matches' sport.slug %}"
+           class="btn btn-sm text-nowrap sports-tab-pill {% if sport.slug == sport_slug %}active-pill{% else %}inactive-pill{% endif %}">
+          <span class="pill-sport-name">
+            {% if sport.slug == 'football' %}⚽{% elif sport.slug == 'cricket' %}🏏{% elif sport.slug == 'tennis' %}🎾{% elif sport.slug == 'badminton' %}🏸{% elif sport.slug == 'hockey' %}🏑{% else %}🏆{% endif %}
+            <span class="ms-1">{{ sport.name }}</span>
+          </span>
+          {% if sport.has_open %}
+            <span class="badge text-bg-success predict-pill-badge mt-1">Predict</span>
+            <span class="visually-hidden">Predict now</span>
+          {% endif %}
+        </a>
+      {% endfor %}
+      <a href="{% url 'closed_matches' %}"
+         class="btn btn-sm text-nowrap sports-tab-pill {% if is_closed_page or request.resolver_match.url_name == 'closed_matches' %}active-pill{% else %}inactive-pill{% endif %}">
+        <span class="pill-sport-name">🔒 Closed</span>
+      </a>
+    </div>
+  </div>
+</div>

@@ -18,7 +18,7 @@ from django.utils import timezone
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.http import require_POST
 
-from . import google_auth, push
+from . import google_auth, push, services
 from .constants import DEFAULT_SPORT_SLUG, DRAW_SPORTS, SPORT_SLUGS, SUPPORTED_SPORTS
 from .forms import AddEmailForm, LocationForm, PredictionForm, RegistrationForm
 from .locations import STATES_BY_COUNTRY
@@ -85,18 +85,8 @@ def sport_matches(request, sport_slug, extra_context=None):
     )
     open_matches = [m for m in matches if m.predictions_open]
     _attach_user_picks(request, open_matches)
-    # Already-predicted matches sink below the still-open ones, so after the
-    # full-page reload a submitted prediction causes, the next match to
-    # predict is near the top instead of buried below ones already done.
+    # Unpredicted matches appear first in kickoff order, followed by already-predicted matches.
     open_matches.sort(key=lambda m: (m.user_pick is not None, m.start_time))
-    # The most recently saved pick goes second, just below the next match to
-    # predict, so the user can still see it without scrolling.
-    predicted = [m for m in open_matches if m.user_pick is not None]
-    if predicted:
-        latest = max(predicted, key=lambda m: m.user_pick.updated_at)
-        open_matches.remove(latest)
-        position = 1 if open_matches and open_matches[0].user_pick is None else 0
-        open_matches.insert(position, latest)
 
     return render(
         request,
@@ -177,11 +167,16 @@ def predict(request, pk):
     match = get_object_or_404(Match.objects.select_related("sport"), pk=pk)
     existing = Prediction.objects.filter(user=request.user, match=match).first()
 
+    is_ajax = (
+        request.headers.get("x-requested-with") == "XMLHttpRequest"
+        or "application/json" in request.headers.get("Accept", "")
+    )
+
     if not match.predictions_open:
-        messages.error(
-            request,
-            "Predictions are locked for this match. The deadline has passed or a winner is already set.",
-        )
+        msg = "Predictions are locked for this match. The deadline has passed or a winner is already set."
+        if is_ajax:
+            return JsonResponse({"status": "error", "message": msg}, status=400)
+        messages.error(request, msg)
         return _sport_redirect(match.sport)
 
     if request.method == "POST":
@@ -190,10 +185,10 @@ def predict(request, pk):
             # Re-check deadline on the server; do not trust the form being visible.
             match.refresh_from_db()
             if not match.predictions_open:
-                messages.error(
-                    request,
-                    "Predictions are locked for this match. The deadline has passed or a winner is already set.",
-                )
+                msg = "Predictions are locked for this match. The deadline has passed or a winner is already set."
+                if is_ajax:
+                    return JsonResponse({"status": "error", "message": msg}, status=400)
+                messages.error(request, msg)
                 return _sport_redirect(match.sport)
             Prediction.objects.update_or_create(
                 user=request.user,
@@ -201,6 +196,15 @@ def predict(request, pk):
                 defaults={"choice": form.cleaned_data["choice"]},
             )
             credit_referral_if_first_prediction(request.user)
+            if is_ajax:
+                open_count = services.open_matches(request.user).count()
+                return JsonResponse({
+                    "status": "ok",
+                    "choice": form.cleaned_data["choice"],
+                    "match_id": match.id,
+                    "message": "Your prediction has been saved.",
+                    "open_prediction_count": open_count,
+                })
             messages.success(request, "Your prediction has been saved.")
             next_url = request.POST.get("next")
             if next_url and url_has_allowed_host_and_scheme(
@@ -208,6 +212,9 @@ def predict(request, pk):
             ):
                 return redirect(next_url)
             return _sport_redirect(match.sport)
+        else:
+            if is_ajax:
+                return JsonResponse({"status": "error", "errors": form.errors}, status=400)
     else:
         initial = {"choice": existing.choice} if existing else None
         form = PredictionForm(match=match, initial=initial)
@@ -248,82 +255,6 @@ def my_predictions(request):
         "predictions/my_predictions.html",
         {"pending": pending, "decided": decided, "cancelled": cancelled},
     )
-
-
-@login_required
-def my_account(request):
-    """Referral link, credit wallet and redemption history for the current
-    user, plus the optional Country / State shown on the leaderboard (POST
-    saves those). `profile.credits` is entirely separate from
-    `profile.points` (leaderboard) -- see Profile/CreditLedger in models.py."""
-    profile = request.user.profile
-    if request.method == "POST":
-        location_form = LocationForm(request.POST, instance=profile)
-        if location_form.is_valid():
-            location_form.save()
-            messages.success(request, "Your location has been saved.")
-            return redirect("my_account")
-    else:
-        location_form = LocationForm(instance=profile)
-    settings_row = ReferralSettings.load()
-    threshold = settings_row.redemption_threshold
-    referral_link = request.build_absolute_uri(
-        f"{reverse('register')}?ref={profile.referral_code}"
-    )
-    referrals = Referral.objects.filter(referrer=request.user).select_related(
-        "referred_user"
-    )
-
-    all_time_rank = Profile.objects.filter(
-        Q(points__gt=profile.points)
-        | Q(points=profile.points, user__username__lt=profile.user.username)
-    ).count() + 1
-
-    monthly_points, monthly_rank = 0, None
-    for i, p in enumerate(_monthly_profiles(*_current_month()), start=1):
-        if p.user_id == request.user.id:
-            monthly_points, monthly_rank = p.monthly_points, i
-            break
-
-    return render(
-        request,
-        "predictions/my_account.html",
-        {
-            "profile": profile,
-            "referral_link": referral_link,
-            "referrals": referrals,
-            "referrals_credited": sum(
-                1 for r in referrals if r.status == Referral.Status.CREDITED
-            ),
-            "credits_per_referral": settings_row.credits_per_referral,
-            "redemptions": VoucherRedemption.objects.filter(user=request.user),
-            "credits_threshold": threshold,
-            "progress_pct": min(100, profile.credits * 100 // threshold)
-            if threshold
-            else 0,
-            "can_redeem": profile.credits >= threshold,
-            "all_time_points": profile.points,
-            "all_time_rank": all_time_rank,
-            "monthly_points": monthly_points,
-            "monthly_rank": monthly_rank,
-            "location_form": location_form,
-            "states_by_country_json": json.dumps(STATES_BY_COUNTRY),
-        },
-    )
-
-
-@login_required
-def redeem_credits_view(request):
-    if request.method == "POST":
-        redemption = redeem_credits(request.user)
-        if redemption is None:
-            messages.error(request, "You don't have enough credits to redeem yet.")
-        else:
-            messages.success(
-                request,
-                "Redemption requested — we'll be in touch once it's fulfilled.",
-            )
-    return redirect("my_account")
 
 
 def _all_time_profiles():
@@ -456,6 +387,105 @@ def _assign_medals_by_eligibility(
     return profiles
 
 
+def get_all_time_leaderboard_profiles():
+    all_time_profiles = list(_all_time_profiles())
+    return _assign_medals_by_eligibility(
+        all_time_profiles,
+        MEDAL_MIN_PREDICTIONS,
+        count_attr="predictions_count",
+        points_attr="points",
+    )
+
+
+def get_monthly_leaderboard_profiles(year, month):
+    monthly_profiles = _monthly_profiles(year, month)
+    return _assign_medals_by_eligibility(
+        monthly_profiles,
+        MEDAL_MIN_PREDICTIONS,
+        count_attr="monthly_predictions_count",
+        points_attr="monthly_points",
+    )
+
+
+@login_required
+def my_account(request):
+    """Referral link, credit wallet and redemption history for the current
+    user, plus the optional Country / State shown on the leaderboard (POST
+    saves those). `profile.credits` is entirely separate from
+    `profile.points` (leaderboard) -- see Profile/CreditLedger in models.py."""
+    profile = request.user.profile
+    if request.method == "POST":
+        location_form = LocationForm(request.POST, instance=profile)
+        if location_form.is_valid():
+            location_form.save()
+            messages.success(request, "Your location has been saved.")
+            return redirect("my_account")
+    else:
+        location_form = LocationForm(instance=profile)
+    settings_row = ReferralSettings.load()
+    threshold = settings_row.redemption_threshold
+    referral_link = request.build_absolute_uri(
+        f"{reverse('register')}?ref={profile.referral_code}"
+    )
+    referrals = Referral.objects.filter(referrer=request.user).select_related(
+        "referred_user"
+    )
+
+    all_time_profiles = get_all_time_leaderboard_profiles()
+    all_time_rank = None
+    for i, p in enumerate(all_time_profiles, start=1):
+        if p.user_id == request.user.id:
+            all_time_rank = i
+            break
+
+    monthly_profiles = get_monthly_leaderboard_profiles(*_current_month())
+    monthly_points, monthly_rank = 0, None
+    for i, p in enumerate(monthly_profiles, start=1):
+        if p.user_id == request.user.id:
+            monthly_points, monthly_rank = p.monthly_points, i
+            break
+
+    return render(
+        request,
+        "predictions/my_account.html",
+        {
+            "profile": profile,
+            "referral_link": referral_link,
+            "referrals": referrals,
+            "referrals_credited": sum(
+                1 for r in referrals if r.status == Referral.Status.CREDITED
+            ),
+            "credits_per_referral": settings_row.credits_per_referral,
+            "redemptions": VoucherRedemption.objects.filter(user=request.user),
+            "credits_threshold": threshold,
+            "progress_pct": min(100, profile.credits * 100 // threshold)
+            if threshold
+            else 0,
+            "can_redeem": profile.credits >= threshold,
+            "all_time_points": profile.points,
+            "all_time_rank": all_time_rank,
+            "monthly_points": monthly_points,
+            "monthly_rank": monthly_rank,
+            "location_form": location_form,
+            "states_by_country_json": json.dumps(STATES_BY_COUNTRY),
+        },
+    )
+
+
+@login_required
+def redeem_credits_view(request):
+    if request.method == "POST":
+        redemption = redeem_credits(request.user)
+        if redemption is None:
+            messages.error(request, "You don't have enough credits to redeem yet.")
+        else:
+            messages.success(
+                request,
+                "Redemption requested — we'll be in touch once it's fulfilled.",
+            )
+    return redirect("my_account")
+
+
 def leaderboard(request):
     """One page showing the All-Time and Monthly boards side by side.
 
@@ -470,19 +500,13 @@ def leaderboard(request):
     zone = timezone.get_default_timezone()
 
     # Medals on both boards always need the prediction floor.
-    all_time_profiles = list(_all_time_profiles())
-    all_time_profiles = _assign_medals_by_eligibility(
-        all_time_profiles,
-        MEDAL_MIN_PREDICTIONS,
-        count_attr="predictions_count",
-        points_attr="points",
-    )
+    all_time_profiles = get_all_time_leaderboard_profiles()
 
-    monthly_profiles = _monthly_profiles(*selected)
     if is_past_month:
         # Only the winners: a zero-point player isn't one. The prediction
         # floor applies from the month the rule was introduced; earlier
         # months stay rank-based.
+        monthly_profiles = _monthly_profiles(*selected)
         winners = [p for p in monthly_profiles if p.monthly_points > 0]
         if selected >= MEDAL_ELIGIBILITY_FIRST_MONTH:
             winners = [
@@ -492,12 +516,7 @@ def leaderboard(request):
         monthly_profiles = winners[:3]
         _assign_medals_by_rank(monthly_profiles)
     else:
-        monthly_profiles = _assign_medals_by_eligibility(
-            monthly_profiles,
-            MEDAL_MIN_PREDICTIONS,
-            count_attr="monthly_predictions_count",
-            points_attr="monthly_points",
-        )
+        monthly_profiles = get_monthly_leaderboard_profiles(*selected)
 
     months_with_activity = {
         (m.year, m.month)

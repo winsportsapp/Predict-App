@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>{% block full_title %}{% block title %}Predict{% endblock %} · WinSports{% endblock %}</title>
   <meta name="description" content="{% block meta_description %}WinSports is a 100% free sports prediction game. Predict football, cricket, tennis, badminton and hockey matches, climb the monthly leaderboard and win gift vouchers. No betting, no entry fees.{% endblock %}">
   <link rel="canonical" href="{% block canonical_url %}https://winsports.cc{{ request.path }}{% endblock %}">
@@ -60,6 +60,10 @@
       --ws-border: #e2e8f0;
       --ws-text: #0f172a;
       --ws-muted: #64748b;
+    }
+    html, body {
+      min-height: 100%;
+      overflow-x: hidden;
     }
     body {
       font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
@@ -371,6 +375,83 @@
         height: 24px;
       }
     }
+    /* Sticky Top Navigation Container */
+    .sticky-nav-container {
+      position: -webkit-sticky;
+      position: sticky;
+      top: 0;
+      top: env(safe-area-inset-top, 0px);
+      z-index: 1030;
+      background-color: var(--ws-bg);
+      width: 100%;
+      -webkit-transform: translateZ(0);
+      transform: translateZ(0);
+    }
+    .sports-pill-wrapper {
+      background-color: #f8fafc;
+      border-bottom: 1px solid #e2e8f0;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.04);
+    }
+    .sports-pill-scroller {
+      scroll-behavior: smooth;
+      -webkit-overflow-scrolling: touch;
+    }
+    .sports-pill-scroller::-webkit-scrollbar {
+      height: 4px;
+    }
+    .sports-pill-scroller::-webkit-scrollbar-thumb {
+      background: #cbd5e1;
+      border-radius: 4px;
+    }
+    .sports-tab-pill {
+      padding: 0.35rem 0.85rem;
+      font-size: 0.82rem;
+      font-weight: 600;
+      transition: all 0.15s ease;
+      display: inline-flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      border-radius: 12px;
+      min-height: 48px;
+    }
+    .pill-sport-name {
+      display: inline-flex;
+      align-items: center;
+      line-height: 1.2;
+    }
+    .active-pill {
+      background-color: #0B3D2E !important;
+      color: #ffffff !important;
+      border: 1px solid #0B3D2E !important;
+      box-shadow: 0 2px 6px rgba(11, 61, 46, 0.25);
+    }
+    .inactive-pill {
+      background-color: #ffffff !important;
+      color: #475569 !important;
+      border: 1px solid #e2e8f0 !important;
+    }
+    .inactive-pill:hover {
+      background-color: #f1f5f9 !important;
+      color: #0f172a !important;
+    }
+    .predict-pill-badge {
+      font-size: 0.58rem;
+      font-weight: 700;
+      padding: 0.12rem 0.45rem;
+      border-radius: 999px;
+      letter-spacing: 0.03em;
+      line-height: 1;
+      display: inline-block;
+    }
+    .active-pill .predict-pill-badge {
+      background-color: #22c55e !important;
+      color: #ffffff !important;
+    }
+    .inactive-pill .predict-pill-badge {
+      background-color: #16a34a !important;
+      color: #ffffff !important;
+    }
     /* App Header */
     .app-header {
       background: linear-gradient(180deg, #06261c 0%, #0B3D2E 100%);
@@ -497,100 +578,107 @@
         padding-bottom: 0;
       }
     }
+    @media (display-mode: standalone) {
+      .app-header {
+        padding-top: max(0.5rem, env(safe-area-inset-top, 0.5rem)) !important;
+      }
+    }
   </style>
   {% block extra_head %}{% endblock %}
 </head>
-<body>
-  <!-- Header / App Bar -->
-  <header class="app-header py-2 py-lg-3 mb-4 shadow-sm">
-    <div class="container d-flex align-items-center justify-content-between">
-      <div class="d-flex align-items-center gap-2">
-        <a class="navbar-brand text-white fw-bold d-flex align-items-center gap-2 m-0 text-decoration-none" href="{% url 'match_list' %}">
-          <span class="fs-4 brand-title">WinSports</span>
-          <span class="badge rounded-pill brand-badge-f2p">FREE</span>
-        </a>
-      </div>
-
-      <div class="d-flex align-items-center gap-2">
-        {% if user.is_authenticated %}
-          <span class="header-username text-white fw-semibold small text-truncate d-inline-block"
-                style="max-width: 120px;"
-                title="{{ user.username }}">{{ user.username }}</span>
-          <div class="points-pill d-flex align-items-center gap-1 px-3 py-1 rounded-pill text-white shadow-sm">
-            <span>🏆</span>
-            <span class="fw-bold">{{ user_points }}</span>
-            <span class="small text-white-50">pts</span>
-          </div>
-        {% else %}
-          <div class="d-flex align-items-center gap-2">
-            <a href="{% url 'login' %}" class="btn btn-outline-light btn-sm px-3 rounded-pill">Log in</a>
-            <a href="{% url 'register' %}" class="btn btn-success btn-sm px-3 rounded-pill fw-semibold">Register</a>
-          </div>
-        {% endif %}
-      </div>
-    </div>
-
-    <!-- Desktop Sub-Navigation Menu -->
-    <div class="desktop-nav-bar d-none d-lg-block mt-2 pt-2 border-top border-white border-opacity-10">
+<body>  <!-- Sticky Navigation Wrapper (Top Nav Bar + Menus for Sports) -->
+  <div class="sticky-nav-container mb-4">
+    <header class="app-header py-2 py-lg-3 shadow-sm">
       <div class="container d-flex align-items-center justify-content-between">
-        <ul class="nav align-items-center gap-1" id="sports-nav">
-          <li class="nav-item">
-            <a class="nav-link text-white-50 px-2 py-0.5 rounded d-flex flex-column align-items-center justify-content-center text-center lh-sm {% if request.resolver_match.url_name in 'match_list sport_matches match_detail' %}text-white fw-bold active-sport-link{% endif %}"
-               href="{% url 'match_list' %}">
-              <span>Matches</span>
-              <span class="badge text-bg-success predict-now-badge mt-1" style="font-size: 0.58rem;">Predict</span>
-            </a>
-          </li>
-          <li class="nav-item">
-            <a class="nav-link text-white-50 px-2 py-1 rounded {% if request.resolver_match.url_name == 'closed_matches' %}text-white fw-bold active-sport-link{% endif %}"
-               href="{% url 'closed_matches' %}">Closed Matches</a>
-          </li>
-          <li class="nav-item">
-            <a class="nav-link text-white-50 px-2 py-1 rounded {% if request.resolver_match.url_name == 'analytics' %}text-white fw-bold active-sport-link{% endif %}"
-               href="{% url 'analytics' %}">Analytics</a>
-          </li>
-          {% if user.is_authenticated %}
-            <li class="nav-item">
-              <a class="nav-link text-white-50 px-2 py-1 rounded {% if request.resolver_match.url_name == 'my_predictions' %}text-white fw-bold active-sport-link{% endif %}"
-                 href="{% url 'my_predictions' %}">My Picks</a>
-            </li>
-          {% endif %}
-          <li class="nav-item">
-            <a class="nav-link text-white-50 px-2 py-1 rounded {% if request.resolver_match.url_name == 'how_it_works' %}text-white fw-bold active-sport-link{% endif %}"
-               href="{% url 'how_it_works' %}">Fair Play</a>
-          </li>
-          <li class="nav-item">
-            <a class="nav-link text-white-50 px-2 py-1 rounded {% if request.resolver_match.url_name == 'leaderboard' %}text-white fw-bold active-sport-link{% endif %}"
-               href="{% url 'leaderboard' %}">Leaderboard</a>
-          </li>
-        </ul>
+        <div class="d-flex align-items-center gap-2">
+          <a class="navbar-brand text-white fw-bold d-flex align-items-center gap-2 m-0 text-decoration-none" href="{% url 'match_list' %}">
+            <span class="fs-4 brand-title">WinSports</span>
+            <span class="badge rounded-pill brand-badge-f2p">FREE</span>
+          </a>
+        </div>
 
         <div class="d-flex align-items-center gap-2">
           {% if user.is_authenticated %}
-            <a class="nav-link text-white-50 px-2 py-0.5 rounded d-flex flex-column align-items-center justify-content-center text-center lh-sm {% if request.resolver_match.url_name == 'my_account' %}text-white fw-bold active-sport-link{% endif %}"
-               href="{% url 'my_account' %}">
-              <span>My Account</span>
-              <span class="badge text-bg-success predict-now-badge mt-1" style="font-size: 0.58rem;">Redeem Credits</span>
-            </a>
-            <form method="post" action="{% url 'logout' %}" class="d-inline ms-1">
-              {% csrf_token %}
-              <input type="hidden" name="push_endpoint" value="" data-push-endpoint>
-              <button type="submit" class="btn btn-outline-light btn-sm rounded-pill px-3">Log out</button>
-            </form>
+            <span class="header-username text-white fw-semibold small text-truncate d-inline-block"
+                  style="max-width: 120px;"
+                  title="{{ user.username }}">{{ user.username }}</span>
+            <div class="points-pill d-flex align-items-center gap-1 px-3 py-1 rounded-pill text-white shadow-sm">
+              <span>🏆</span>
+              <span class="fw-bold">{{ user_points }}</span>
+              <span class="small text-white-50">pts</span>
+            </div>
+          {% else %}
+            <div class="d-flex align-items-center gap-2">
+              <a href="{% url 'login' %}" class="btn btn-outline-light btn-sm px-3 rounded-pill">Log in</a>
+              <a href="{% url 'register' %}" class="btn btn-success btn-sm px-3 rounded-pill fw-semibold">Register</a>
+            </div>
           {% endif %}
-          <span data-push-item hidden>
-            <button type="button" class="btn btn-outline-light btn-sm rounded-pill" data-push-enable>🔔 Alerts</button>
-          </span>
-          <span data-push-blocked-item hidden>
-            <button type="button" class="btn btn-outline-light btn-sm rounded-pill" data-push-blocked>🔔 Blocked</button>
-          </span>
-          <span data-pwa-install-item hidden>
-            <button type="button" class="btn btn-success btn-sm rounded-pill fw-semibold" data-pwa-install>Install App</button>
-          </span>
         </div>
       </div>
-    </div>
-  </header>
+
+      <!-- Desktop Sub-Navigation Menu -->
+      <div class="desktop-nav-bar d-none d-lg-block mt-2 pt-2 border-top border-white border-opacity-10">
+        <div class="container d-flex align-items-center justify-content-between">
+          <ul class="nav align-items-center gap-1" id="sports-nav">
+            <li class="nav-item">
+              <a class="nav-link text-white-50 px-2 py-0.5 rounded d-flex flex-column align-items-center justify-content-center text-center lh-sm {% if request.resolver_match.url_name in 'match_list sport_matches match_detail' %}text-white fw-bold active-sport-link{% endif %}"
+                 href="{% url 'match_list' %}">
+                <span>Matches</span>
+                <span class="badge text-bg-success predict-now-badge mt-1" style="font-size: 0.58rem;">Predict</span>
+              </a>
+            </li>
+            <li class="nav-item">
+              <a class="nav-link text-white-50 px-2 py-1 rounded {% if request.resolver_match.url_name == 'closed_matches' %}text-white fw-bold active-sport-link{% endif %}"
+                 href="{% url 'closed_matches' %}">Closed Matches</a>
+            </li>
+            <li class="nav-item">
+              <a class="nav-link text-white-50 px-2 py-1 rounded {% if request.resolver_match.url_name == 'analytics' %}text-white fw-bold active-sport-link{% endif %}"
+                 href="{% url 'analytics' %}">Analytics</a>
+            </li>
+            {% if user.is_authenticated %}
+              <li class="nav-item">
+                <a class="nav-link text-white-50 px-2 py-1 rounded {% if request.resolver_match.url_name == 'my_predictions' %}text-white fw-bold active-sport-link{% endif %}"
+                   href="{% url 'my_predictions' %}">My Picks</a>
+              </li>
+            {% endif %}
+            <li class="nav-item">
+              <a class="nav-link text-white-50 px-2 py-1 rounded {% if request.resolver_match.url_name == 'how_it_works' %}text-white fw-bold active-sport-link{% endif %}"
+                 href="{% url 'how_it_works' %}">Fair Play</a>
+            </li>
+            <li class="nav-item">
+              <a class="nav-link text-white-50 px-2 py-1 rounded {% if request.resolver_match.url_name == 'leaderboard' %}text-white fw-bold active-sport-link{% endif %}"
+                 href="{% url 'leaderboard' %}">Leaderboard</a>
+            </li>
+          </ul>
+
+          <div class="d-flex align-items-center gap-2">
+            {% if user.is_authenticated %}
+              <a class="nav-link text-white-50 px-2 py-0.5 rounded d-flex flex-column align-items-center justify-content-center text-center lh-sm {% if request.resolver_match.url_name == 'my_account' %}text-white fw-bold active-sport-link{% endif %}"
+                 href="{% url 'my_account' %}">
+                <span>My Account</span>
+                <span class="badge text-bg-success predict-now-badge mt-1" style="font-size: 0.58rem;">Redeem Credits</span>
+              </a>
+              <form method="post" action="{% url 'logout' %}" class="d-inline ms-1">
+                {% csrf_token %}
+                <input type="hidden" name="push_endpoint" value="" data-push-endpoint>
+                <button type="submit" class="btn btn-outline-light btn-sm rounded-pill px-3">Log out</button>
+              </form>
+            {% endif %}
+            <span data-push-item hidden>
+              <button type="button" class="btn btn-outline-light btn-sm rounded-pill" data-push-enable>🔔 Alerts</button>
+            </span>
+            <span data-push-blocked-item hidden>
+              <button type="button" class="btn btn-outline-light btn-sm rounded-pill" data-push-blocked>🔔 Blocked</button>
+            </span>
+            <span data-pwa-install-item hidden>
+              <button type="button" class="btn btn-success btn-sm rounded-pill fw-semibold" data-pwa-install>Install App</button>
+            </span>
+          </div>
+        </div>
+      </div>
+    </header>
+    {% block sticky_subnav %}{% endblock %}
+  </div>
 
   <main class="container pb-5">
     {% if messages %}
