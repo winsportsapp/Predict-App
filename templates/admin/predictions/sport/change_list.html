@@ -4,6 +4,16 @@
 {% block extrahead %}
 {{ block.super }}
 <style>
+  /* Non-sortable clean headers */
+  #result_list th {
+    cursor: default !important;
+  }
+  #result_list th a {
+    cursor: default !important;
+    pointer-events: none !important;
+    text-decoration: none !important;
+    color: inherit !important;
+  }
   /* Wrap and compact schedule column headers */
   #result_list th[class*="column-auto_"] {
     white-space: normal !important;
@@ -18,22 +28,20 @@
     display: block !important;
     text-align: center !important;
   }
-  #result_list th[class*="column-auto_"] a {
-    display: inline-block !important;
-    line-height: 1.3 !important;
-    text-align: center !important;
-    text-decoration: none !important;
-  }
   #result_list th[class*="column-auto_"] .time-slot-badge {
     display: block;
     margin-top: 4px;
-    font-size: 11px;
-    font-weight: 700;
-    color: var(--primary, #007bff);
-    background: rgba(0, 123, 255, 0.08);
-    border: 1px solid rgba(0, 123, 255, 0.2);
+    font-size: 12px;
+    font-weight: 800 !important;
+    color: #0b5ed7;
+    background: rgba(13, 110, 253, 0.1);
+    border: 1px solid rgba(13, 110, 253, 0.25);
     border-radius: 4px;
-    padding: 1px 4px;
+    padding: 2px 4px;
+    letter-spacing: 0.5px;
+  }
+  #result_list th[class*="column-auto_"] .time-slot-badge strong {
+    font-weight: 800 !important;
   }
   #result_list td[class*="field-auto_"] {
     text-align: center !important;
@@ -53,14 +61,13 @@
 
 <script>
 document.addEventListener("DOMContentLoaded", function() {
-  // 1. Column header wrapping: format "06:30" and "20:30" beneath feature title
-  document.querySelectorAll('#result_list th[class*="column-auto_"] a, #result_list th[class*="column-auto_"] .text').forEach(function(el) {
-    if (el.tagName === 'A' || el.children.length === 0) {
-      el.innerHTML = el.innerHTML.replace(
-        /\s*(06:30|20:30)/g,
-        '<span class="time-slot-badge">$1</span>'
-      );
-    }
+  // 1. Column header wrapping: format bold "06:30" and "20:30" beneath feature title
+  document.querySelectorAll('#result_list th[class*="column-auto_"]').forEach(function(th) {
+    const textEl = th.querySelector('.text') || th;
+    textEl.innerHTML = textEl.innerHTML.replace(
+      /\s*(06:30|20:30)/g,
+      '<span class="time-slot-badge"><strong>$1</strong></span>'
+    );
   });
 
   // 2. Interactive Dependency: Fixture uncheck -> Odds uncheck & grey/disable

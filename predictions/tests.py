@@ -5647,6 +5647,17 @@ class SyncExternalMatchesCommandTests(TestCase):
             self.assertIn(col, SportAdmin.list_display)
             self.assertIn(col, SportAdmin.list_editable)
 
+    def test_sport_admin_sorting_and_ordering(self):
+        from predictions.admin import SportAdmin
+
+        admin_instance = SportAdmin(Sport, AdminSite())
+        request = RequestFactory().get("/admin/predictions/sport/")
+        self.assertEqual(admin_instance.get_sortable_by(request), ())
+
+        qs = admin_instance.get_queryset(request)
+        names = list(qs.values_list("name", flat=True)[:5])
+        self.assertEqual(names, ["Football", "Cricket", "Tennis", "Badminton", "Hockey"])
+
     def test_sport_model_save_resets_odds_when_fixture_is_false(self):
         sport = Sport.objects.get(name="Football")
         sport.auto_fixture_0630 = False

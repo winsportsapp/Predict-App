@@ -5,7 +5,7 @@ from django.http import JsonResponse
 from django import forms
 from django.contrib import admin, messages
 from django.core.exceptions import ValidationError
-from django.db.models import Count, Q
+from django.db.models import Case, Count, IntegerField, Q, Value, When
 from django.utils import formats, timezone
 from django.utils.html import format_html
 
@@ -224,6 +224,25 @@ class SportAdmin(admin.ModelAdmin):
     @admin.display(boolean=True, description="Exclusion filter")
     def has_exclude_filter(self, obj):
         return bool(obj.exclude_tournaments_filter and obj.exclude_tournaments_filter.strip())
+
+    def get_sortable_by(self, request):
+        return ()
+
+    def get_queryset(self, request):
+        qs = super().get_queryset(request)
+        from .constants import SUPPORTED_SPORTS
+
+        order_cases = [
+            When(name__iexact=sport, then=Value(i))
+            for i, sport in enumerate(SUPPORTED_SPORTS)
+        ]
+        return qs.annotate(
+            custom_sort_order=Case(
+                *order_cases,
+                default=Value(999),
+                output_field=IntegerField(),
+            )
+        ).order_by("custom_sort_order", "name")
 
     def get_urls(self):
         urls = super().get_urls()
