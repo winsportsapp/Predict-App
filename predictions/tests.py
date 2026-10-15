@@ -5516,12 +5516,13 @@ class FlashLiveProviderTests(SimpleTestCase):
         self.assertEqual(provider.sport_ids["Hockey"], 24)
         self.assertFalse(provider.supports("Curling"))
 
-    def test_hockey_is_not_imported_by_default(self):
-        # Field hockey is entered by hand, so it must cost no API requests.
+    def test_hockey_is_supported_by_default(self):
         provider = FlashLiveProvider(
             api_key="k", tournaments=(), sport_ids={}, session=mock.Mock()
         )
-        self.assertFalse(provider.supports("Hockey"))
+        self.assertTrue(provider.supports("Hockey"))
+        self.assertEqual(provider.sport_ids["Hockey"], 24)
+
 
 
 class SyncExternalMatchesCommandTests(TestCase):
@@ -5574,10 +5575,10 @@ class SyncExternalMatchesCommandTests(TestCase):
             return_value=[("England: Premier League", 10)],
         ):
             call_command(
-                "sync_external_matches", "--list-tournaments", "--sport", "football",
+                "sync_external_matches", "--list-tournaments", "--sport", "tennis",
                 stdout=out,
             )
-        self.assertIn("England: Premier League	(10 matches)", out.getvalue())
+        self.assertIn("England: Premier League\t(10 matches)", out.getvalue())
         self.assertIn("API requests used this run:", out.getvalue())
 
     def test_requires_a_mode_and_a_provider(self):
@@ -5620,6 +5621,28 @@ class SyncExternalMatchesCommandTests(TestCase):
         from predictions.admin import SportAdmin
         self.assertIn("is_active", SportAdmin.list_display)
         self.assertIn("is_active", SportAdmin.list_editable)
+
+    def test_exclude_sport_skips_matching_sports(self):
+        provider = FakeProvider([external_event()])
+        output = self._run(provider, "--fixtures", "--exclude-sport", "Football")
+        self.assertNotIn("Football fixtures:", output)
+
+    def test_report_requests_breakdown(self):
+        from predictions.management.commands.sync_external_matches import Command as SyncCommand
+
+        p1 = mock.Mock()
+        p1.name = "api-football"
+        p1.requests_made = 2
+        p2 = mock.Mock()
+        p2.name = "flashlive"
+        p2.requests_made = 6
+
+        cmd = SyncCommand()
+        out = StringIO()
+        cmd.stdout = out
+        cmd._report_requests([p1, p2])
+        self.assertIn("API requests used this run: 8 (api-football: 2, flashlive: 6)", out.getvalue())
+
 
 
 def google_id_token(**overrides):

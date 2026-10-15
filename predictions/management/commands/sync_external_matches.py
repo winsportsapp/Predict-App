@@ -1,5 +1,6 @@
 from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
+from django.db.models import Q
 
 from predictions.importers.base import ProviderError
 from predictions.importers.flashlive import FlashLiveProvider
@@ -18,7 +19,14 @@ class Command(BaseCommand):
     def add_arguments(self, parser):
         parser.add_argument("--fixtures", action="store_true", help="Import upcoming fixtures.")
         parser.add_argument("--results", action="store_true", help="Fetch results for matches awaiting one.")
-        parser.add_argument("--sport", help="Only this sport (e.g. Football). Default: all.")
+        parser.add_argument(
+            "--sport",
+            help="Only this sport (e.g. Football) or comma-separated list. Default: all.",
+        )
+        parser.add_argument(
+            "--exclude-sport",
+            help="Exclude this sport (or comma-separated list, e.g. Hockey).",
+        )
         parser.add_argument("--days-ahead", type=int, default=7, help="Fixture window in days (max 7).")
         parser.add_argument(
             "--new-day-only",
@@ -80,11 +88,20 @@ class Command(BaseCommand):
 
         sports = Sport.objects.all()
         if options["sport"]:
-            sports = sports.filter(name__iexact=options["sport"])
+            sport_names = [s.strip() for s in options["sport"].split(",") if s.strip()]
+            q = Q()
+            for name in sport_names:
+                q |= Q(name__iexact=name)
+            sports = sports.filter(q)
             if not sports:
                 raise CommandError(f"Unknown sport: {options['sport']}")
         elif not options["force"]:
             sports = sports.filter(is_active=True)
+
+        if options.get("exclude_sport"):
+            exclude_names = [s.strip() for s in options["exclude_sport"].split(",") if s.strip()]
+            for name in exclude_names:
+                sports = sports.exclude(name__iexact=name)
 
         failed = False
         with transaction.atomic():
@@ -141,8 +158,16 @@ class Command(BaseCommand):
             self.stdout.write(safe)
 
     def _report_requests(self, providers):
-        used = sum(getattr(p, "requests_made", 0) for p in providers)
-        self.stdout.write(f"API requests used this run: {used}")
+        breakdown = [
+            f"{p.name}: {getattr(p, 'requests_made', 0)}"
+            for p in providers
+            if getattr(p, "requests_made", 0) > 0
+        ]
+        total = sum(getattr(p, "requests_made", 0) for p in providers)
+        if breakdown:
+            self.stdout.write(f"API requests used this run: {total} ({', '.join(breakdown)})")
+        else:
+            self.stdout.write("API requests used this run: 0")
 
     def _report_fixtures(self, sport, summary):
         odds_count = summary.get("odds_filled", 0)

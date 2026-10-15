@@ -41,7 +41,9 @@ DEFAULT_SPORT_IDS = {
     "Tennis": 2,
     "Cricket": 13,
     "Badminton": 21,
+    "Hockey": 24,
 }
+
 
 
 # FlashLive's list endpoint only reaches 7 days either side of today.
