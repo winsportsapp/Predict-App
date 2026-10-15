@@ -4418,6 +4418,8 @@ class AdminMenuOrderTests(TestCase):
             [m["name"] for m in app["models"]],
             [
                 "Matches",
+                "Matches Counts and Credits",
+                "Match Stats",
                 "Teams",
                 "Team name aliases",
                 "Sports",
@@ -4432,6 +4434,83 @@ class AdminMenuOrderTests(TestCase):
                 "Push subscriptions",
             ],
         )
+
+
+class MatchCountCreditAdminTests(TestCase):
+    def test_admin_configuration_and_permissions(self):
+        from predictions.admin import MatchCountCreditAdmin
+        from predictions.models import MatchCountCredit
+
+        admin_instance = MatchCountCreditAdmin(MatchCountCredit, AdminSite())
+        request = RequestFactory().get("/admin/predictions/matchcountcredit/")
+        self.assertFalse(admin_instance.has_add_permission(request))
+        self.assertFalse(admin_instance.has_delete_permission(request))
+        self.assertIsNone(admin_instance.actions)
+        self.assertEqual(admin_instance.get_sortable_by(request), ())
+        self.assertIn("monthly_match_limit", admin_instance.list_editable)
+
+    def test_queryset_returns_5_sports_in_order_with_serial_numbers(self):
+        from predictions.admin import MatchCountCreditAdmin
+        from predictions.models import MatchCountCredit
+
+        admin_instance = MatchCountCreditAdmin(MatchCountCredit, AdminSite())
+        request = RequestFactory().get("/admin/predictions/matchcountcredit/")
+        qs = admin_instance.get_queryset(request)
+        self.assertEqual(
+            list(qs.values_list("name", flat=True)),
+            ["Football", "Cricket", "Tennis", "Badminton", "Hockey"],
+        )
+        for i, sport in enumerate(qs, start=1):
+            self.assertEqual(admin_instance.serial_number(sport), i)
+
+    def test_published_matches_count_and_balance_calculation(self):
+        from predictions.admin import MatchCountCreditAdmin
+        from predictions.models import MatchCountCredit, Sport
+
+        admin_user = User.objects.create_superuser("admin_mcc", password="pass12345")
+        self.client.force_login(admin_user)
+
+        football = Sport.objects.get(name="Football")
+        football.monthly_match_limit = 25
+        football.save()
+
+        now = timezone.now()
+        t1 = Team.objects.create(name="Team MCC A", sport=football)
+        t2 = Team.objects.create(name="Team MCC B", sport=football)
+
+        Match.objects.create(
+            sport=football, team_a=t1, team_b=t2,
+            start_time=now, prediction_deadline=now,
+            is_published=True,
+        )
+        Match.objects.create(
+            sport=football, team_a=t1, team_b=t2,
+            start_time=now, prediction_deadline=now,
+            is_published=True,
+        )
+        Match.objects.create(
+            sport=football, team_a=t1, team_b=t2,
+            start_time=now, prediction_deadline=now,
+            is_published=False,
+        )
+
+        admin_instance = MatchCountCreditAdmin(MatchCountCredit, AdminSite())
+        request = RequestFactory().get("/admin/predictions/matchcountcredit/")
+        qs = admin_instance.get_queryset(request)
+        fb_obj = next(s for s in qs if s.name == "Football")
+
+        self.assertEqual(fb_obj.published_month_count, 2)
+        # 25 limit - 2 published = 23
+        self.assertIn("23", admin_instance.balance_available(fb_obj))
+
+        response = self.client.get(reverse("admin:predictions_matchcountcredit_changelist"))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Matches Counts &amp; Credits Dashboard")
+        self.assertContains(response, "Football")
+        self.assertContains(response, "Cricket")
+        self.assertContains(response, "Tennis")
+        self.assertContains(response, "Badminton")
+        self.assertContains(response, "Hockey")
 
 
 class LoseDrawLabelTests(TestCase):

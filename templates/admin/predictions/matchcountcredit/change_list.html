@@ -1,0 +1,92 @@
+{% extends "admin/change_list.html" %}
+{% load static %}
+
+{% block extrahead %}
+{{ block.super }}
+<style>
+  /* Header styling */
+  #result_list th {
+    cursor: default !important;
+    text-align: center !important;
+    vertical-align: middle !important;
+    padding: 10px 12px !important;
+  }
+  #result_list th.column-sport_name {
+    text-align: left !important;
+  }
+  #result_list td {
+    vertical-align: middle !important;
+    padding: 8px 12px !important;
+  }
+  #result_list td.field-serial_number {
+    text-align: center !important;
+    font-weight: 700 !important;
+    color: var(--body-quiet-color, #666) !important;
+    width: 60px !important;
+  }
+  #result_list td.field-sport_name {
+    font-size: 14px !important;
+    font-weight: 700 !important;
+  }
+  #result_list td.field-published_for_current_month {
+    text-align: center !important;
+    width: 180px !important;
+  }
+  #result_list td.field-monthly_match_limit {
+    text-align: center !important;
+    width: 170px !important;
+  }
+  #result_list td.field-monthly_match_limit input[type="number"] {
+    width: 85px !important;
+    text-align: center !important;
+    font-weight: 700 !important;
+    font-size: 13px !important;
+    padding: 5px 8px !important;
+    border: 1px solid var(--border-color, #ccc) !important;
+    border-radius: 4px !important;
+  }
+  #result_list td.field-balance_available {
+    text-align: center !important;
+    width: 170px !important;
+  }
+
+  /* Summary Card Banner */
+  .match-credits-summary-card {
+    background: var(--darkened-bg, #f8fafc);
+    border: 1px solid var(--border-color, #e2e8f0);
+    border-radius: 8px;
+    padding: 16px 20px;
+    margin-bottom: 20px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  }
+  .match-credits-title {
+    margin: 0 0 6px 0;
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--body-fg, #1e293b);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .match-credits-desc {
+    margin: 0;
+    font-size: 13px;
+    color: var(--body-quiet-color, #64748b);
+    line-height: 1.4;
+  }
+</style>
+{% endblock %}
+
+{% block result_list %}
+<div class="match-credits-summary-card">
+  <div class="match-credits-title">
+    <span>📊</span> Matches Counts &amp; Credits Dashboard — {{ current_month_name }}
+  </div>
+  <p class="match-credits-desc">
+    Monitor published matches for the current calendar month against admin-defined monthly limits.
+    <strong>Balance Available</strong> is automatically computed as <em>(Limit for current month − Published for current month)</em>.
+    You can adjust the limits directly in the table below and click <strong>Save</strong>.
+  </p>
+</div>
+{{ block.super }}
+{% endblock %}

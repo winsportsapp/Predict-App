@@ -152,6 +152,12 @@ class Sport(models.Model):
     )
 
 
+    monthly_match_limit = models.PositiveIntegerField(
+        default=50,
+        verbose_name="Limit for current month",
+        help_text="Target limit of published matches for the current month set by admin.",
+    )
+
     def clean(self):
         super().clean()
         if not self.auto_fixture_0630:
@@ -171,6 +177,16 @@ class Sport(models.Model):
 
     def __str__(self):
         return self.name
+
+
+class MatchCountCredit(Sport):
+    """Proxy of Sport for the admin: a dedicated 'Matches Counts and Credits'
+    dashboard listing monthly published matches, admin limit, and balance available."""
+
+    class Meta:
+        proxy = True
+        verbose_name = "Matches Count and Credit"
+        verbose_name_plural = "Matches Counts and Credits"
 
 
 class Team(models.Model):

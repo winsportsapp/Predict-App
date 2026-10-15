@@ -13,6 +13,7 @@ from . import push
 from .models import (
     CreditLedger,
     Match,
+    MatchCountCredit,
     MatchStats,
     Prediction,
     Profile,
@@ -1474,11 +1475,117 @@ class MatchStatsAdmin(admin.ModelAdmin):
         return f"{s.get('team_a_wins', 0)}W - {s.get('draws', 0)}D - {s.get('team_b_wins', 0)}W (Total: {s.get('total', 0)} clashes)"
 
 
+@admin.register(MatchCountCredit)
+class MatchCountCreditAdmin(admin.ModelAdmin):
+    actions = None
+    change_list_template = "admin/predictions/matchcountcredit/change_list.html"
+    list_display = (
+        "serial_number",
+        "sport_name",
+        "published_for_current_month",
+        "monthly_match_limit",
+        "balance_available",
+    )
+    list_editable = ("monthly_match_limit",)
+    list_display_links = ("sport_name",)
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+    def get_sortable_by(self, request):
+        return ()
+
+    def get_queryset(self, request):
+        from .constants import SUPPORTED_SPORTS
+
+        now_ist = timezone.now().astimezone(timezone.get_fixed_timezone(330))
+        order_cases = [
+            When(name__iexact=sport, then=Value(i))
+            for i, sport in enumerate(SUPPORTED_SPORTS)
+        ]
+        return (
+            super()
+            .get_queryset(request)
+            .filter(name__in=SUPPORTED_SPORTS)
+            .annotate(
+                published_month_count=Count(
+                    "matches",
+                    filter=Q(
+                        matches__is_published=True,
+                        matches__start_time__year=now_ist.year,
+                        matches__start_time__month=now_ist.month,
+                    ),
+                ),
+                custom_sort_order=Case(
+                    *order_cases,
+                    default=Value(999),
+                    output_field=IntegerField(),
+                ),
+            )
+            .order_by("custom_sort_order", "name")
+        )
+
+    @admin.display(description="Sl.No")
+    def serial_number(self, obj):
+        from .constants import SUPPORTED_SPORTS
+
+        try:
+            return SUPPORTED_SPORTS.index(obj.name) + 1
+        except ValueError:
+            return "-"
+
+    @admin.display(description="Sport")
+    def sport_name(self, obj):
+        return obj.name
+
+    @admin.display(description="Published for current month")
+    def published_for_current_month(self, obj):
+        count = getattr(obj, "published_month_count", 0)
+        return format_html(
+            '<span style="display:inline-block; padding:3px 12px; font-weight:700; background:#e0f2fe; color:#0369a1; border-radius:12px; font-size:13px;">{}</span>',
+            count,
+        )
+
+    @admin.display(description="Balance available")
+    def balance_available(self, obj):
+        published = getattr(obj, "published_month_count", 0)
+        limit = obj.monthly_match_limit
+        balance = limit - published
+        if balance < 0:
+            color = "#dc2626"
+            bg = "#fee2e2"
+            badge = f"{balance} (Exceeded)"
+        elif balance <= 5:
+            color = "#d97706"
+            bg = "#fef3c7"
+            badge = f"{balance} (Low)"
+        else:
+            color = "#16a34a"
+            bg = "#dcfce7"
+            badge = str(balance)
+        return format_html(
+            '<span style="display:inline-block; padding:3px 12px; font-weight:700; color:{}; background:{}; border-radius:12px; font-size:13px;">{}</span>',
+            color,
+            bg,
+            badge,
+        )
+
+    def changelist_view(self, request, extra_context=None):
+        extra_context = extra_context or {}
+        now_ist = timezone.now().astimezone(timezone.get_fixed_timezone(330))
+        extra_context["current_month_name"] = now_ist.strftime("%B %Y")
+        return super().changelist_view(request, extra_context=extra_context)
+
+
 # The PREDICTIONS menu in the admin sidebar follows this order instead of
 # Django's default alphabetical one. A model missing from the list goes last
 # (a stable sort keeps those in their alphabetical order).
 PREDICTIONS_MENU_ORDER = (
     "Match",
+    "MatchCountCredit",
     "MatchStats",
     "Team",
     "TeamAlias",
