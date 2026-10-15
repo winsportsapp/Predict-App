@@ -157,6 +157,11 @@ class Sport(models.Model):
         verbose_name="Limit for current month",
         help_text="Target limit of published matches for the current month set by admin.",
     )
+    order = models.PositiveSmallIntegerField(
+        default=99,
+        verbose_name="Display order",
+        help_text="Order in which sports appear in tables (Football=1, Cricket=2, Tennis=3, Badminton=4, Hockey=5).",
+    )
 
     def clean(self):
         super().clean()
@@ -166,6 +171,15 @@ class Sport(models.Model):
             self.auto_odds_2030 = False
 
     def save(self, *args, **kwargs):
+        if not self.order:
+            order_map = {
+                "Football": 1,
+                "Cricket": 2,
+                "Tennis": 3,
+                "Badminton": 4,
+                "Hockey": 5,
+            }
+            self.order = order_map.get(self.name, 99)
         if not self.auto_fixture_0630:
             self.auto_odds_0630 = False
         if not self.auto_fixture_2030:
@@ -173,7 +187,7 @@ class Sport(models.Model):
         super().save(*args, **kwargs)
 
     class Meta:
-        ordering = ["name"]
+        ordering = ["order", "name"]
 
     def __str__(self):
         return self.name

@@ -226,24 +226,13 @@ class SportAdmin(admin.ModelAdmin):
     def has_exclude_filter(self, obj):
         return bool(obj.exclude_tournaments_filter and obj.exclude_tournaments_filter.strip())
 
+    ordering = ("order", "name")
+
     def get_sortable_by(self, request):
         return ()
 
     def get_queryset(self, request):
-        qs = super().get_queryset(request)
-        from .constants import SUPPORTED_SPORTS
-
-        order_cases = [
-            When(name__iexact=sport, then=Value(i))
-            for i, sport in enumerate(SUPPORTED_SPORTS)
-        ]
-        return qs.annotate(
-            custom_sort_order=Case(
-                *order_cases,
-                default=Value(999),
-                output_field=IntegerField(),
-            )
-        ).order_by("custom_sort_order", "name")
+        return super().get_queryset(request).order_by("order", "name")
 
     def get_urls(self):
         urls = super().get_urls()
@@ -1495,6 +1484,8 @@ class MatchCountCreditAdmin(admin.ModelAdmin):
     def has_delete_permission(self, request, obj=None):
         return False
 
+    ordering = ("order", "name")
+
     def get_sortable_by(self, request):
         return ()
 
@@ -1502,10 +1493,6 @@ class MatchCountCreditAdmin(admin.ModelAdmin):
         from .constants import SUPPORTED_SPORTS
 
         now_ist = timezone.now().astimezone(timezone.get_fixed_timezone(330))
-        order_cases = [
-            When(name__iexact=sport, then=Value(i))
-            for i, sport in enumerate(SUPPORTED_SPORTS)
-        ]
         return (
             super()
             .get_queryset(request)
@@ -1518,24 +1505,14 @@ class MatchCountCreditAdmin(admin.ModelAdmin):
                         matches__start_time__year=now_ist.year,
                         matches__start_time__month=now_ist.month,
                     ),
-                ),
-                custom_sort_order=Case(
-                    *order_cases,
-                    default=Value(999),
-                    output_field=IntegerField(),
-                ),
+                )
             )
-            .order_by("custom_sort_order", "name")
+            .order_by("order", "name")
         )
 
     @admin.display(description="Sl.No")
     def serial_number(self, obj):
-        from .constants import SUPPORTED_SPORTS
-
-        try:
-            return SUPPORTED_SPORTS.index(obj.name) + 1
-        except ValueError:
-            return "-"
+        return obj.order if obj.order and obj.order < 99 else "-"
 
     @admin.display(description="Sport")
     def sport_name(self, obj):

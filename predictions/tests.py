@@ -4455,12 +4455,13 @@ class MatchCountCreditAdminTests(TestCase):
 
         admin_instance = MatchCountCreditAdmin(MatchCountCredit, AdminSite())
         request = RequestFactory().get("/admin/predictions/matchcountcredit/")
-        qs = admin_instance.get_queryset(request)
+        request.user = User.objects.create_superuser("admin_mcc_order", password="pass12345")
+        cl = admin_instance.get_changelist_instance(request)
         self.assertEqual(
-            list(qs.values_list("name", flat=True)),
+            [s.name for s in cl.result_list],
             ["Football", "Cricket", "Tennis", "Badminton", "Hockey"],
         )
-        for i, sport in enumerate(qs, start=1):
+        for i, sport in enumerate(cl.result_list, start=1):
             self.assertEqual(admin_instance.serial_number(sport), i)
 
     def test_published_matches_count_and_balance_calculation(self):
@@ -5731,10 +5732,11 @@ class SyncExternalMatchesCommandTests(TestCase):
 
         admin_instance = SportAdmin(Sport, AdminSite())
         request = RequestFactory().get("/admin/predictions/sport/")
+        request.user = User.objects.create_superuser("admin_sport_test", password="pass12345")
         self.assertEqual(admin_instance.get_sortable_by(request), ())
 
-        qs = admin_instance.get_queryset(request)
-        names = list(qs.values_list("name", flat=True)[:5])
+        cl = admin_instance.get_changelist_instance(request)
+        names = [s.name for s in cl.result_list[:5]]
         self.assertEqual(names, ["Football", "Cricket", "Tennis", "Badminton", "Hockey"])
 
     def test_sport_model_save_resets_odds_when_fixture_is_false(self):
