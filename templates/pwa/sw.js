@@ -1,7 +1,7 @@
 {% load static %}// Service worker for the installable app. Pages are always fetched live
 // (they show per-user points and forms); only static assets are cached, and
 // a small offline page is shown when the network is unreachable.
-const VERSION = "v4";
+const VERSION = "v5";
 const CACHE = "winsports-" + VERSION;
 const OFFLINE_URL = "{% url 'offline' %}";
 const PRECACHE = [

@@ -61,10 +61,6 @@
       --ws-text: #0f172a;
       --ws-muted: #64748b;
     }
-    html, body {
-      min-height: 100%;
-      overflow-x: hidden;
-    }
     body {
       font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
       background-color: var(--ws-bg);
@@ -380,12 +376,9 @@
       position: -webkit-sticky;
       position: sticky;
       top: 0;
-      top: env(safe-area-inset-top, 0px);
       z-index: 1030;
       background-color: var(--ws-bg);
       width: 100%;
-      -webkit-transform: translateZ(0);
-      transform: translateZ(0);
     }
     .sports-pill-wrapper {
       background-color: #f8fafc;
@@ -587,7 +580,7 @@
   {% block extra_head %}{% endblock %}
 </head>
 <body>  <!-- Sticky Navigation Wrapper (Top Nav Bar + Menus for Sports) -->
-  <div class="sticky-nav-container mb-4">
+  <div class="sticky-nav-container">
     <header class="app-header py-2 py-lg-3 shadow-sm">
       <div class="container d-flex align-items-center justify-content-between">
         <div class="d-flex align-items-center gap-2">
@@ -680,7 +673,7 @@
     {% block sticky_subnav %}{% endblock %}
   </div>
 
-  <main class="container pb-5">
+  <main class="container pt-3 pt-md-4 pb-5">
     {% if messages %}
       {% for message in messages %}
         <div class="alert alert-{{ message.tags }} alert-dismissible fade show rounded-3" role="alert">
