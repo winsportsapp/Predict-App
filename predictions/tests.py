@@ -5,7 +5,7 @@ import re
 import shutil
 import tempfile
 import uuid
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone as dt_timezone
 from io import StringIO
 from pathlib import Path
 from unittest import mock
@@ -5997,6 +5997,47 @@ class SyncExternalMatchesCommandTests(TestCase):
         cmd.stdout = out
         cmd._report_requests([p1, p2])
         self.assertIn("API requests used this run: 8 (api-football: 2, flashlive: 6)", out.getvalue())
+
+    def test_auto_slot_and_days_ahead_inference_evening(self):
+        provider = FakeProvider([external_event()])
+        with mock.patch("predictions.management.commands.sync_external_matches.import_fixtures") as mock_import:
+            mock_import.return_value = {
+                "created": 1,
+                "updated": 0,
+                "skipped": 0,
+                "new_teams": [],
+                "called_off": [],
+            }
+            # Mock evening IST time (20:35 IST = 15:05 UTC)
+            evening_time = datetime(2026, 10, 15, 15, 5, tzinfo=dt_timezone.utc)
+            with mock.patch("django.utils.timezone.now", return_value=evening_time):
+                self._run(provider, "--fixtures", "--new-day-only")
+                self.assertTrue(mock_import.called)
+                fb_calls = [c for c in mock_import.call_args_list if c.args[1].name == "Football"]
+                self.assertTrue(len(fb_calls) > 0)
+                # In the evening, days_ahead should default to 1 (next day)
+                self.assertEqual(fb_calls[0].kwargs.get("days_ahead"), 1)
+
+    def test_auto_slot_and_days_ahead_inference_morning(self):
+        provider = FakeProvider([external_event()])
+        with mock.patch("predictions.management.commands.sync_external_matches.import_fixtures") as mock_import:
+            mock_import.return_value = {
+                "created": 1,
+                "updated": 0,
+                "skipped": 0,
+                "new_teams": [],
+                "called_off": [],
+            }
+            # Mock morning IST time (06:35 IST = 01:05 UTC)
+            morning_time = datetime(2026, 10, 15, 1, 5, tzinfo=dt_timezone.utc)
+            with mock.patch("django.utils.timezone.now", return_value=morning_time):
+                self._run(provider, "--fixtures", "--new-day-only")
+                self.assertTrue(mock_import.called)
+                fb_calls = [c for c in mock_import.call_args_list if c.args[1].name == "Football"]
+                self.assertTrue(len(fb_calls) > 0)
+                # In the morning, days_ahead should default to 7
+                self.assertEqual(fb_calls[0].kwargs.get("days_ahead"), 7)
+
 
 
 

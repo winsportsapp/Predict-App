@@ -33,7 +33,12 @@ class Command(BaseCommand):
             choices=["06:30", "20:30"],
             help="Scheduled run slot to apply sport-level auto-sync controls (06:30 or 20:30).",
         )
-        parser.add_argument("--days-ahead", type=int, default=7, help="Fixture window in days (max 7).")
+        parser.add_argument(
+            "--days-ahead",
+            type=int,
+            default=None,
+            help="Fixture window in days (max 7). Default: 1 in 20:30 slot, 7 in 06:30 slot.",
+        )
         parser.add_argument(
             "--new-day-only",
             action="store_true",
@@ -109,13 +114,19 @@ class Command(BaseCommand):
             for name in exclude_names:
                 sports = sports.exclude(name__iexact=name)
 
+        now_ist = timezone.now().astimezone(timezone.get_fixed_timezone(330))
+        is_evening = now_ist.hour >= 13
+
         slot = options.get("slot")
         if not slot:
             if options["fixtures"]:
-                slot = "20:30" if options.get("days_ahead") == 1 else "06:30"
+                slot = "20:30" if (options.get("days_ahead") == 1 or is_evening) else "06:30"
             elif options["results"]:
-                now_ist = timezone.now().astimezone(timezone.get_fixed_timezone(330))
-                slot = "20:30" if now_ist.hour >= 13 else "06:30"
+                slot = "20:30" if is_evening else "06:30"
+
+        days_ahead = options.get("days_ahead")
+        if days_ahead is None:
+            days_ahead = 1 if slot == "20:30" else 7
 
         failed = False
         with transaction.atomic():
@@ -156,7 +167,7 @@ class Command(BaseCommand):
                                 import_fixtures(
                                     provider,
                                     sport,
-                                    days_ahead=options["days_ahead"],
+                                    days_ahead=days_ahead,
                                     download_images=not options["dry_run"],
                                     new_day_only=options["new_day_only"],
                                     with_odds=with_odds,

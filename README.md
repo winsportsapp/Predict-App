@@ -40,32 +40,21 @@ To stay strictly within the 500 RapidAPI requests/month limit (~14 requests/day)
 
 ### Server Timezone: UTC (Default on Railway, AWS, DigitalOcean, Heroku)
 ```cron
-# 1. Results Fetch #1 at 06:30 IST (01:00 UTC):
-0 1 * * * cd /path/to/project && /path/to/venv/bin/python manage.py sync_external_matches --results --slot 06:30
+# 1. Results Fetch (06:30 IST & 20:30 IST / 01:00 UTC & 15:00 UTC):
+0 1,15 * * * cd /path/to/project && /path/to/venv/bin/python manage.py sync_external_matches --results
 
-# 2. Morning Fixtures & Odds at 06:35 IST (01:05 UTC):
-5 1 * * * cd /path/to/project && /path/to/venv/bin/python manage.py sync_external_matches --fixtures --new-day-only --slot 06:30
-
-# 3. Results Fetch #2 at 20:30 IST (15:00 UTC):
-0 15 * * * cd /path/to/project && /path/to/venv/bin/python manage.py sync_external_matches --results --slot 20:30
-
-# 4. Evening Next-Day Fixtures & Odds at 20:35 IST (15:05 UTC) [All sports, including Football]:
-5 15 * * * cd /path/to/project && /path/to/venv/bin/python manage.py sync_external_matches --fixtures --days-ahead 1 --new-day-only --slot 20:30
+# 2. Fixtures & Odds (06:35 IST & 20:35 IST / 01:05 UTC & 15:05 UTC):
+# Automatically infers morning (7-day window) or evening (next-day window, 1 day ahead) based on IST run time.
+5 1,15 * * * cd /path/to/project && /path/to/venv/bin/python manage.py sync_external_matches --fixtures --new-day-only
 ```
 
 ### Server Timezone: IST (`Asia/Kolkata`)
 ```cron
-# 1. Results Fetch #1 at 06:30 IST:
-30 6 * * * cd /path/to/project && /path/to/venv/bin/python manage.py sync_external_matches --results --slot 06:30
+# 1. Results Fetch (06:30 IST & 20:30 IST):
+30 6,20 * * * cd /path/to/project && /path/to/venv/bin/python manage.py sync_external_matches --results
 
-# 2. Morning Fixtures & Odds at 06:35 IST:
-35 6 * * * cd /path/to/project && /path/to/venv/bin/python manage.py sync_external_matches --fixtures --new-day-only --slot 06:30
-
-# 3. Results Fetch #2 at 20:30 IST:
-30 20 * * * cd /path/to/project && /path/to/venv/bin/python manage.py sync_external_matches --results --slot 20:30
-
-# 4. Evening Next-Day Fixtures & Odds at 20:35 IST [All sports, including Football]:
-35 20 * * * cd /path/to/project && /path/to/venv/bin/python manage.py sync_external_matches --fixtures --days-ahead 1 --new-day-only --slot 20:30
+# 2. Fixtures & Odds (06:35 IST & 20:35 IST):
+35 6,20 * * * cd /path/to/project && /path/to/venv/bin/python manage.py sync_external_matches --fixtures --new-day-only
 ```
 
 
