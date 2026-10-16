@@ -8496,7 +8496,19 @@ class AdminManualSyncTests(TestCase):
         self.assertContains(resp, "suggested result(s) imported")
 
 
+class FixtureExclusionTests(TestCase):
+    def test_lower_tier_tournaments_are_excluded(self):
+        from predictions.constants import is_fixture_excluded
 
+        self.assertTrue(is_fixture_excluded("Football", ["England: FA Cup", "Bury", "Harrogate"]))
+        self.assertTrue(is_fixture_excluded("Football", ["LaLiga2", "Leganes", "Cordoba"]))
+        self.assertTrue(is_fixture_excluded("Football", ["Germany: 2. Bundesliga", "FC Koln", "HSV"]))
+        self.assertTrue(is_fixture_excluded("Football", ["England: National League", "Southend", "York"]))
+        self.assertTrue(is_fixture_excluded("Football", ["England: Premier League 2", "Arsenal U21", "Chelsea U21"]))
 
+    def test_india_isl_is_never_excluded(self):
+        from predictions.constants import is_fixture_excluded
 
-
+        self.assertFalse(is_fixture_excluded("Football", ["India: Indian Super League", "Bengaluru", "Chennaiyin"]))
+        self.assertFalse(is_fixture_excluded("Football", ["India: ISL", "Inter Kashi", "Odisha"]))
+        self.assertFalse(is_fixture_excluded("Football", ["Indian Super League", "Mohun Bagan", "Kerala Blasters"]))

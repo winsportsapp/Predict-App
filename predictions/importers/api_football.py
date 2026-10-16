@@ -207,7 +207,9 @@ class APIFootballProvider(Provider):
         all_excludes = set(excludes) | DEFAULT_FOOTBALL_SECOND_DIV_EXCLUDES
         includes = self.tournaments if tournaments is None else tournaments
 
-        if all_excludes:
+        # Explicit protection: India ISL is never excluded
+        is_isl = any("indian super league" in k or "isl" in k for k in tournament_keys)
+        if not is_isl and all_excludes:
             for pat in all_excludes:
                 p = str(pat).strip().lower()
                 if not p:
@@ -380,6 +382,40 @@ class APIFootballProvider(Provider):
                         if d is not None:
                             event.draw_odds = d
                     all_events.append(event)
+
+        if with_odds and all_events:
+            priority_keywords = [
+                "premier league",
+                "laliga",
+                "la liga",
+                "serie a",
+                "bundesliga",
+                "ligue 1",
+                "champions league",
+                "europa league",
+                "indian super league",
+                "isl",
+            ]
+            odds_needed = [
+                e
+                for e in all_events
+                if (e.home_odds is None and e.away_odds is None)
+                and any(k in e.event_name.lower() for k in priority_keywords)
+            ]
+            # Safety cap of 20 odds requests per sync run to stay well within 100/day quota
+            for event in odds_needed[:20]:
+                try:
+                    odds = self.fetch_event_odds(event.external_id)
+                    if odds:
+                        h, a, d = odds
+                        if h is not None:
+                            event.home_odds = h
+                        if a is not None:
+                            event.away_odds = a
+                        if d is not None:
+                            event.draw_odds = d
+                except Exception as exc:
+                    logger.debug("Failed fetching odds for fixture %s: %s", event.external_id, exc)
 
         return all_events
 
