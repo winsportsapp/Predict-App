@@ -474,6 +474,8 @@ class APIFootballProvider(Provider):
         target_date = (today + timedelta(days=indent_days)).isoformat()
         try:
             data = self._get("/odds", {"date": target_date})
+        except ProviderQuotaExceededError:
+            raise
         except ProviderError as exc:
             logger.debug("API-Football /odds failed for %s: %s", target_date, exc)
             return {}
@@ -495,6 +497,8 @@ class APIFootballProvider(Provider):
         """(home, away, draw) for a single fixture ID."""
         try:
             data = self._get("/odds", {"fixture": external_id})
+        except ProviderQuotaExceededError:
+            raise
         except ProviderError:
             return None
 

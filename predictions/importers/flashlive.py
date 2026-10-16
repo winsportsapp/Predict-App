@@ -305,6 +305,8 @@ class FlashLiveProvider(Provider):
                     "timezone": self.utc_offset,
                 },
             )
+        except ProviderQuotaExceededError:
+            raise
         except ProviderError as exc:
             logger.debug(
                 "FlashLive list-main-odds not available for %s day %s: %s",
@@ -344,9 +346,13 @@ class FlashLiveProvider(Provider):
         """(home_odds, away_odds, draw_odds) for a single event ID, or None."""
         try:
             data = self._get("/events/odds", {"event_id": external_id, "locale": LOCALE})
+        except ProviderQuotaExceededError:
+            raise
         except ProviderError:
             try:
                 data = self._get("/events/live-odds", {"event_id": external_id, "locale": LOCALE})
+            except ProviderQuotaExceededError:
+                raise
             except ProviderError:
                 return None
 

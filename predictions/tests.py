@@ -8666,3 +8666,47 @@ class ProviderQuotaAndAdminNotificationTests(TestCase):
             )
             self.assertEqual(resp.status_code, 200)
             self.assertContains(resp, "⚠️ API-Football daily quota reached")
+
+    def test_flashlive_fetch_odds_re_raises_quota_error(self):
+        from unittest import mock
+        from predictions.importers.flashlive import FlashLiveProvider
+        from predictions.importers.base import ProviderQuotaExceededError
+
+        session = mock.Mock()
+        resp = mock.Mock()
+        resp.status_code = 429
+        resp.headers = {"x-ratelimit-requests-reset": "86400"}
+        resp.text = '{"message": "You have exceeded the MONTHLY quota for Requests"}'
+        session.get.return_value = resp
+
+        provider = FlashLiveProvider(api_key="fake-key", session=session)
+        with self.assertRaises(ProviderQuotaExceededError) as ctx:
+            provider.fetch_odds("Badminton", indent_days=0)
+        self.assertIn("FlashLive monthly quota on RapidAPI reached", str(ctx.exception))
+
+    def test_fetch_odds_admin_action_catches_quota_and_warns(self):
+        from unittest import mock
+        from predictions.importers.base import ProviderQuotaExceededError
+        from django.contrib import admin
+
+        mock_provider = mock.Mock()
+        mock_provider.name = "flashlive"
+        mock_provider.requests_made = 0
+        mock_provider.supports.return_value = True
+        mock_provider.fetch_matches_odds.side_effect = ProviderQuotaExceededError(
+            "FlashLive monthly quota on RapidAPI reached (500 requests/month). Quota restores on October 25 at 03:05 PM IST."
+        )
+
+        with mock.patch("predictions.admin.get_providers", return_value=[mock_provider]):
+            with mock.patch("predictions.admin.provider_for", return_value=mock_provider):
+                resp = self.client.post(
+                    reverse("admin:predictions_match_changelist"),
+                    {
+                        "action": "fetch_odds_and_calculate_points",
+                        admin.helpers.ACTION_CHECKBOX_NAME: [self.match.pk],
+                    },
+                    follow=True,
+                )
+                self.assertEqual(resp.status_code, 200)
+                self.assertContains(resp, "⚠️ FlashLive monthly quota on RapidAPI reached")
+
