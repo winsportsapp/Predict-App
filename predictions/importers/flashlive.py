@@ -647,6 +647,8 @@ class FlashLiveProvider(Provider):
             time.sleep(self.throttle_delay)  # Polite throttle to prevent RapidAPI per-second burst rate limits
         try:
             resp = session.get(BASE_URL + path, params=params, timeout=REQUEST_TIMEOUT)
+            from predictions.api_credits import record_provider_headers
+            record_provider_headers(f"flashlive_{key_name}", getattr(resp, "headers", None))
         except requests.RequestException as exc:
             err_str = str(exc).lower()
             if "too many 429" in err_str or "quota" in err_str:

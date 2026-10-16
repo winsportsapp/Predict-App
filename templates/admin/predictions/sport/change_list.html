@@ -204,6 +204,61 @@
     color: #dc2626;
     background: #fee2e2;
   }
+
+  /* API Provider Live Credits Section */
+  .api-credits-divider {
+    border-top: 1px dashed var(--border-color, #cbd5e1);
+    margin: 8px 0 4px 0;
+  }
+  .api-credits-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 4px;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .api-credits-header-title {
+    font-size: 13.5px;
+    font-weight: 700;
+    color: var(--body-fg, #1e293b);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .btn-refresh-credits {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 12px;
+    font-weight: 600;
+    padding: 3px 10px;
+    border-radius: 4px;
+    border: 1px solid var(--border-color, #cbd5e1);
+    background: var(--body-bg, #ffffff);
+    color: var(--body-fg, #334155) !important;
+    text-decoration: none !important;
+    transition: all 0.15s ease;
+  }
+  .btn-refresh-credits:hover {
+    background: #0d6efd;
+    color: #ffffff !important;
+    border-color: #0d6efd;
+  }
+  .api-credit-line {
+    flex-wrap: wrap;
+    row-gap: 4px;
+  }
+  .api-credit-detail {
+    font-size: 12px;
+    color: var(--body-quiet-color, #64748b);
+    margin-left: 4px;
+  }
+  .api-credit-timestamp {
+    margin-left: 6px;
+    font-style: italic;
+    color: var(--body-quiet-color, #94a3b8);
+  }
 </style>
 
 <script>
@@ -347,6 +402,47 @@ document.addEventListener("DOMContentLoaded", function() {
     <span class="total-label">Total Balance available for Other sports (Flashlive):</span>
     <span class="total-badge {% if flashlive_balance < 0 %}badge-exceeded{% elif flashlive_balance <= 20 %}badge-low{% else %}badge-ok{% endif %}">
       {{ flashlive_balance }}{% if flashlive_balance < 0 %} (Exceeded){% elif flashlive_balance <= 20 %} (Low){% endif %}
+    </span>
+  </div>
+
+  <div class="api-credits-divider"></div>
+  <div class="api-credits-header">
+    <span class="api-credits-header-title">🌐 External API Providers — Credit Usage &amp; Remaining Balances</span>
+    <a href="?refresh_api_credits=1" class="btn-refresh-credits" title="Query external APIs directly to fetch live balance figures">
+      <span>🔄</span> Refresh API Credits
+    </a>
+  </div>
+
+  <div class="match-credits-total-line api-credit-line">
+    <span class="total-label">Balance credit available for Football API Daily/Monthly:</span>
+    <span class="total-badge {{ api_credits.football.badge_class }}">
+      {{ api_credits.football.badge_text }}
+    </span>
+    <span class="api-credit-detail">
+      {{ api_credits.football.detail }}
+      {% if api_credits.football.last_updated %}<span class="api-credit-timestamp">({{ api_credits.football.last_updated }})</span>{% endif %}
+    </span>
+  </div>
+
+  <div class="match-credits-total-line api-credit-line">
+    <span class="total-label">Balance credit available for Flashline Primary API Monthly:</span>
+    <span class="total-badge {{ api_credits.flashlive_primary.badge_class }}">
+      {{ api_credits.flashlive_primary.badge_text }}
+    </span>
+    <span class="api-credit-detail">
+      {{ api_credits.flashlive_primary.detail }}
+      {% if api_credits.flashlive_primary.last_updated %}<span class="api-credit-timestamp">({{ api_credits.flashlive_primary.last_updated }})</span>{% endif %}
+    </span>
+  </div>
+
+  <div class="match-credits-total-line api-credit-line">
+    <span class="total-label">Balance credit available for Flashline Secondary API Monthly:</span>
+    <span class="total-badge {{ api_credits.flashlive_secondary.badge_class }}">
+      {{ api_credits.flashlive_secondary.badge_text }}
+    </span>
+    <span class="api-credit-detail">
+      {{ api_credits.flashlive_secondary.detail }}
+      {% if api_credits.flashlive_secondary.last_updated %}<span class="api-credit-timestamp">({{ api_credits.flashlive_secondary.last_updated }})</span>{% endif %}
     </span>
   </div>
 </div>

@@ -916,3 +916,33 @@ class PushSubscription(models.Model):
 
     def __str__(self):
         return f"{self.user} ({self.endpoint[:40]}...)"
+
+
+class APICreditStatus(models.Model):
+    """Stores the latest verified API quota and credit balance for third-party providers."""
+
+    class ProviderChoice(models.TextChoices):
+        API_FOOTBALL = "api_football", "API-Football"
+        FLASHLIVE_PRIMARY = "flashlive_primary", "FlashLive Primary API"
+        FLASHLIVE_SECONDARY = "flashlive_secondary", "FlashLive Secondary API"
+
+    provider = models.CharField(
+        max_length=50,
+        choices=ProviderChoice.choices,
+        unique=True,
+    )
+    daily_remaining = models.IntegerField(null=True, blank=True)
+    daily_limit = models.IntegerField(null=True, blank=True)
+    monthly_remaining = models.IntegerField(null=True, blank=True)
+    monthly_limit = models.IntegerField(null=True, blank=True)
+    reset_info = models.CharField(max_length=200, blank=True, default="")
+    last_checked = models.DateTimeField(auto_now=True)
+    raw_headers = models.JSONField(blank=True, default=dict)
+
+    class Meta:
+        verbose_name = "API Credit Status"
+        verbose_name_plural = "API Credit Statuses"
+        ordering = ["provider"]
+
+    def __str__(self):
+        return f"{self.get_provider_display()}: {self.monthly_remaining if self.monthly_remaining is not None else self.daily_remaining} remaining"

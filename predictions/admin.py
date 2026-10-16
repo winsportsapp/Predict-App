@@ -11,6 +11,7 @@ from django.utils.html import format_html
 
 from . import push
 from .models import (
+    APICreditStatus,
     CreditLedger,
     Match,
     MatchCountCredit,
@@ -311,6 +312,20 @@ class SportAdmin(admin.ModelAdmin):
         extra_context["match_credits_rows"] = match_credits_rows
         extra_context["football_balance"] = football_balance
         extra_context["flashlive_balance"] = flashlive_balance
+
+        # Handle on-demand API balance refresh
+        if request.GET.get("refresh_api_credits"):
+            from .api_credits import get_api_credits_display_summary
+            get_api_credits_display_summary(force_refresh=True)
+            self.message_user(
+                request,
+                "API balance credits refreshed successfully from API-Football and RapidAPI.",
+                messages.SUCCESS,
+            )
+            return redirect(request.path)
+
+        from .api_credits import get_api_credits_display_summary
+        extra_context["api_credits"] = get_api_credits_display_summary(force_refresh=False)
 
         return super().changelist_view(request, extra_context=extra_context)
 
@@ -1302,7 +1317,7 @@ class MatchAdmin(admin.ModelAdmin):
     def save_model(self, request, obj, form, change):
         super().save_model(request, obj, form, change)
 
-        if form.cleaned_data.get("fetch_h2h_and_recent"):
+        if form and hasattr(form, "cleaned_data") and form.cleaned_data.get("fetch_h2h_and_recent"):
             try:
                 stats = get_or_fetch_match_stats(obj, force_refresh=True)
                 if stats and (
@@ -1627,6 +1642,29 @@ class MatchCountCreditAdmin(admin.ModelAdmin):
         return super().changelist_view(request, extra_context=extra_context)
 
 
+@admin.register(APICreditStatus)
+class APICreditStatusAdmin(admin.ModelAdmin):
+    list_display = (
+        "provider",
+        "daily_remaining",
+        "daily_limit",
+        "monthly_remaining",
+        "monthly_limit",
+        "reset_info",
+        "last_checked",
+    )
+    readonly_fields = (
+        "provider",
+        "daily_remaining",
+        "daily_limit",
+        "monthly_remaining",
+        "monthly_limit",
+        "reset_info",
+        "last_checked",
+        "raw_headers",
+    )
+
+
 # The PREDICTIONS menu in the admin sidebar follows this order instead of
 # Django's default alphabetical one. A model missing from the list goes last
 # (a stable sort keeps those in their alphabetical order).
@@ -1634,6 +1672,7 @@ PREDICTIONS_MENU_ORDER = (
     "Match",
     "Sport",
     "MatchCountCredit",
+    "APICreditStatus",
     "MatchStats",
     "Team",
     "TeamAlias",

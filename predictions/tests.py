@@ -4559,6 +4559,9 @@ class ManageCreditsAdminTests(TestCase):
         self.assertContains(response, "Limit for Current Month")
         self.assertContains(response, "Total Balance available for Football API:")
         self.assertContains(response, "Total Balance available for Other sports (Flashlive):")
+        self.assertContains(response, "Balance credit available for Football API Daily/Monthly:")
+        self.assertContains(response, "Balance credit available for Flashline Primary API Monthly:")
+        self.assertContains(response, "Balance credit available for Flashline Secondary API Monthly:")
 
         # Verify dynamic balance calculations match row data
         fb_row = next(r for r in response.context["match_credits_rows"] if r["sport_name"] == "Football")
@@ -8826,4 +8829,95 @@ class ProviderQuotaAndAdminNotificationTests(TestCase):
                 )
                 self.assertEqual(resp.status_code, 200)
                 self.assertContains(resp, "⚠️ FlashLive monthly quota on RapidAPI reached")
+
+
+class APICreditStatusTests(TestCase):
+    def setUp(self):
+        from django.contrib.auth.models import User
+        self.admin = User.objects.create_superuser("admin_api_credits", "api@example.com", "pass12345")
+        self.client.force_login(self.admin)
+
+    def test_record_provider_headers_api_football(self):
+        from predictions.api_credits import record_provider_headers
+        from predictions.models import APICreditStatus
+
+        headers = {
+            "x-ratelimit-requests-remaining": "85",
+            "x-ratelimit-requests-limit": "100",
+        }
+        record_provider_headers("api_football", headers)
+
+        status = APICreditStatus.objects.get(provider="api_football")
+        self.assertEqual(status.daily_remaining, 85)
+        self.assertEqual(status.daily_limit, 100)
+
+    def test_record_provider_headers_flashlive(self):
+        from predictions.api_credits import record_provider_headers
+        from predictions.models import APICreditStatus
+
+        headers = {
+            "x-ratelimit-requests-remaining": "380",
+            "x-ratelimit-requests-limit": "500",
+            "x-ratelimit-requests-reset": "86400",
+        }
+        record_provider_headers("flashlive_secondary", headers)
+
+        status = APICreditStatus.objects.get(provider="flashlive_secondary")
+        self.assertEqual(status.monthly_remaining, 380)
+        self.assertEqual(status.monthly_limit, 500)
+        self.assertIn("Quota restores on", status.reset_info)
+
+    def test_get_api_credits_display_summary_formatting(self):
+        from predictions.api_credits import get_api_credits_display_summary
+        from predictions.models import APICreditStatus
+
+        APICreditStatus.objects.create(
+            provider="api_football",
+            daily_remaining=90,
+            daily_limit=100,
+        )
+        APICreditStatus.objects.create(
+            provider="flashlive_primary",
+            monthly_remaining=0,
+            monthly_limit=500,
+            reset_info="Quota restores on October 25 at 03:05 PM IST",
+        )
+        APICreditStatus.objects.create(
+            provider="flashlive_secondary",
+            monthly_remaining=380,
+            monthly_limit=500,
+            reset_info="Quota restores on November 13 at 08:00 PM IST",
+        )
+
+        summary = get_api_credits_display_summary(force_refresh=False)
+        self.assertEqual(summary["football"]["badge_class"], "badge-ok")
+        self.assertIn("90 / 100 Daily", summary["football"]["badge_text"])
+
+        self.assertEqual(summary["flashlive_primary"]["badge_class"], "badge-exceeded")
+        self.assertIn("0 / 500", summary["flashlive_primary"]["badge_text"])
+        self.assertIn("Exhausted", summary["flashlive_primary"]["badge_text"])
+
+        self.assertEqual(summary["flashlive_secondary"]["badge_class"], "badge-ok")
+        self.assertIn("380 / 500", summary["flashlive_secondary"]["badge_text"])
+
+    def test_admin_refresh_api_credits_query_param(self):
+        from unittest import mock
+        from django.urls import reverse
+        from predictions.models import APICreditStatus
+
+        APICreditStatus.objects.create(provider="api_football", daily_remaining=90, daily_limit=100)
+        APICreditStatus.objects.create(provider="flashlive_primary", monthly_remaining=0, monthly_limit=500)
+        APICreditStatus.objects.create(provider="flashlive_secondary", monthly_remaining=380, monthly_limit=500)
+
+        with mock.patch("predictions.api_credits.fetch_live_api_football_credits") as mock_fb:
+            with mock.patch("predictions.api_credits.fetch_live_flashlive_credits") as mock_fl:
+                resp = self.client.get(
+                    reverse("admin:predictions_sport_changelist") + "?refresh_api_credits=1",
+                    follow=True,
+                )
+                self.assertEqual(resp.status_code, 200)
+                self.assertContains(resp, "API balance credits refreshed successfully")
+                self.assertEqual(mock_fb.call_count, 1)
+                self.assertEqual(mock_fl.call_count, 2)  # primary and secondary
+
 

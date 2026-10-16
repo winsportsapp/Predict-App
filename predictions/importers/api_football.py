@@ -248,6 +248,8 @@ class APIFootballProvider(Provider):
         url = f"{self.base_url}{path}"
         try:
             resp = self.session.get(url, params=params or {}, timeout=REQUEST_TIMEOUT)
+            from predictions.api_credits import record_provider_headers
+            record_provider_headers("api_football", getattr(resp, "headers", None))
         except requests.RequestException as exc:
             raise ProviderError(f"API-Football request failed: {exc}") from exc
 
