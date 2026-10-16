@@ -13,6 +13,7 @@ from django.utils import timezone
 from django.utils.text import slugify
 
 from .constants import DRAW_SPORTS, SUPPORTED_SPORTS, is_fixture_excluded
+from .importers.base import ProviderQuotaExceededError
 from .models import (
     CreditLedger,
     Match,
@@ -785,6 +786,7 @@ def get_or_fetch_match_stats(match, force_refresh=False):
         return existing
 
     summary = None
+    last_quota_error = None
     for provider in candidates:
         try:
             res = provider.fetch_h2h_and_form(match)
@@ -793,11 +795,21 @@ def get_or_fetch_match_stats(match, force_refresh=False):
                 break
             elif res and summary is None:
                 summary = res
+        except ProviderQuotaExceededError as exc:
+            last_quota_error = exc
+            logger.warning(
+                "Provider %s quota reached for match %s: %s",
+                getattr(provider, "name", provider), match.pk, exc
+            )
+            break
         except Exception as exc:
             logger.warning(
                 "Provider %s failed fetching stats for match %s: %s",
                 getattr(provider, "name", provider), match.pk, exc, exc_info=True
             )
+
+    if summary is None and last_quota_error:
+        raise last_quota_error
 
     if summary is None:
         return existing

@@ -8512,3 +8512,157 @@ class FixtureExclusionTests(TestCase):
         self.assertFalse(is_fixture_excluded("Football", ["India: Indian Super League", "Bengaluru", "Chennaiyin"]))
         self.assertFalse(is_fixture_excluded("Football", ["India: ISL", "Inter Kashi", "Odisha"]))
         self.assertFalse(is_fixture_excluded("Football", ["Indian Super League", "Mohun Bagan", "Kerala Blasters"]))
+
+
+class ProviderQuotaAndAdminNotificationTests(TestCase):
+    def setUp(self):
+        from django.contrib.auth.models import User
+        from predictions.models import Match, Sport, Team
+
+        self.admin = User.objects.create_superuser("admin_quota", "admin_quota@example.com", "pass123")
+        self.client.force_login(self.admin)
+
+        from datetime import timedelta
+        self.football = Sport.objects.get(name="Football")
+        self.team_a = Team.objects.create(name="Chelsea", sport=self.football)
+        self.team_b = Team.objects.create(name="Everton", sport=self.football)
+        st = timezone.now() + timedelta(days=1)
+        self.match = Match.objects.create(
+            sport=self.football,
+            team_a=self.team_a,
+            team_b=self.team_b,
+            start_time=st,
+            prediction_deadline=st,
+            status=Match.Status.SCHEDULED,
+            external_id="12345",
+            external_source="api-football",
+        )
+
+    def test_api_football_429_raises_quota_exceeded_error(self):
+        from unittest import mock
+        from predictions.importers.api_football import APIFootballProvider
+        from predictions.importers.base import ProviderQuotaExceededError
+
+        session = mock.Mock()
+        resp = mock.Mock()
+        resp.status_code = 429
+        resp.text = "Rate limit reached"
+        session.get.return_value = resp
+
+        provider = APIFootballProvider(api_key="fake-key", session=session)
+        with self.assertRaises(ProviderQuotaExceededError) as ctx:
+            provider._get("/fixtures", {})
+        self.assertIn("daily quota reached", str(ctx.exception))
+
+    def test_api_football_json_request_limit_raises_quota_exceeded_error(self):
+        from unittest import mock
+        from predictions.importers.api_football import APIFootballProvider
+        from predictions.importers.base import ProviderQuotaExceededError
+
+        session = mock.Mock()
+        resp = mock.Mock()
+        resp.status_code = 200
+        resp.json.return_value = {
+            "errors": {"requests": "You have reached your request limit for today"}
+        }
+        session.get.return_value = resp
+
+        provider = APIFootballProvider(api_key="fake-key", session=session)
+        with self.assertRaises(ProviderQuotaExceededError) as ctx:
+            provider._get("/fixtures", {})
+        self.assertIn("API-Football daily quota reached", str(ctx.exception))
+
+    def test_flashlive_primary_429_raises_quota_exceeded_error(self):
+        from unittest import mock
+        from predictions.importers.flashlive import FlashLiveProvider
+        from predictions.importers.base import ProviderQuotaExceededError
+
+        session = mock.Mock()
+        resp = mock.Mock()
+        resp.status_code = 429
+        resp.headers = {"x-ratelimit-requests-reset": "86400"}
+        resp.text = '{"message": "You have exceeded the MONTHLY quota for Requests"}'
+        session.get.return_value = resp
+
+        provider = FlashLiveProvider(api_key="fake-key", session=session)
+        with self.assertRaises(ProviderQuotaExceededError) as ctx:
+            provider._get("/events/list", {})
+        self.assertIn("FlashLive monthly quota on RapidAPI reached", str(ctx.exception))
+        self.assertIn("Quota restores on", str(ctx.exception))
+
+    def test_flashlive_secondary_stats_429_raises_quota_exceeded_error(self):
+        from unittest import mock
+        from predictions.importers.flashlive import FlashLiveProvider
+        from predictions.importers.base import ProviderQuotaExceededError
+
+        stats_session = mock.Mock()
+        resp = mock.Mock()
+        resp.status_code = 429
+        resp.headers = {"x-ratelimit-requests-reset": "86400"}
+        resp.text = "Monthly quota reached"
+        stats_session.get.return_value = resp
+
+        provider = FlashLiveProvider(
+            api_key="fake-key",
+            stats_api_key="fake-stats-key",
+            stats_session=stats_session,
+        )
+        with self.assertRaises(ProviderQuotaExceededError) as ctx:
+            provider._get_stats("/events/h2h", {"event_id": "test"})
+        self.assertIn("FlashLive Secondary API (H2H & Recent Form) monthly quota reached", str(ctx.exception))
+
+    def test_fetch_h2h_admin_action_catches_quota_and_warns(self):
+        from unittest import mock
+        from predictions.importers.base import ProviderQuotaExceededError
+        from django.contrib import admin
+
+        with mock.patch("predictions.admin.get_or_fetch_match_stats") as mock_stats:
+            mock_stats.side_effect = ProviderQuotaExceededError(
+                "FlashLive monthly quota on RapidAPI reached (500 requests/month). Quota restores on October 25 at 03:05 PM IST."
+            )
+            resp = self.client.post(
+                reverse("admin:predictions_match_changelist"),
+                {
+                    "action": "fetch_h2h_and_recent_form",
+                    admin.helpers.ACTION_CHECKBOX_NAME: [self.match.pk],
+                },
+                follow=True,
+            )
+            self.assertEqual(resp.status_code, 200)
+            self.assertContains(resp, "⚠️ FlashLive monthly quota on RapidAPI reached")
+
+    def test_save_model_catches_quota_and_warns(self):
+        from unittest import mock
+        from predictions.importers.base import ProviderQuotaExceededError
+
+        with mock.patch("predictions.admin.get_or_fetch_match_stats") as mock_stats:
+            mock_stats.side_effect = ProviderQuotaExceededError(
+                "API-Football daily quota reached (100 requests/day limit). Quota resets at 00:00 UTC (05:30 AM IST)."
+            )
+            resp = self.client.post(
+                reverse("admin:predictions_match_change", args=[self.match.pk]),
+                {
+                    "sport": self.football.pk,
+                    "team_a": self.team_a.pk,
+                    "team_b": self.team_b.pk,
+                    "start_time_0": "2026-10-17",
+                    "start_time_1": "15:00:00",
+                    "prediction_deadline_0": "2026-10-17",
+                    "prediction_deadline_1": "15:00:00",
+                    "status": "scheduled",
+                    "fetch_h2h_and_recent": "on",
+                    "team_a_win_points": 10,
+                    "team_a_lose_points": -5,
+                    "team_b_win_points": 10,
+                    "team_b_lose_points": -5,
+                    "draw_win_points": 10,
+                    "draw_lose_points": -5,
+                    "stats-TOTAL_FORMS": "0",
+                    "stats-INITIAL_FORMS": "0",
+                    "stats-MIN_NUM_FORMS": "0",
+                    "stats-MAX_NUM_FORMS": "1000",
+                },
+                follow=True,
+            )
+            self.assertEqual(resp.status_code, 200)
+            self.assertContains(resp, "⚠️ API-Football daily quota reached")

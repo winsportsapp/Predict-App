@@ -82,6 +82,10 @@ class ProviderError(Exception):
     """The external source could not be reached or returned bad data."""
 
 
+class ProviderQuotaExceededError(ProviderError):
+    """The external API key has reached its monthly/daily quota or rate limit."""
+
+
 @dataclass
 class ExternalEvent:
     source: str
@@ -183,12 +187,12 @@ class Provider:
 
 
 def make_session(headers=None):
-    """A requests session that retries transient failures (5xx, 429)."""
+    """A requests session that retries transient server failures (5xx), but fails fast on 429."""
     session = requests.Session()
     retry = Retry(
-        total=3,
-        backoff_factor=2,
-        status_forcelist=(429, 500, 502, 503, 504),
+        total=2,
+        backoff_factor=1,
+        status_forcelist=(500, 502, 503, 504),
         allowed_methods=("GET",),
     )
     session.mount("https://", HTTPAdapter(max_retries=retry))

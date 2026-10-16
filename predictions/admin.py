@@ -30,7 +30,7 @@ from .models import (
 from django.db import transaction
 from django.shortcuts import redirect, render
 from django.urls import path, reverse
-from .importers.base import ProviderError
+from .importers.base import ProviderError, ProviderQuotaExceededError
 from .importers.registry import get_providers, provider_for
 from .services import (
     apply_odds_and_points,
@@ -1075,6 +1075,9 @@ class MatchAdmin(admin.ModelAdmin):
             kickoffs = {m.external_id: m.start_time for m in matches}
             try:
                 results_map = provider.fetch_results(sport.name, kickoffs)
+            except ProviderQuotaExceededError as exc:
+                self.message_user(request, f"⚠️ {sport.name}: {exc}", messages.WARNING)
+                break
             except Exception as exc:
                 self.message_user(request, f"{sport.name}: Error fetching results ({exc})", messages.ERROR)
                 continue
@@ -1137,10 +1140,13 @@ class MatchAdmin(admin.ModelAdmin):
 
         fetched_map = {}
         initial_requests = sum(getattr(p, "requests_made", 0) for p in providers)
+        quota_warnings = []
         for provider, matches in by_provider.items():
             if provider and matches:
                 try:
                     fetched_map.update(provider.fetch_matches_odds(matches))
+                except ProviderQuotaExceededError as exc:
+                    quota_warnings.append(str(exc))
                 except Exception as exc:
                     logger.warning("Failed bulk fetching odds: %s", exc)
 
@@ -1173,6 +1179,8 @@ class MatchAdmin(admin.ModelAdmin):
         requests_used = final_requests - initial_requests
 
         msg_parts = []
+        if quota_warnings:
+            msg_parts.append(f"⚠️ {quota_warnings[0]}")
         if updated_count:
             req_info = (
                 f" (used {requests_used} API request{'s' if requests_used != 1 else ''})"
@@ -1195,9 +1203,9 @@ class MatchAdmin(admin.ModelAdmin):
 
         if msg_parts:
             level = (
-                messages.SUCCESS
-                if (updated_count or recalculated_count)
-                else messages.WARNING
+                messages.WARNING
+                if (quota_warnings or (failed_count and not updated_count and not recalculated_count))
+                else (messages.SUCCESS if (updated_count or recalculated_count) else messages.WARNING)
             )
             self.message_user(request, " ".join(msg_parts), level)
 
@@ -1237,6 +1245,7 @@ class MatchAdmin(admin.ModelAdmin):
         empty_count = 0
         skipped_count = 0
         failed_count = 0
+        quota_warnings = []
         for match in queryset.select_related("sport", "team_a", "team_b"):
             if not match.sport.is_active:
                 skipped_count += 1
@@ -1249,11 +1258,19 @@ class MatchAdmin(admin.ModelAdmin):
                     empty_count += 1
                 else:
                     failed_count += 1
+            except ProviderQuotaExceededError as q_exc:
+                q_msg = str(q_exc)
+                if q_msg not in quota_warnings:
+                    quota_warnings.append(q_msg)
+                failed_count += 1
+                break
             except Exception as exc:
                 logger.warning("Error fetching H2H for match %s: %s", match.pk, exc)
                 failed_count += 1
 
         msg_parts = []
+        if quota_warnings:
+            msg_parts.append(f"⚠️ {quota_warnings[0]}")
         if success_count:
             msg_parts.append(
                 f"Fetched Head to Head & recent form for {success_count} match(es) (API-Football / FlashLive)."
@@ -1266,7 +1283,7 @@ class MatchAdmin(admin.ModelAdmin):
             msg_parts.append(
                 f"{skipped_count} match(es) skipped because their sport is paused."
             )
-        if failed_count:
+        if failed_count and not quota_warnings:
             msg_parts.append(
                 f"{failed_count} match(es) could not be retrieved from provider."
             )
@@ -1275,9 +1292,9 @@ class MatchAdmin(admin.ModelAdmin):
             msg_parts.append("No matches processed.")
 
         level = (
-            messages.SUCCESS
-            if success_count
-            else (messages.WARNING if (failed_count or skipped_count) else messages.INFO)
+            messages.WARNING
+            if (quota_warnings or failed_count or skipped_count)
+            else (messages.SUCCESS if success_count else messages.INFO)
         )
         self.message_user(request, " ".join(msg_parts), level)
 
@@ -1310,6 +1327,10 @@ class MatchAdmin(admin.ModelAdmin):
                         f"Could not fetch Head to Head for {obj} (sport paused or provider returned no data).",
                         messages.WARNING,
                     )
+            except ProviderQuotaExceededError as q_exc:
+                self.message_user(
+                    request, f"⚠️ {q_exc}", messages.WARNING
+                )
             except Exception as exc:
                 logger.warning("Error fetching H2H on save for %s: %s", obj.pk, exc)
                 try:

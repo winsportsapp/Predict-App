@@ -20,6 +20,7 @@ from .base import (
     H2HSummary,
     Provider,
     ProviderError,
+    ProviderQuotaExceededError,
     make_session,
     match_score,
     resolve_side,
@@ -112,6 +113,8 @@ FOOTBALL_TIER_EXPANSIONS = {
         "major league soccer",
     },
 }
+
+_TEAM_ID_CACHE = {}
 
 
 class APIFootballProvider(Provider):
@@ -248,6 +251,11 @@ class APIFootballProvider(Provider):
         except requests.RequestException as exc:
             raise ProviderError(f"API-Football request failed: {exc}") from exc
 
+        if resp.status_code == 429:
+            raise ProviderQuotaExceededError(
+                "API-Football rate limit / daily quota reached (100 requests/day limit). Quota resets at 00:00 UTC (05:30 AM IST)."
+            )
+
         if resp.status_code != 200:
             raise ProviderError(
                 f"API-Football {path} returned HTTP {resp.status_code}: {resp.text[:200]}"
@@ -260,6 +268,11 @@ class APIFootballProvider(Provider):
 
         errors = payload.get("errors")
         if errors:
+            err_str = str(errors).lower()
+            if "request limit" in err_str or "requests" in err_str:
+                raise ProviderQuotaExceededError(
+                    "API-Football daily quota reached (100 requests/day limit). Quota resets at 00:00 UTC (05:30 AM IST)."
+                )
             if isinstance(errors, dict) and any(errors.values()):
                 raise ProviderError(f"API-Football error: {errors}")
             elif isinstance(errors, list) and errors:
@@ -514,28 +527,44 @@ class APIFootballProvider(Provider):
     # -- Head-to-Head & Recent Form ----------------------------------------
 
     def fetch_h2h_and_form(self, match):
-        """Fetch H2H history and recent 5-match form for both teams."""
+        """Fetch H2H history and recent form for both teams (optimized for Free plan)."""
         if not self.supports(match.sport.name):
             return None
 
-        home_id, away_id = None, None
+        team_a_key = match.team_a.name.lower().strip()
+        team_b_key = match.team_b.name.lower().strip()
 
-        # 1. Try finding team IDs from match.external_id
-        if match.external_id:
+        home_id = _TEAM_ID_CACHE.get(team_a_key)
+        away_id = _TEAM_ID_CACHE.get(team_b_key)
+
+        # 1. Try finding team IDs from match.external_id if not cached
+        if (not home_id or not away_id) and match.external_id:
             try:
                 data = self._get("/fixtures", {"id": match.external_id})
                 if data and isinstance(data, list):
                     fx = data[0].get("teams", {})
-                    home_id = fx.get("home", {}).get("id")
-                    away_id = fx.get("away", {}).get("id")
+                    h_id = fx.get("home", {}).get("id")
+                    a_id = fx.get("away", {}).get("id")
+                    if h_id:
+                        home_id = h_id
+                        _TEAM_ID_CACHE[team_a_key] = h_id
+                    if a_id:
+                        away_id = a_id
+                        _TEAM_ID_CACHE[team_b_key] = a_id
+            except ProviderQuotaExceededError:
+                raise
             except ProviderError:
                 pass
 
-        # 2. Fall back to team name search if team IDs unknown
+        # 2. Fall back to team name search if team IDs still unknown
         if not home_id:
             home_id = self._search_team_id(match.team_a.name)
+            if home_id:
+                _TEAM_ID_CACHE[team_a_key] = home_id
         if not away_id:
             away_id = self._search_team_id(match.team_b.name)
+            if away_id:
+                _TEAM_ID_CACHE[team_b_key] = away_id
 
         if not (home_id and away_id):
             logger.debug(
@@ -567,15 +596,15 @@ class APIFootballProvider(Provider):
                             team_b_wins += 1
                         elif res == "D":
                             draws += 1
+        except ProviderQuotaExceededError:
+            raise
         except ProviderError as exc:
             logger.warning("Failed fetching H2H for %s vs %s: %s", match.team_a, match.team_b, exc)
 
-        # 4. Fetch recent form (last 5 matches for Team A & Team B)
-        team_a_form = self._fetch_team_recent_form(home_id, match.team_a.name)
-        team_b_form = self._fetch_team_recent_form(away_id, match.team_b.name)
-
-        # If team form is not available from API (free plan restriction), fall back to H2H recent form
-        if not team_a_form and past_matches:
+        # 4. Derive recent form from past H2H encounters (0 extra API requests, 100% Free Plan compatible)
+        team_a_form = []
+        team_b_form = []
+        if past_matches:
             for p in past_matches[:5]:
                 team_a_form.append({
                     "result": "W" if p.get("winner_side") == "A" else ("D" if p.get("winner_side") == "D" else "L"),
@@ -583,8 +612,6 @@ class APIFootballProvider(Provider):
                     "score": p.get("score", ""),
                     "date": p.get("date", ""),
                 })
-        if not team_b_form and past_matches:
-            for p in past_matches[:5]:
                 team_b_form.append({
                     "result": "W" if p.get("winner_side") == "B" else ("D" if p.get("winner_side") == "D" else "L"),
                     "opponent": match.team_a.name,

@@ -25,6 +25,7 @@ from .base import (
     H2HSummary,
     Provider,
     ProviderError,
+    ProviderQuotaExceededError,
     make_session,
     match_score,
     resolve_side,
@@ -47,6 +48,24 @@ DEFAULT_SPORT_IDS = {
     "Hockey": 24,
 }
 
+
+
+def _format_rapidapi_reset(headers, default_date_str="October 25 at 03:05 PM IST"):
+    # Check headers (case-insensitive) for reset seconds
+    reset_val = None
+    for k, v in (headers or {}).items():
+        if k.lower() in ("x-ratelimit-requests-reset", "ratelimit-reset"):
+            reset_val = v
+            break
+    if reset_val:
+        try:
+            secs = int(reset_val)
+            dt = datetime.now(dt_timezone.utc) + timedelta(seconds=secs)
+            ist_dt = dt.astimezone(dt_timezone(timedelta(hours=5, minutes=30)))
+            return ist_dt.strftime("%B %d at %I:%M %p IST")
+        except Exception:
+            pass
+    return default_date_str
 
 
 # FlashLive's list endpoint only reaches 7 days either side of today.
@@ -577,6 +596,20 @@ class FlashLiveProvider(Provider):
             )
             if resp.status_code == 200:
                 return resp.json().get("DATA") or []
+            if resp.status_code == 429:
+                reset_time = _format_rapidapi_reset(resp.headers, "November 13 at 08:00 PM IST")
+                raise ProviderQuotaExceededError(
+                    f"FlashLive Secondary API (H2H & Recent Form) monthly quota reached on RapidAPI (500 requests/month). Quota restores on {reset_time}."
+                )
+        except ProviderQuotaExceededError:
+            raise
+        except requests.RequestException as exc:
+            err_str = str(exc).lower()
+            if "too many 429" in err_str or "quota" in err_str:
+                raise ProviderQuotaExceededError(
+                    "FlashLive Secondary API (H2H & Recent Form) monthly quota reached on RapidAPI (500 requests/month)."
+                ) from exc
+            logger.debug("FlashLive stats request %s failed: %s", path, exc)
         except Exception as exc:
             logger.debug("FlashLive stats request %s failed: %s", path, exc)
         return []
@@ -593,17 +626,22 @@ class FlashLiveProvider(Provider):
             )
         except requests.RequestException as exc:
             err_str = str(exc).lower()
-            if "too many 429 error responses" in err_str or "quota" in err_str:
-                raise ProviderError("FlashLive monthly quota exhausted on RapidAPI (500/month limit).") from exc
+            if "too many 429" in err_str or "quota" in err_str:
+                raise ProviderQuotaExceededError(
+                    "FlashLive monthly quota on RapidAPI reached (500 requests/month). Quota restores on October 25 at 03:05 PM IST."
+                ) from exc
             raise ProviderError(f"FlashLive request failed: {exc}") from exc
         if response.status_code == 404:
             # FlashLive answers 404 for a day with no events.
             return []
         if response.status_code == 429:
             msg = response.text[:200]
-            if "monthly quota" in msg.lower():
-                raise ProviderError("FlashLive monthly quota exhausted on RapidAPI (500/month limit).")
-            raise ProviderError(f"FlashLive rate limit (429): {msg}")
+            reset_time = _format_rapidapi_reset(response.headers, "October 25 at 03:05 PM IST")
+            if "monthly quota" in msg.lower() or "hard-limit" in msg.lower() or "exceeded" in msg.lower():
+                raise ProviderQuotaExceededError(
+                    f"FlashLive monthly quota on RapidAPI reached (500 requests/month). Quota restores on {reset_time}."
+                )
+            raise ProviderQuotaExceededError(f"FlashLive rate limit (429): {msg}. Quota restores on {reset_time}.")
         if response.status_code != 200:
             raise ProviderError(
                 f"FlashLive {path} returned HTTP {response.status_code}: "
