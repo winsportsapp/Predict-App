@@ -6067,8 +6067,8 @@ class SyncExternalMatchesCommandTests(TestCase):
                 self.assertTrue(mock_import.called)
                 fb_calls = [c for c in mock_import.call_args_list if c.args[1].name == "Football"]
                 self.assertTrue(len(fb_calls) > 0)
-                # In the morning, days_ahead should default to 7
-                self.assertEqual(fb_calls[0].kwargs.get("days_ahead"), 7)
+                # In the morning, days_ahead should default to 1 (next day)
+                self.assertEqual(fb_calls[0].kwargs.get("days_ahead"), 1)
 
 
 

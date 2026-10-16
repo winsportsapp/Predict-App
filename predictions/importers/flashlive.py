@@ -11,6 +11,7 @@ not change the number of requests.
 
 import logging
 import re
+import time
 from fnmatch import fnmatchcase
 from datetime import datetime, timedelta, timezone as dt_timezone
 
@@ -585,15 +586,24 @@ class FlashLiveProvider(Provider):
         if not self.api_key:
             raise ProviderError("RAPIDAPI_KEY is not set.")
         self.requests_made += 1
+        time.sleep(1.2)  # Polite throttle to prevent RapidAPI per-second burst rate limits
         try:
             response = self.session.get(
                 BASE_URL + path, params=params, timeout=REQUEST_TIMEOUT
             )
         except requests.RequestException as exc:
+            err_str = str(exc).lower()
+            if "too many 429 error responses" in err_str or "quota" in err_str:
+                raise ProviderError("FlashLive monthly quota exhausted on RapidAPI (500/month limit).") from exc
             raise ProviderError(f"FlashLive request failed: {exc}") from exc
         if response.status_code == 404:
             # FlashLive answers 404 for a day with no events.
             return []
+        if response.status_code == 429:
+            msg = response.text[:200]
+            if "monthly quota" in msg.lower():
+                raise ProviderError("FlashLive monthly quota exhausted on RapidAPI (500/month limit).")
+            raise ProviderError(f"FlashLive rate limit (429): {msg}")
         if response.status_code != 200:
             raise ProviderError(
                 f"FlashLive {path} returned HTTP {response.status_code}: "

@@ -44,7 +44,7 @@ To stay strictly within the 500 RapidAPI requests/month limit (~14 requests/day)
 0 1,15 * * * cd /path/to/project && /path/to/venv/bin/python manage.py sync_external_matches --results
 
 # 2. Fixtures & Odds (06:35 IST & 20:35 IST / 01:05 UTC & 15:05 UTC):
-# Automatically infers morning (7-day window) or evening (next-day window, 1 day ahead) based on IST run time.
+# Both morning and evening runs strictly import next-day fixtures (Day 1 / tomorrow) and bookmaker odds.
 5 1,15 * * * cd /path/to/project && /path/to/venv/bin/python manage.py sync_external_matches --fixtures --new-day-only
 ```
 

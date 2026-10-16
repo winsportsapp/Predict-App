@@ -37,7 +37,7 @@ class Command(BaseCommand):
             "--days-ahead",
             type=int,
             default=None,
-            help="Fixture window in days (max 7). Default: 1 in 20:30 slot, 7 in 06:30 slot.",
+            help="Fixture window in days (max 7). Default: 1 (Next-day matches).",
         )
         parser.add_argument(
             "--new-day-only",
@@ -126,7 +126,7 @@ class Command(BaseCommand):
 
         days_ahead = options.get("days_ahead")
         if days_ahead is None:
-            days_ahead = 1 if slot == "20:30" else 7
+            days_ahead = 1  # Scheduled runs strictly target Next Day (Day 1)
 
         failed = False
         with transaction.atomic():
@@ -190,7 +190,15 @@ class Command(BaseCommand):
                 except ProviderError as exc:
                     # Keep going: one sport failing shouldn't block the rest.
                     failed = True
-                    self.stderr.write(self.style.ERROR(f"{sport.name}: {exc}"))
+                    err_msg = str(exc)
+                    if "quota" in err_msg.lower():
+                        self.stderr.write(
+                            self.style.WARNING(
+                                f"{sport.name}: {err_msg}"
+                            )
+                        )
+                    else:
+                        self.stderr.write(self.style.ERROR(f"{sport.name}: {exc}"))
 
             if options["dry_run"]:
                 transaction.set_rollback(True)
@@ -198,7 +206,7 @@ class Command(BaseCommand):
 
         self._report_requests(providers)
         if failed:
-            raise CommandError("Some sports failed; see errors above.")
+            raise CommandError("Some sports failed or reached quota; see logs above.")
 
     def _safe_write(self, msg):
         try:
