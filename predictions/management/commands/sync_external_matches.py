@@ -129,6 +129,7 @@ class Command(BaseCommand):
             days_ahead = 1  # Scheduled runs strictly target Next Day (Day 1)
 
         failed = False
+        quota_stopped = False
         with transaction.atomic():
             for sport in sports:
                 if not sport.is_active and not options["force"]:
@@ -189,15 +190,16 @@ class Command(BaseCommand):
 
                 except ProviderError as exc:
                     # Keep going: one sport failing shouldn't block the rest.
-                    failed = True
                     err_msg = str(exc)
                     if "quota" in err_msg.lower():
+                        quota_stopped = True
                         self.stderr.write(
                             self.style.WARNING(
-                                f"{sport.name}: {err_msg}"
+                                f"{sport.name}: {err_msg} (quota limit reached, stopped cleanly)."
                             )
                         )
                     else:
+                        failed = True
                         self.stderr.write(self.style.ERROR(f"{sport.name}: {exc}"))
 
             if options["dry_run"]:
@@ -206,7 +208,7 @@ class Command(BaseCommand):
 
         self._report_requests(providers)
         if failed:
-            raise CommandError("Some sports failed or reached quota; see logs above.")
+            raise CommandError("Some sports failed unexpectedly; see logs above.")
 
     def _safe_write(self, msg):
         try:
