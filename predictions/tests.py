@@ -8587,7 +8587,7 @@ class ProviderQuotaAndAdminNotificationTests(TestCase):
         provider = FlashLiveProvider(api_key="fake-key", session=session)
         with self.assertRaises(ProviderQuotaExceededError) as ctx:
             provider._get("/events/list", {})
-        self.assertIn("FlashLive monthly quota on RapidAPI reached", str(ctx.exception))
+        self.assertIn("FlashLive Primary API monthly quota on RapidAPI reached", str(ctx.exception))
         self.assertIn("Quota restores on", str(ctx.exception))
 
     def test_flashlive_secondary_stats_429_raises_quota_exceeded_error(self):
@@ -8603,13 +8603,131 @@ class ProviderQuotaAndAdminNotificationTests(TestCase):
         stats_session.get.return_value = resp
 
         provider = FlashLiveProvider(
-            api_key="fake-key",
+            api_key="",
             stats_api_key="fake-stats-key",
             stats_session=stats_session,
         )
         with self.assertRaises(ProviderQuotaExceededError) as ctx:
             provider._get_stats("/events/h2h", {"event_id": "test"})
-        self.assertIn("FlashLive Secondary API (H2H & Recent Form) monthly quota reached", str(ctx.exception))
+        self.assertIn("FlashLive Secondary API monthly quota on RapidAPI reached", str(ctx.exception))
+
+    def test_flashlive_get_fails_over_to_secondary_when_primary_429(self):
+        from unittest import mock
+        from predictions.importers.flashlive import FlashLiveProvider
+
+        primary_session = mock.Mock()
+        p_resp = mock.Mock()
+        p_resp.status_code = 429
+        p_resp.headers = {"x-ratelimit-requests-reset": "86400"}
+        p_resp.text = "Quota reached"
+        primary_session.get.return_value = p_resp
+
+        secondary_session = mock.Mock()
+        s_resp = mock.Mock()
+        s_resp.status_code = 200
+        s_resp.json.return_value = {"DATA": [{"EVENT_ID": "evt_123"}]}
+        secondary_session.get.return_value = s_resp
+
+        provider = FlashLiveProvider(
+            api_key="key-primary",
+            stats_api_key="key-secondary",
+            session=primary_session,
+            stats_session=secondary_session,
+        )
+        data = provider._get("/events/list", {"sport_id": 1})
+        self.assertEqual(data, [{"EVENT_ID": "evt_123"}])
+        self.assertEqual(primary_session.get.call_count, 1)
+        self.assertEqual(secondary_session.get.call_count, 1)
+
+    def test_flashlive_get_stats_fails_over_to_primary_when_secondary_429(self):
+        from unittest import mock
+        from predictions.importers.flashlive import FlashLiveProvider
+
+        secondary_session = mock.Mock()
+        s_resp = mock.Mock()
+        s_resp.status_code = 429
+        s_resp.headers = {"x-ratelimit-requests-reset": "86400"}
+        s_resp.text = "Quota reached"
+        secondary_session.get.return_value = s_resp
+
+        primary_session = mock.Mock()
+        p_resp = mock.Mock()
+        p_resp.status_code = 200
+        p_resp.json.return_value = {"DATA": [{"H2H_ID": "h2h_123"}]}
+        primary_session.get.return_value = p_resp
+
+        provider = FlashLiveProvider(
+            api_key="key-primary",
+            stats_api_key="key-secondary",
+            session=primary_session,
+            stats_session=secondary_session,
+        )
+        data = provider._get_stats("/events/h2h", {"event_id": "test"})
+        self.assertEqual(data, [{"H2H_ID": "h2h_123"}])
+        self.assertEqual(secondary_session.get.call_count, 1)
+        self.assertEqual(primary_session.get.call_count, 1)
+
+    def test_flashlive_raises_when_both_keys_are_429(self):
+        from unittest import mock
+        from predictions.importers.flashlive import FlashLiveProvider
+        from predictions.importers.base import ProviderQuotaExceededError
+
+        primary_session = mock.Mock()
+        p_resp = mock.Mock()
+        p_resp.status_code = 429
+        p_resp.headers = {"x-ratelimit-requests-reset": "86400"}
+        p_resp.text = "Quota reached"
+        primary_session.get.return_value = p_resp
+
+        secondary_session = mock.Mock()
+        s_resp = mock.Mock()
+        s_resp.status_code = 429
+        s_resp.headers = {"x-ratelimit-requests-reset": "86400"}
+        s_resp.text = "Quota reached"
+        secondary_session.get.return_value = s_resp
+
+        provider = FlashLiveProvider(
+            api_key="key-primary",
+            stats_api_key="key-secondary",
+            session=primary_session,
+            stats_session=secondary_session,
+        )
+        with self.assertRaises(ProviderQuotaExceededError) as ctx:
+            provider._get("/events/list", {"sport_id": 1})
+        self.assertIn("FlashLive monthly quota reached on all available keys (Primary & Secondary exhausted).", str(ctx.exception))
+
+    def test_flashlive_subsequent_request_skips_exhausted_primary(self):
+        from unittest import mock
+        from predictions.importers.flashlive import FlashLiveProvider
+
+        primary_session = mock.Mock()
+        p_resp = mock.Mock()
+        p_resp.status_code = 429
+        p_resp.headers = {"x-ratelimit-requests-reset": "86400"}
+        p_resp.text = "Quota reached"
+        primary_session.get.return_value = p_resp
+
+        secondary_session = mock.Mock()
+        s_resp = mock.Mock()
+        s_resp.status_code = 200
+        s_resp.json.return_value = {"DATA": [{"EVENT_ID": "evt_123"}]}
+        secondary_session.get.return_value = s_resp
+
+        provider = FlashLiveProvider(
+            api_key="key-primary",
+            stats_api_key="key-secondary",
+            session=primary_session,
+            stats_session=secondary_session,
+        )
+        # First call triggers failover and records primary exhaustion
+        provider._get("/events/list", {"sport_id": 1})
+        self.assertEqual(primary_session.get.call_count, 1)
+        self.assertEqual(secondary_session.get.call_count, 1)
+
+        # Second call should bypass primary completely and call secondary directly
+        provider._get("/events/odds", {"event_id": "evt_123"})
+        self.assertEqual(primary_session.get.call_count, 1)  # Still 1, NOT called again
+        self.assertEqual(secondary_session.get.call_count, 2)  # Secondary took it directly
 
     def test_fetch_h2h_admin_action_catches_quota_and_warns(self):
         from unittest import mock
@@ -8678,11 +8796,10 @@ class ProviderQuotaAndAdminNotificationTests(TestCase):
         resp.headers = {"x-ratelimit-requests-reset": "86400"}
         resp.text = '{"message": "You have exceeded the MONTHLY quota for Requests"}'
         session.get.return_value = resp
-
         provider = FlashLiveProvider(api_key="fake-key", session=session)
         with self.assertRaises(ProviderQuotaExceededError) as ctx:
             provider.fetch_odds("Badminton", indent_days=0)
-        self.assertIn("FlashLive monthly quota on RapidAPI reached", str(ctx.exception))
+        self.assertIn("FlashLive Primary API monthly quota on RapidAPI reached", str(ctx.exception))
 
     def test_fetch_odds_admin_action_catches_quota_and_warns(self):
         from unittest import mock

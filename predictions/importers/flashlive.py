@@ -50,22 +50,46 @@ DEFAULT_SPORT_IDS = {
 
 
 
-def _format_rapidapi_reset(headers, default_date_str="October 25 at 03:05 PM IST"):
+def _parse_rapidapi_reset(headers, default_date_str="October 25 at 03:05 PM IST"):
     # Check headers (case-insensitive) for reset seconds
     reset_val = None
-    for k, v in (headers or {}).items():
-        if k.lower() in ("x-ratelimit-requests-reset", "ratelimit-reset"):
-            reset_val = v
-            break
+    if isinstance(headers, (dict, requests.structures.CaseInsensitiveDict)):
+        for k, v in headers.items():
+            if str(k).lower() in ("x-ratelimit-requests-reset", "ratelimit-reset"):
+                reset_val = v
+                break
+    reset_dt = None
     if reset_val:
         try:
             secs = int(reset_val)
-            dt = datetime.now(dt_timezone.utc) + timedelta(seconds=secs)
-            ist_dt = dt.astimezone(dt_timezone(timedelta(hours=5, minutes=30)))
-            return ist_dt.strftime("%B %d at %I:%M %p IST")
+            reset_dt = datetime.now(dt_timezone.utc) + timedelta(seconds=secs)
+            ist_dt = reset_dt.astimezone(dt_timezone(timedelta(hours=5, minutes=30)))
+            return ist_dt.strftime("%B %d at %I:%M %p IST"), reset_dt
         except Exception:
             pass
-    return default_date_str
+    return default_date_str, reset_dt
+
+
+def _format_rapidapi_reset(headers, default_date_str="October 25 at 03:05 PM IST"):
+    date_str, _ = _parse_rapidapi_reset(headers, default_date_str)
+    return date_str
+
+
+import sys
+
+# default throttle delay (can be set to 0 in tests)
+DEFAULT_THROTTLE_DELAY = 0 if "test" in sys.argv else 1.2
+
+# In-memory quota exhaustion cache: {key_name: reset_datetime}
+_KEY_QUOTA_STATUS = {
+    "primary": None,
+    "secondary": None,
+}
+
+
+def reset_flashlive_quota_status():
+    _KEY_QUOTA_STATUS["primary"] = None
+    _KEY_QUOTA_STATUS["secondary"] = None
 
 
 # FlashLive's list endpoint only reaches 7 days either side of today.
@@ -146,13 +170,19 @@ class FlashLiveProvider(Provider):
         utc_offset=None,
         stats_api_key=None,
         stats_session=None,
+        throttle_delay=None,
     ):
-        self.api_key = api_key if api_key is not None else settings.RAPIDAPI_KEY
+        self.api_key = api_key if api_key is not None else getattr(settings, "RAPIDAPI_KEY", "")
         self.stats_api_key = (
             stats_api_key
             if stats_api_key is not None
-            else getattr(settings, "RAPIDAPI_STATS_KEY", "") or self.api_key
+            else (getattr(settings, "RAPIDAPI_STATS_KEY", "") if api_key is None else "")
         )
+        self.throttle_delay = (
+            DEFAULT_THROTTLE_DELAY if throttle_delay is None else throttle_delay
+        )
+        self._use_global_quota = (session is None and stats_session is None)
+        self._instance_quota_status = {"primary": None, "secondary": None}
         # Tournament names or IDs; "*" wildcards allowed, e.g. "* ATP*".
         self.tournaments = _patterns(
             tournaments if tournaments is not None else settings.FLASHLIVE_TOURNAMENTS
@@ -189,8 +219,10 @@ class FlashLiveProvider(Provider):
             utc_offset if utc_offset is not None else settings.FLASHLIVE_UTC_OFFSET
         )
         self.local_tz = dt_timezone(timedelta(hours=self.utc_offset))
-        self.session = session or make_session(
-            {"x-rapidapi-key": self.api_key, "x-rapidapi-host": API_HOST}
+        self.session = session or (
+            make_session({"x-rapidapi-key": self.api_key, "x-rapidapi-host": API_HOST})
+            if self.api_key
+            else None
         )
         # Dedicated session for H2H and recent form requests using secondary key
         self.stats_session = stats_session or (
@@ -198,6 +230,8 @@ class FlashLiveProvider(Provider):
             if self.stats_api_key
             else self.session
         )
+        if self.session is None and self.stats_session is not None:
+            self.session = self.stats_session
         # Requests made by this instance, reported by the command so usage
         # against the monthly quota can be followed in the logs.
         self.requests_made = 0
@@ -592,71 +626,140 @@ class FlashLiveProvider(Provider):
 
     # -- helpers -----------------------------------------------------------
 
-    def _get_stats(self, path, params):
-        if not self.stats_api_key:
-            return []
-        self.stats_requests_made += 1
+    def _get_quota_reset(self, key_name):
+        if self._use_global_quota:
+            return _KEY_QUOTA_STATUS.get(key_name)
+        return self._instance_quota_status.get(key_name)
+
+    def _set_quota_reset(self, key_name, reset_dt):
+        if self._use_global_quota:
+            _KEY_QUOTA_STATUS[key_name] = reset_dt
+        else:
+            self._instance_quota_status[key_name] = reset_dt
+
+    def _execute_http(self, session, key_name, path, params):
+        if key_name == "primary":
+            self.requests_made += 1
+        else:
+            self.stats_requests_made += 1
+
+        if self.throttle_delay > 0:
+            time.sleep(self.throttle_delay)  # Polite throttle to prevent RapidAPI per-second burst rate limits
         try:
-            resp = self.stats_session.get(
-                BASE_URL + path, params=params, timeout=REQUEST_TIMEOUT
-            )
-            if resp.status_code == 200:
-                return resp.json().get("DATA") or []
-            if resp.status_code == 429:
-                reset_time = _format_rapidapi_reset(resp.headers, "November 13 at 08:00 PM IST")
-                raise ProviderQuotaExceededError(
-                    f"FlashLive Secondary API (H2H & Recent Form) monthly quota reached on RapidAPI (500 requests/month). Quota restores on {reset_time}."
-                )
-        except ProviderQuotaExceededError:
-            raise
+            resp = session.get(BASE_URL + path, params=params, timeout=REQUEST_TIMEOUT)
         except requests.RequestException as exc:
             err_str = str(exc).lower()
             if "too many 429" in err_str or "quota" in err_str:
+                default_date = "October 25 at 03:05 PM IST" if key_name == "primary" else "November 13 at 08:00 PM IST"
+                self._set_quota_reset(key_name, datetime.now(dt_timezone.utc) + timedelta(hours=12))
                 raise ProviderQuotaExceededError(
-                    "FlashLive Secondary API (H2H & Recent Form) monthly quota reached on RapidAPI (500 requests/month)."
+                    f"FlashLive {key_name} key quota reached (429). Quota restores around {default_date}."
                 ) from exc
-            logger.debug("FlashLive stats request %s failed: %s", path, exc)
-        except Exception as exc:
-            logger.debug("FlashLive stats request %s failed: %s", path, exc)
-        return []
+            raise ProviderError(f"FlashLive request failed ({key_name} key): {exc}") from exc
 
+        if resp.status_code == 404:
+            return []
+
+        if resp.status_code == 429:
+            msg = resp.text[:200]
+            default_date = "October 25 at 03:05 PM IST" if key_name == "primary" else "November 13 at 08:00 PM IST"
+            reset_str, reset_dt = _parse_rapidapi_reset(resp.headers, default_date)
+            self._set_quota_reset(key_name, reset_dt or (datetime.now(dt_timezone.utc) + timedelta(hours=12)))
+            label = "Primary" if key_name == "primary" else "Secondary"
+            raise ProviderQuotaExceededError(
+                f"FlashLive {label} API monthly quota on RapidAPI reached (500 requests/month). Quota restores on {reset_str}."
+            )
+
+        if resp.status_code != 200:
+            raise ProviderError(
+                f"FlashLive {path} returned HTTP {resp.status_code} ({key_name} key): {resp.text[:200]}"
+            )
+
+        try:
+            return resp.json().get("DATA") or []
+        except ValueError as exc:
+            raise ProviderError(f"FlashLive {path} returned invalid JSON ({key_name} key)") from exc
+
+    def _execute_with_failover(self, preferred_name, fallback_name, preferred_session, fallback_session, path, params):
+        pref_key_str = self.api_key if preferred_name == "primary" else self.stats_api_key
+        fallback_key_str = self.stats_api_key if fallback_name == "secondary" else self.api_key
+
+        if not self.api_key and not self.stats_api_key:
+            raise ProviderError("Neither RAPIDAPI_KEY nor RAPIDAPI_STATS_KEY is set.")
+
+        has_fallback = (
+            fallback_session is not None
+            and fallback_session != preferred_session
+            and bool(fallback_key_str)
+            and fallback_key_str != pref_key_str
+        )
+
+        now = datetime.now(dt_timezone.utc)
+        pref_reset = self._get_quota_reset(preferred_name)
+        fb_reset = self._get_quota_reset(fallback_name)
+
+        # If preferred key has no credentials but fallback does, route directly to fallback
+        if not pref_key_str and has_fallback:
+            return self._execute_http(fallback_session, fallback_name, path, params)
+
+        # 1. If preferred key is known to be quota-exhausted and fallback is active and not exhausted,
+        # route straight to fallback directly!
+        if pref_reset and now < pref_reset and has_fallback and (not fb_reset or now >= fb_reset):
+            logger.info(
+                "FlashLive %s key is known to be exhausted until %s; using %s key directly for %s",
+                preferred_name, pref_reset, fallback_name, path
+            )
+            return self._execute_http(fallback_session, fallback_name, path, params)
+
+        # 2. Try preferred key
+        try:
+            return self._execute_http(preferred_session, preferred_name, path, params)
+        except ProviderQuotaExceededError as pref_err:
+            if not has_fallback:
+                raise pref_err
+
+            # Check if fallback key is also known to be exhausted
+            if fb_reset and now < fb_reset:
+                raise ProviderQuotaExceededError(
+                    f"FlashLive monthly quota reached on all available keys (Primary & Secondary exhausted)."
+                ) from pref_err
+
+            logger.warning(
+                "FlashLive %s key reached quota (%s); failing over to %s key for %s",
+                preferred_name, pref_err, fallback_name, path
+            )
+            try:
+                return self._execute_http(fallback_session, fallback_name, path, params)
+            except ProviderQuotaExceededError as fb_err:
+                raise ProviderQuotaExceededError(
+                    f"FlashLive monthly quota reached on all available keys (Primary & Secondary exhausted)."
+                ) from fb_err
 
     def _get(self, path, params):
-        if not self.api_key:
-            raise ProviderError("RAPIDAPI_KEY is not set.")
-        self.requests_made += 1
-        time.sleep(1.2)  # Polite throttle to prevent RapidAPI per-second burst rate limits
-        try:
-            response = self.session.get(
-                BASE_URL + path, params=params, timeout=REQUEST_TIMEOUT
-            )
-        except requests.RequestException as exc:
-            err_str = str(exc).lower()
-            if "too many 429" in err_str or "quota" in err_str:
-                raise ProviderQuotaExceededError(
-                    "FlashLive monthly quota on RapidAPI reached (500 requests/month). Quota restores on October 25 at 03:05 PM IST."
-                ) from exc
-            raise ProviderError(f"FlashLive request failed: {exc}") from exc
-        if response.status_code == 404:
-            # FlashLive answers 404 for a day with no events.
+        return self._execute_with_failover(
+            preferred_name="primary",
+            fallback_name="secondary",
+            preferred_session=self.session,
+            fallback_session=self.stats_session,
+            path=path,
+            params=params,
+        )
+
+    def _get_stats(self, path, params):
+        if not self.stats_api_key and not self.api_key:
             return []
-        if response.status_code == 429:
-            msg = response.text[:200]
-            reset_time = _format_rapidapi_reset(response.headers, "October 25 at 03:05 PM IST")
-            if "monthly quota" in msg.lower() or "hard-limit" in msg.lower() or "exceeded" in msg.lower():
-                raise ProviderQuotaExceededError(
-                    f"FlashLive monthly quota on RapidAPI reached (500 requests/month). Quota restores on {reset_time}."
-                )
-            raise ProviderQuotaExceededError(f"FlashLive rate limit (429): {msg}. Quota restores on {reset_time}.")
-        if response.status_code != 200:
-            raise ProviderError(
-                f"FlashLive {path} returned HTTP {response.status_code}: "
-                f"{response.text[:200]}"
-            )
-        try:
-            return response.json().get("DATA") or []
-        except ValueError as exc:
-            raise ProviderError(f"FlashLive {path} returned invalid JSON") from exc
+        primary_session = self.session if self.api_key else None
+        secondary_session = self.stats_session if self.stats_api_key else None
+        preferred_session = secondary_session or primary_session
+        fallback_session = primary_session if secondary_session and primary_session != secondary_session else None
+        return self._execute_with_failover(
+            preferred_name="secondary" if secondary_session else "primary",
+            fallback_name="primary",
+            preferred_session=preferred_session,
+            fallback_session=fallback_session,
+            path=path,
+            params=params,
+        )
 
     def _list_events(self, sport_name, indent_days):
         return self._get(
