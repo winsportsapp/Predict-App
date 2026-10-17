@@ -700,42 +700,59 @@ class FlashLiveProvider(Provider):
         pref_reset = self._get_quota_reset(preferred_name)
         fb_reset = self._get_quota_reset(fallback_name)
 
+        # Automatically clear expired quota resets
+        if pref_reset and now >= pref_reset:
+            self._set_quota_reset(preferred_name, None)
+            pref_reset = None
+        if fb_reset and now >= fb_reset:
+            self._set_quota_reset(fallback_name, None)
+            fb_reset = None
+
         # If preferred key has no credentials but fallback does, route directly to fallback
         if not pref_key_str and has_fallback:
             return self._execute_http(fallback_session, fallback_name, path, params)
 
-        # 1. If preferred key is known to be quota-exhausted and fallback is active and not exhausted,
-        # route straight to fallback directly!
-        if pref_reset and now < pref_reset and has_fallback and (not fb_reset or now >= fb_reset):
-            logger.info(
-                "FlashLive %s key is known to be exhausted until %s; using %s key directly for %s",
-                preferred_name, pref_reset, fallback_name, path
+        # Determine attempt order:
+        # If preferred is exhausted but fallback has quota, try fallback first.
+        # If fallback is exhausted but preferred has quota, try preferred first.
+        if pref_reset and has_fallback and not fb_reset:
+            first_name, first_session = fallback_name, fallback_session
+            second_name, second_session = preferred_name, preferred_session
+        else:
+            first_name, first_session = preferred_name, preferred_session
+            second_name, second_session = fallback_name, fallback_session
+
+        # If both keys are known to be exhausted right now:
+        if pref_reset and fb_reset:
+            raise ProviderQuotaExceededError(
+                "FlashLive monthly quota reached on all available keys (Primary & Secondary exhausted)."
             )
-            return self._execute_http(fallback_session, fallback_name, path, params)
 
-        # 2. Try preferred key
+        # 1. Try first candidate
         try:
-            return self._execute_http(preferred_session, preferred_name, path, params)
-        except ProviderQuotaExceededError as pref_err:
-            if not has_fallback:
-                raise pref_err
+            return self._execute_http(first_session, first_name, path, params)
+        except ProviderQuotaExceededError as first_err:
+            if not has_fallback or first_session == second_session:
+                raise first_err
 
-            # Check if fallback key is also known to be exhausted
-            if fb_reset and now < fb_reset:
+            # Check if second candidate is also known to be exhausted
+            now = datetime.now(dt_timezone.utc)
+            second_reset = self._get_quota_reset(second_name)
+            if second_reset and now < second_reset:
                 raise ProviderQuotaExceededError(
-                    f"FlashLive monthly quota reached on all available keys (Primary & Secondary exhausted)."
-                ) from pref_err
+                    "FlashLive monthly quota reached on all available keys (Primary & Secondary exhausted)."
+                ) from first_err
 
             logger.warning(
                 "FlashLive %s key reached quota (%s); failing over to %s key for %s",
-                preferred_name, pref_err, fallback_name, path
+                first_name, first_err, second_name, path
             )
             try:
-                return self._execute_http(fallback_session, fallback_name, path, params)
-            except ProviderQuotaExceededError as fb_err:
+                return self._execute_http(second_session, second_name, path, params)
+            except ProviderQuotaExceededError as second_err:
                 raise ProviderQuotaExceededError(
-                    f"FlashLive monthly quota reached on all available keys (Primary & Secondary exhausted)."
-                ) from fb_err
+                    "FlashLive monthly quota reached on all available keys (Primary & Secondary exhausted)."
+                ) from second_err
 
     def _get(self, path, params):
         return self._execute_with_failover(
