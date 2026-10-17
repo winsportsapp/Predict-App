@@ -119,10 +119,7 @@ class Command(BaseCommand):
 
         slot = options.get("slot")
         if not slot:
-            if options["fixtures"]:
-                slot = "20:30" if (options.get("days_ahead") == 1 or is_evening) else "06:30"
-            elif options["results"]:
-                slot = "20:30" if is_evening else "06:30"
+            slot = "20:30" if is_evening else "06:30"
 
         days_ahead = options.get("days_ahead")
         if days_ahead is None:
@@ -224,12 +221,20 @@ class Command(BaseCommand):
             self.stdout.write(safe)
 
     def _report_requests(self, providers):
-        breakdown = [
-            f"{p.name}: {getattr(p, 'requests_made', 0)}"
-            for p in providers
-            if getattr(p, "requests_made", 0) > 0
-        ]
-        total = sum(getattr(p, "requests_made", 0) for p in providers)
+        breakdown = []
+        total = 0
+        for p in providers:
+            pri = getattr(p, "requests_made", 0)
+            pri = pri if isinstance(pri, int) else 0
+            sec = getattr(p, "stats_requests_made", 0)
+            sec = sec if isinstance(sec, int) else 0
+            reqs = pri + sec
+            if reqs > 0:
+                details = f"{p.name}: {reqs}"
+                if sec > 0:
+                    details += f" ({pri} primary, {sec} secondary)"
+                breakdown.append(details)
+                total += reqs
         if breakdown:
             self.stdout.write(f"API requests used this run: {total} ({', '.join(breakdown)})")
         else:

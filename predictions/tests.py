@@ -6042,15 +6042,38 @@ class SyncExternalMatchesCommandTests(TestCase):
         p1 = mock.Mock()
         p1.name = "api-football"
         p1.requests_made = 2
+        p1.stats_requests_made = 0
         p2 = mock.Mock()
         p2.name = "flashlive"
         p2.requests_made = 6
+        p2.stats_requests_made = 0
 
         cmd = SyncCommand()
         out = StringIO()
         cmd.stdout = out
         cmd._report_requests([p1, p2])
         self.assertIn("API requests used this run: 8 (api-football: 2, flashlive: 6)", out.getvalue())
+
+    def test_report_requests_breakdown_with_secondary(self):
+        from predictions.management.commands.sync_external_matches import Command as SyncCommand
+
+        p1 = mock.Mock()
+        p1.name = "api-football"
+        p1.requests_made = 5
+        p1.stats_requests_made = 0
+        p2 = mock.Mock()
+        p2.name = "flashlive"
+        p2.requests_made = 1
+        p2.stats_requests_made = 4
+
+        cmd = SyncCommand()
+        out = StringIO()
+        cmd.stdout = out
+        cmd._report_requests([p1, p2])
+        output = out.getvalue()
+        self.assertIn("API requests used this run: 10", output)
+        self.assertIn("api-football: 5", output)
+        self.assertIn("flashlive: 5 (1 primary, 4 secondary)", output)
 
     def test_auto_slot_and_days_ahead_inference_evening(self):
         provider = FakeProvider([external_event()])
@@ -6085,11 +6108,10 @@ class SyncExternalMatchesCommandTests(TestCase):
             # Mock morning IST time (06:35 IST = 01:05 UTC)
             morning_time = datetime(2026, 10, 15, 1, 5, tzinfo=dt_timezone.utc)
             with mock.patch("django.utils.timezone.now", return_value=morning_time):
-                self._run(provider, "--fixtures", "--new-day-only")
+                self._run(provider, "--fixtures", "--days-ahead", "1")
                 self.assertTrue(mock_import.called)
                 fb_calls = [c for c in mock_import.call_args_list if c.args[1].name == "Football"]
                 self.assertTrue(len(fb_calls) > 0)
-                # In the morning, days_ahead should default to 1 (next day)
                 self.assertEqual(fb_calls[0].kwargs.get("days_ahead"), 1)
 
 
