@@ -130,19 +130,19 @@ class Command(BaseCommand):
 
         failed = False
         quota_stopped = False
-        with transaction.atomic():
-            for sport in sports:
-                if not sport.is_active and not options["force"]:
-                    self.stdout.write(
-                        self.style.WARNING(
-                            f"{sport.name}: sync is paused in admin (is_active=False). "
-                            "Pass --force to sync anyway."
-                        )
+        for sport in sports:
+            if not sport.is_active and not options["force"]:
+                self.stdout.write(
+                    self.style.WARNING(
+                        f"{sport.name}: sync is paused in admin (is_active=False). "
+                        "Pass --force to sync anyway."
                     )
-                    continue
-                provider = provider_for(sport.name, providers)
-                if provider is None:
-                    continue
+                )
+                continue
+            provider = provider_for(sport.name, providers)
+            if provider is None:
+                continue
+            with transaction.atomic():
                 try:
                     if options["fixtures"]:
                         should_sync_fixtures = (
@@ -188,6 +188,9 @@ class Command(BaseCommand):
                                 sport, sync_results(provider, sport, force=options["force"])
                             )
 
+                    if options["dry_run"]:
+                        transaction.set_rollback(True)
+
                 except ProviderError as exc:
                     # Keep going: one sport failing shouldn't block the rest.
                     err_msg = str(exc)
@@ -201,10 +204,12 @@ class Command(BaseCommand):
                     else:
                         failed = True
                         self.stderr.write(self.style.ERROR(f"{sport.name}: {exc}"))
+                except Exception as exc:
+                    failed = True
+                    self.stderr.write(self.style.ERROR(f"{sport.name} unexpected error: {exc}"))
 
-            if options["dry_run"]:
-                transaction.set_rollback(True)
-                self.stdout.write(self.style.WARNING("Dry run: nothing was saved."))
+        if options["dry_run"]:
+            self.stdout.write(self.style.WARNING("Dry run: nothing was saved."))
 
         self._report_requests(providers)
         if failed:

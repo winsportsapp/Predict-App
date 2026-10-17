@@ -5355,6 +5355,25 @@ class SyncResultsTests(TestCase):
         summary = sync_results(provider, self.football)
         self.assertEqual(summary["called_off"], ["Arsenal vs Chelsea"])
 
+    def test_unpublished_matches_are_never_queried_for_results(self):
+        awaiting_external_match(external_id="pub", home="PubTeamA", away="PubTeamB", is_published=True)
+        awaiting_external_match(external_id="unpub", home="UnpubTeamA", away="UnpubTeamB", is_published=False)
+        provider = FakeProvider(results={
+            "pub": external_event("pub", result="home"),
+            "unpub": external_event("unpub", result="home"),
+        })
+
+        summary = sync_results(provider, self.football, force=False)
+        self.assertEqual(summary["suggested"], 1)
+        self.assertIn("pub", provider.requested_kickoffs)
+        self.assertNotIn("unpub", provider.requested_kickoffs)
+
+        # Even with force=True, unpublished matches are strictly excluded to protect API quota
+        provider2 = FakeProvider(results={"unpub": external_event("unpub", result="home")})
+        summary_force = sync_results(provider2, self.football, force=True)
+        self.assertEqual(summary_force["suggested"], 0)
+        self.assertFalse(hasattr(provider2, "requested_kickoffs"))
+
 
 class ConfirmSuggestedResultTests(TestCase):
     def setUp(self):
@@ -8919,5 +8938,67 @@ class APICreditStatusTests(TestCase):
                 self.assertContains(resp, "API balance credits refreshed successfully")
                 self.assertEqual(mock_fb.call_count, 1)
                 self.assertEqual(mock_fl.call_count, 2)  # primary and secondary
+
+    def test_api_football_ratelimit_error_message(self):
+        from unittest import mock
+        from predictions.importers.api_football import APIFootballProvider
+        from predictions.importers.base import ProviderQuotaExceededError
+
+        session = mock.Mock()
+        resp = mock.Mock()
+        resp.status_code = 200
+        resp.json.return_value = {
+            "errors": {"rateLimit": "Too many requests. Your rate limit is 10 requests per minute."}
+        }
+        session.get.return_value = resp
+
+        provider = APIFootballProvider(api_key="fake-key", session=session)
+        with self.assertRaises(ProviderQuotaExceededError) as ctx:
+            provider._get("/fixtures", {})
+        self.assertIn("10 requests/min limit", str(ctx.exception))
+
+    def test_api_football_fetch_results_caps_and_breaks_on_quota(self):
+        from unittest import mock
+        from predictions.importers.api_football import APIFootballProvider
+        from predictions.importers.base import ProviderQuotaExceededError
+
+        provider = APIFootballProvider(api_key="fake-key")
+        with mock.patch.object(provider, "_get") as mock_get:
+            mock_get.side_effect = ProviderQuotaExceededError("Rate limit reached")
+            kickoffs = {f"id_{i}": timezone.now() for i in range(30)}
+            res = provider.fetch_results("Football", kickoffs)
+            self.assertEqual(res, {})
+            # Should have stopped on the first call due to break
+            self.assertEqual(mock_get.call_count, 1)
+
+    def test_sync_external_matches_per_sport_transaction_isolation(self):
+        from unittest import mock
+        from predictions.management.commands.sync_external_matches import Command as SyncCommand
+        from predictions.importers.base import ProviderQuotaExceededError
+
+        cmd = SyncCommand()
+        mock_fb = mock.Mock()
+        mock_fb.name = "api-football"
+        mock_fb.supports.side_effect = lambda s: s.lower() == "football"
+
+        mock_tennis = mock.Mock()
+        mock_tennis.name = "flashlive"
+        mock_tennis.supports.side_effect = lambda s: s.lower() == "tennis"
+
+        with mock.patch("predictions.management.commands.sync_external_matches.get_providers", return_value=[mock_fb, mock_tennis]):
+            with mock.patch("predictions.management.commands.sync_external_matches.import_fixtures") as mock_import:
+                def side_effect(provider, sport, **kwargs):
+                    if sport.name == "Football":
+                        raise ProviderQuotaExceededError("Football quota limit reached")
+                    return {"created": 2, "updated": 0, "skipped": 0, "new_teams": [], "called_off": []}
+
+                mock_import.side_effect = side_effect
+                with mock.patch.object(cmd, "stdout"):
+                    with mock.patch.object(cmd, "stderr"):
+                        cmd.handle(fixtures=True, results=False, list_sports=False, list_tournaments=False, sport=None, exclude_sport=None, slot="06:30", days_ahead=1, new_day_only=True, no_odds=True, dry_run=False, force=False)
+
+                called_sports = [call.args[1].name for call in mock_import.call_args_list]
+                self.assertIn("Football", called_sports)
+                self.assertIn("Tennis", called_sports)
 
 

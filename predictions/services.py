@@ -519,18 +519,17 @@ def sync_results(provider, sport, force=False):
 
     cutoff = timezone.now() - timedelta(days=RESULT_LOOKUP_DAYS)
     pending = {}
-    for match in (
-        Match.objects.filter(
-            sport=sport,
-            external_source=provider.name,
-            status=Match.Status.AWAITING_RESULT,
-            winner__isnull=True,
-            is_draw=False,
-            suggested_at__isnull=True,
-        )
-        .exclude(external_id="")
-        .select_related("team_a", "team_b")
-    ):
+    pending_qs = Match.objects.filter(
+        sport=sport,
+        external_source=provider.name,
+        status=Match.Status.AWAITING_RESULT,
+        winner__isnull=True,
+        is_draw=False,
+        suggested_at__isnull=True,
+        is_published=True,  # Strictly look up results for published matches only (FlashLive & API-Football)
+    )
+
+    for match in pending_qs.exclude(external_id="").select_related("team_a", "team_b"):
         if match.start_time < cutoff:
             summary["enter_by_hand"].append(str(match))
         else:

@@ -1068,6 +1068,8 @@ class MatchAdmin(admin.ModelAdmin):
         for m in queryset.select_related("sport", "team_a", "team_b"):
             if not m.external_id:
                 continue
+            if not m.is_published:
+                continue
             if m.has_result or m.status not in (Match.Status.AWAITING_RESULT, Match.Status.SCHEDULED):
                 continue
             by_sport.setdefault(m.sport, []).append(m)

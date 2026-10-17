@@ -8,6 +8,8 @@ Provides fixtures, bookmaker odds, head-to-head (H2H), and recent form for Footb
 
 import logging
 import re
+import sys
+import time
 from datetime import datetime, timedelta, timezone as dt_timezone
 from fnmatch import fnmatchcase
 import requests
@@ -32,6 +34,9 @@ DEFAULT_HOST = "v3.football.api-sports.io"
 CALLED_OFF_STATUSES = {"PST", "CANC", "ABD", "SUSP", "INT", "WO"}
 FINISHED_STATUSES = {"FT", "AET", "PEN"}
 MAX_FREE_DAYS_AHEAD = 1
+
+# default throttle delay (can be set to 0 in tests)
+DEFAULT_THROTTLE_DELAY = 0 if "test" in sys.argv else 1.2
 
 
 def _patterns(values):
@@ -130,12 +135,16 @@ class APIFootballProvider(Provider):
         max_days_ahead=None,
         tournaments=None,
         exclude_tournaments=None,
+        throttle_delay=None,
     ):
         self.api_key = (
             api_key if api_key is not None else getattr(settings, "API_FOOTBALL_KEY", "")
         )
         self.host = (
             host if host is not None else getattr(settings, "API_FOOTBALL_HOST", DEFAULT_HOST)
+        )
+        self.throttle_delay = (
+            DEFAULT_THROTTLE_DELAY if throttle_delay is None else throttle_delay
         )
         self.leagues = (
             leagues if leagues is not None else getattr(settings, "API_FOOTBALL_LEAGUES", [])
@@ -245,6 +254,8 @@ class APIFootballProvider(Provider):
         if not self.api_key:
             raise ProviderError("API_FOOTBALL_KEY is not configured.")
         self.requests_made += 1
+        if self.throttle_delay > 0:
+            time.sleep(self.throttle_delay)
         url = f"{self.base_url}{path}"
         try:
             resp = self.session.get(url, params=params or {}, timeout=REQUEST_TIMEOUT)
@@ -271,7 +282,11 @@ class APIFootballProvider(Provider):
         errors = payload.get("errors")
         if errors:
             err_str = str(errors).lower()
-            if "request limit" in err_str or "requests" in err_str:
+            if "ratelimit" in err_str or "rate limit" in err_str:
+                raise ProviderQuotaExceededError(
+                    "API-Football per-minute rate limit reached (10 requests/min limit on Free plan). Please wait a moment."
+                )
+            if "request limit" in err_str or "requests" in err_str or "daily" in err_str:
                 raise ProviderQuotaExceededError(
                     "API-Football daily quota reached (100 requests/day limit). Quota resets at 00:00 UTC (05:30 AM IST)."
                 )
@@ -517,14 +532,17 @@ class APIFootballProvider(Provider):
             return {}
 
         found = {}
-        # Fetch fixtures by ID
-        for ext_id in kickoffs.keys():
+        # Fetch fixtures by ID, safety-capped to at most 15 requests per run to avoid quota exhaustion
+        for ext_id in list(kickoffs.keys())[:15]:
             try:
                 data = self._get("/fixtures", {"id": ext_id})
                 if data and isinstance(data, list):
                     event = self._to_event(data[0])
                     if event:
                         found[event.external_id] = event
+            except ProviderQuotaExceededError as exc:
+                logger.warning("API-Football quota/rate limit reached during fetch_results: %s", exc)
+                break
             except ProviderError as exc:
                 logger.debug("Failed fetching result for fixture %s: %s", ext_id, exc)
 
