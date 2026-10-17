@@ -3,6 +3,7 @@ from django.contrib.auth.forms import UserCreationForm
 from django.contrib.auth.models import User
 
 from .locations import COUNTRY_CHOICES, STATE_CHOICES, states_for
+from .moderation import validate_username
 from .models import Match, Prediction, Profile
 
 
@@ -76,6 +77,13 @@ class RegistrationForm(UserCreationForm):
     class Meta(UserCreationForm.Meta):
         model = User
         fields = ("username", "email")
+
+    def clean_username(self):
+        username = self.cleaned_data.get("username", "").strip()
+        validate_username(username)
+        if User.objects.filter(username__iexact=username).exists():
+            raise forms.ValidationError("A user with that username already exists.")
+        return username
 
     def clean_email(self):
         return unique_email(self.cleaned_data["email"])

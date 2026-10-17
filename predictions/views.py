@@ -260,7 +260,8 @@ def my_predictions(request):
 def _all_time_profiles():
     """Total points across all scored predictions, all time."""
     return (
-        Profile.objects.select_related("user")
+        Profile.objects.filter(user__is_active=True)
+        .select_related("user")
         .annotate(predictions_count=Count("user__predictions"))
         .order_by("-points", "user__username")
     )
@@ -336,7 +337,9 @@ def _monthly_profiles(year, month):
     )
     prediction_totals = {row["user_id"]: row["total"] for row in prediction_rows}
 
-    profiles = list(Profile.objects.select_related("user"))
+    profiles = list(
+        Profile.objects.filter(user__is_active=True).select_related("user")
+    )
     for profile in profiles:
         profile.monthly_points = totals.get(profile.user_id, 0)
         profile.monthly_predictions_count = prediction_totals.get(profile.user_id, 0)

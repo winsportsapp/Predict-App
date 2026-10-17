@@ -7,7 +7,7 @@ from django.contrib import admin, messages
 from django.core.exceptions import ValidationError
 from django.db.models import Case, Count, IntegerField, Q, Value, When
 from django.utils import formats, timezone
-from django.utils.html import format_html
+from django.utils.html import format_html, mark_safe
 
 from . import push
 from .models import (
@@ -26,11 +26,14 @@ from .models import (
     Team,
     TeamAlias,
     UserPredictionCount,
+    UsernameModerationLog,
     VoucherRedemption,
 )
+from django.contrib.auth.models import User
 from django.db import transaction
-from django.shortcuts import redirect, render
+from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import path, reverse
+from .moderation import validate_username
 from .importers.base import ProviderError, ProviderQuotaExceededError
 from .importers.registry import get_providers, provider_for
 from .services import (
@@ -421,19 +424,222 @@ class ProfileAdmin(admin.ModelAdmin):
     # and referral_code are system-managed -- see services.py.
     list_display = (
         "user", "points", "credits", "referral_code", "age", "state", "country",
-        "uses_google",
+        "uses_google", "is_user_active", "moderation_status",
     )
-    list_filter = ("country",)
-    search_fields = ("user__username", "state", "country", "referral_code")
+    list_filter = ("is_flagged_for_review", "user__is_active", "country")
+    search_fields = (
+        "user__username", "user__email", "state", "country", "referral_code",
+        "moderation_note",
+    )
     readonly_fields = ("user", "points", "credits", "referral_code", "google_sub")
     fields = (
         "user", "points", "credits", "referral_code", "age", "country", "state",
-        "google_sub",
+        "google_sub", "is_flagged_for_review", "moderation_note",
+    )
+    actions = (
+        "flag_selected_users",
+        "clear_flag_selected_users",
+        "suspend_selected_users",
+        "reactivate_selected_users",
     )
 
     @admin.display(boolean=True, description="Google")
     def uses_google(self, obj):
         return bool(obj.google_sub)
+
+    @admin.display(boolean=True, description="Active", ordering="user__is_active")
+    def is_user_active(self, obj):
+        return obj.user.is_active
+
+    @admin.display(description="Moderation")
+    def moderation_status(self, obj):
+        rename_url = reverse("admin:predictions_profile_rename", args=[obj.pk])
+        flag_badge = (
+            mark_safe('<span style="color:#b91c1c; font-weight:700; margin-right:6px;">⚠️ Flagged</span>')
+            if obj.is_flagged_for_review
+            else ""
+        )
+        return format_html(
+            '{flag}<a class="button" href="{url}" style="padding:2px 8px; font-size:11px; font-weight:600;">Rename</a>',
+            flag=flag_badge,
+            url=rename_url,
+        )
+
+    def get_urls(self):
+        urls = super().get_urls()
+        custom_urls = [
+            path(
+                "<int:profile_id>/rename/",
+                self.admin_site.admin_view(self.rename_user_view),
+                name="predictions_profile_rename",
+            ),
+        ]
+        return custom_urls + urls
+
+    def rename_user_view(self, request, profile_id):
+        profile = get_object_or_404(Profile.objects.select_related("user"), pk=profile_id)
+        user = profile.user
+        errors = []
+
+        if request.method == "POST":
+            new_username = request.POST.get("new_username", "").strip()
+            reason = request.POST.get("reason", "").strip()
+
+            if not new_username:
+                errors.append("New username is required.")
+            elif new_username == user.username:
+                errors.append("New username must be different from current username.")
+            else:
+                try:
+                    validate_username(new_username, is_staff=user.is_staff)
+                except ValidationError as ve:
+                    errors.extend(ve.messages)
+
+                if User.objects.filter(username__iexact=new_username).exclude(pk=user.pk).exists():
+                    errors.append(f"The username '{new_username}' is already taken.")
+
+            if not errors:
+                old_username = user.username
+                user.username = new_username
+                user.save(update_fields=["username"])
+
+                profile.is_flagged_for_review = False
+                profile.save(update_fields=["is_flagged_for_review"])
+
+                UsernameModerationLog.objects.create(
+                    user=user,
+                    moderator=request.user if request.user.is_authenticated else None,
+                    action=UsernameModerationLog.Action.RENAME,
+                    old_username=old_username,
+                    new_username=new_username,
+                    reason=reason or "Renamed via admin panel",
+                )
+
+                messages.success(
+                    request,
+                    f"User '{old_username}' was successfully renamed to '{new_username}'."
+                )
+                return redirect("admin:predictions_profile_changelist")
+
+        context = {
+            **self.admin_site.each_context(request),
+            "profile": profile,
+            "target_user": user,
+            "errors": errors,
+            "title": f"Rename User: {user.username}",
+        }
+        return render(request, "admin/predictions/profile/rename.html", context)
+
+    @admin.action(description="Flag selected users for username review")
+    def flag_selected_users(self, request, queryset):
+        count = 0
+        for profile in queryset:
+            if not profile.is_flagged_for_review:
+                profile.is_flagged_for_review = True
+                profile.save(update_fields=["is_flagged_for_review"])
+                UsernameModerationLog.objects.create(
+                    user=profile.user,
+                    moderator=request.user if request.user.is_authenticated else None,
+                    action=UsernameModerationLog.Action.FLAG,
+                    old_username=profile.user.username,
+                    new_username=profile.user.username,
+                    reason="Flagged for review by administrator",
+                )
+                count += 1
+        self.message_user(request, f"{count} user(s) flagged for review.", messages.SUCCESS)
+
+    @admin.action(description="Clear moderation flag for selected users")
+    def clear_flag_selected_users(self, request, queryset):
+        count = 0
+        for profile in queryset:
+            if profile.is_flagged_for_review:
+                profile.is_flagged_for_review = False
+                profile.save(update_fields=["is_flagged_for_review"])
+                UsernameModerationLog.objects.create(
+                    user=profile.user,
+                    moderator=request.user if request.user.is_authenticated else None,
+                    action=UsernameModerationLog.Action.CLEAR_FLAG,
+                    old_username=profile.user.username,
+                    new_username=profile.user.username,
+                    reason="Moderation flag cleared by administrator",
+                )
+                count += 1
+        self.message_user(request, f"{count} user(s) unflagged.", messages.SUCCESS)
+
+    @admin.action(description="Suspend selected accounts (deactivate)")
+    def suspend_selected_users(self, request, queryset):
+        count = 0
+        for profile in queryset:
+            if profile.user.is_active:
+                profile.user.is_active = False
+                profile.user.save(update_fields=["is_active"])
+                UsernameModerationLog.objects.create(
+                    user=profile.user,
+                    moderator=request.user if request.user.is_authenticated else None,
+                    action=UsernameModerationLog.Action.SUSPEND,
+                    old_username=profile.user.username,
+                    new_username=profile.user.username,
+                    reason="Account suspended by administrator",
+                )
+                count += 1
+        self.message_user(request, f"{count} user account(s) suspended.", messages.WARNING)
+
+    @admin.action(description="Reactivate selected accounts")
+    def reactivate_selected_users(self, request, queryset):
+        count = 0
+        for profile in queryset:
+            if not profile.user.is_active:
+                profile.user.is_active = True
+                profile.user.save(update_fields=["is_active"])
+                UsernameModerationLog.objects.create(
+                    user=profile.user,
+                    moderator=request.user if request.user.is_authenticated else None,
+                    action=UsernameModerationLog.Action.REACTIVATE,
+                    old_username=profile.user.username,
+                    new_username=profile.user.username,
+                    reason="Account reactivated by administrator",
+                )
+                count += 1
+        self.message_user(request, f"{count} user account(s) reactivated.", messages.SUCCESS)
+
+
+@admin.register(UsernameModerationLog)
+class UsernameModerationLogAdmin(admin.ModelAdmin):
+    """Read-only audit trail for username moderation actions."""
+
+    list_display = (
+        "created_at",
+        "moderator",
+        "user",
+        "action",
+        "old_username",
+        "new_username",
+        "reason",
+    )
+    list_filter = ("action", "created_at")
+    search_fields = (
+        "user__username",
+        "old_username",
+        "new_username",
+        "moderator__username",
+        "reason",
+    )
+    readonly_fields = (
+        "created_at",
+        "moderator",
+        "user",
+        "action",
+        "old_username",
+        "new_username",
+        "reason",
+    )
+    date_hierarchy = "created_at"
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
 
 
 def _int_or_none(value):
@@ -1679,6 +1885,7 @@ PREDICTIONS_MENU_ORDER = (
     "Team",
     "TeamAlias",
     "Profile",
+    "UsernameModerationLog",
     "UserPredictionCount",
     "Prediction",
     "ScoreAdjustment",

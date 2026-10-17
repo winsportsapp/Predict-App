@@ -122,11 +122,32 @@ def generate_username(name):
     (compared case-insensitively). Never derived from the email address, as
     usernames are public on the leaderboard.
     """
+    from django.core.exceptions import ValidationError
+    from .moderation import validate_username
+
     base = re.sub(r"[^\w.@+-]", "", name or "")[:USERNAME_MAX_LENGTH]
-    base = base or FALLBACK_USERNAME
+    try:
+        if base and len(base) >= 3:
+            validate_username(base)
+        else:
+            base = FALLBACK_USERNAME
+    except ValidationError:
+        base = FALLBACK_USERNAME
+
     candidate, n = base, 1
-    while User.objects.filter(username__iexact=candidate).exists():
+    while True:
+        try:
+            validate_username(candidate)
+            valid = True
+        except ValidationError:
+            valid = False
+
+        if valid and not User.objects.filter(username__iexact=candidate).exists():
+            return candidate
+
         n += 1
         suffix = str(n)
+        # If candidate became invalid, force fallback base
+        if not valid:
+            base = FALLBACK_USERNAME
         candidate = base[: USERNAME_MAX_LENGTH - len(suffix)] + suffix
-    return candidate

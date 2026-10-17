@@ -1,0 +1,72 @@
+{% extends "admin/base_site.html" %}
+{% load i18n admin_urls static %}
+
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+<a href="{% url 'admin:index' %}">{% translate 'Home' %}</a>
+&rsaquo; <a href="{% url 'admin:app_list' app_label='predictions' %}">Predictions</a>
+&rsaquo; <a href="{% url 'admin:predictions_profile_changelist' %}">Profiles</a>
+&rsaquo; Rename {{ target_user.username }}
+</div>
+{% endblock %}
+
+{% block content %}
+<div id="content-main" style="max-width: 800px;">
+  <h1>Rename User: {{ target_user.username }}</h1>
+  
+  {% if errors %}
+    <div class="messagelist">
+      {% for error in errors %}
+        <div class="errorlist error">{{ error }}</div>
+      {% endfor %}
+    </div>
+  {% endif %}
+
+  <div class="module aligned" style="background: #fff; padding: 20px; border: 1px solid #e2e8f0; border-radius: 8px; margin-bottom: 20px;">
+    <h2>Account Information</h2>
+    <div class="form-row" style="margin-bottom: 10px;">
+      <strong>User ID:</strong> {{ target_user.id }}
+    </div>
+    <div class="form-row" style="margin-bottom: 10px;">
+      <strong>Current Username:</strong> <code>{{ target_user.username }}</code>
+    </div>
+    <div class="form-row" style="margin-bottom: 10px;">
+      <strong>Email:</strong> {{ target_user.email|default:"(None)" }}
+    </div>
+    <div class="form-row" style="margin-bottom: 10px;">
+      <strong>Prediction Points:</strong> {{ profile.points }} pts
+    </div>
+    <div class="form-row" style="margin-bottom: 10px;">
+      <strong>Account Status:</strong> {% if target_user.is_active %}<span style="color: green; font-weight: bold;">Active</span>{% else %}<span style="color: red; font-weight: bold;">Suspended / Inactive</span>{% endif %}
+    </div>
+    <div class="form-row">
+      <strong>Moderation Review Status:</strong> {% if profile.is_flagged_for_review %}<span style="color: #b91c1c; font-weight: bold;">⚠️ Flagged for Review</span>{% else %}<span style="color: green;">Clean</span>{% endif %}
+    </div>
+  </div>
+
+  <form method="post" class="module aligned" style="background: #fff; padding: 20px; border: 1px solid #e2e8f0; border-radius: 8px;">
+    {% csrf_token %}
+    <h2>Moderation Action: Rename User</h2>
+    <p style="color: #64748b; font-size: 13px; margin-bottom: 20px;">
+      Note: Renaming the user will update their display name across the site, leaderboard, and predictions while keeping their underlying User ID, points, prediction picks, and referral records completely intact. This action is permanently logged in the Username Moderation Log.
+    </p>
+
+    <div class="form-row" style="margin-bottom: 15px;">
+      <label for="id_new_username" style="display: block; font-weight: bold; margin-bottom: 5px;">New Username <span style="color: red;">*</span>:</label>
+      <input type="text" name="new_username" id="id_new_username" class="vTextField" maxlength="30" required style="width: 100%; max-width: 350px; padding: 6px 10px; font-size: 14px; border: 1px solid #cbd5e1; border-radius: 4px;" value="{{ request.POST.new_username|default:'' }}">
+      <div style="font-size: 12px; color: #64748b; margin-top: 4px;">Must be between 3 and 30 characters, pass content moderation filters, and not be taken.</div>
+    </div>
+
+    <div class="form-row" style="margin-bottom: 20px;">
+      <label for="id_reason" style="display: block; font-weight: bold; margin-bottom: 5px;">Moderation Reason / Note:</label>
+      <textarea name="reason" id="id_reason" rows="3" style="width: 100%; max-width: 500px; padding: 6px 10px; font-size: 13px; border: 1px solid #cbd5e1; border-radius: 4px;" placeholder="e.g. Inappropriate previous username, impersonation, or user-requested change">{{ request.POST.reason|default:'' }}</textarea>
+      <div style="font-size: 12px; color: #64748b; margin-top: 4px;">This reason will be recorded in the immutable audit trail along with your administrator account.</div>
+    </div>
+
+    <div class="submit-row" style="margin-top: 25px; padding-top: 15px; border-top: 1px solid #f1f5f9;">
+      <input type="submit" value="Rename User & Log Action" class="default" style="background: #0B3D2E; color: white; border: none; padding: 8px 18px; border-radius: 6px; font-weight: 600; cursor: pointer;">
+      <a href="{% url 'admin:predictions_profile_changelist' %}" class="button cancel-link" style="margin-left: 10px; padding: 8px 16px; text-decoration: none; border: 1px solid #cbd5e1; border-radius: 6px; color: #334155; background: #fff;">Cancel</a>
+    </div>
+  </form>
+</div>
+{% endblock %}

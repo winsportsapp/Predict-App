@@ -69,12 +69,61 @@ class Profile(models.Model):
         unique=True,
         editable=False,
     )
+    # Moderation flags for inappropriate username review
+    is_flagged_for_review = models.BooleanField(
+        default=False,
+        verbose_name="Flagged for Username Review",
+        help_text="Check if this account requires review for username violations.",
+    )
+    moderation_note = models.TextField(
+        blank=True,
+        default="",
+        verbose_name="Moderation Notes",
+        help_text="Internal notes regarding username moderation, review status, or warnings.",
+    )
 
     class Meta:
         ordering = ["-points", "user__username"]
 
     def __str__(self):
         return f"{self.user.username} ({self.points} pts)"
+
+
+class UsernameModerationLog(models.Model):
+    """Audit trail for username moderation actions (renaming, suspension, flagging)."""
+
+    class Action(models.TextChoices):
+        RENAME = "rename", "Renamed"
+        SUSPEND = "suspend", "Suspended"
+        REACTIVATE = "reactivate", "Reactivated"
+        FLAG = "flag", "Flagged for Review"
+        CLEAR_FLAG = "clear_flag", "Flag Cleared"
+
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="moderation_logs",
+    )
+    moderator = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="actions_moderated",
+    )
+    action = models.CharField(max_length=20, choices=Action.choices)
+    old_username = models.CharField(max_length=150, blank=True, default="")
+    new_username = models.CharField(max_length=150, blank=True, default="")
+    reason = models.TextField(blank=True, default="")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        verbose_name = "Username Moderation Log"
+        verbose_name_plural = "Username Moderation Logs"
+
+    def __str__(self):
+        return f"{self.user.username} - {self.get_action_display()} ({self.created_at.strftime('%Y-%m-%d %H:%M')})"
 
 
 class UserPredictionCount(Profile):
