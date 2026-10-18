@@ -39,7 +39,7 @@ without a key, emails are printed to the console.
 Match synchronization runs automatically for all 5 sports (Football, Cricket, Tennis, Badminton, Hockey) via the FlashLive Sports API on RapidAPI. Fixtures, odds, and results use the Primary key (`RAPIDAPI_KEY`) with automatic bidirectional failover to the Secondary key (`RAPIDAPI_STATS_KEY`).
 
 ### Option A: Background Scheduler Daemon (Recommended for Local Dev & Background Worker)
-Run the built-in scheduler daemon in a terminal or background service:
+Run the built-in scheduler daemon in a terminal or double-click `scripts\start_scheduler_daemon.bat`:
 ```bash
 python manage.py run_scheduler
 ```
@@ -50,7 +50,7 @@ This automatically executes:
 - **20:35 IST**: Evening Fixtures & Odds
 
 ### Option B: Windows Task Scheduler (Windows Local)
-To register the 4 daily tasks directly in Windows Task Scheduler:
+To register the 4 daily tasks directly in Windows Task Scheduler (configured with laptop battery resilience, sleep/wake catch-up, and timestamped logging in `logs/auto_sync.log`):
 ```powershell
 powershell -ExecutionPolicy Bypass -File scripts/setup_windows_scheduler.ps1
 ```
