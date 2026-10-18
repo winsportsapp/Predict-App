@@ -4452,10 +4452,12 @@ class AdminMenuOrderTests(TestCase):
                 "Matches",
                 "Manage Credits",
                 "Manage Tournaments",
+                "API Credit Statuses",
                 "Match Stats",
                 "Teams",
                 "Team name aliases",
                 "Profiles",
+                "Username Moderation Logs",
                 "User Counts",
                 "Predictions",
                 "Score adjustments",
@@ -4557,21 +4559,15 @@ class ManageCreditsAdminTests(TestCase):
         # Check lower merged table features
         self.assertContains(response, "Matches Counts &amp; Credits Dashboard")
         self.assertContains(response, "Limit for Current Month")
-        self.assertContains(response, "Total Balance available for Football API:")
-        self.assertContains(response, "Total Balance available for Other sports (Flashlive):")
-        self.assertContains(response, "Balance credit available for Football API Daily/Monthly:")
-        self.assertContains(response, "Balance credit available for Flashline Primary API Monthly:")
-        self.assertContains(response, "Balance credit available for Flashline Secondary API Monthly:")
+        self.assertContains(response, "Total Balance available for All sports (FlashLive):")
+        self.assertContains(response, "Balance credit available for FlashLive Primary API Monthly:")
+        self.assertContains(response, "Balance credit available for FlashLive Secondary API Monthly:")
 
         # Verify dynamic balance calculations match row data
-        fb_row = next(r for r in response.context["match_credits_rows"] if r["sport_name"] == "Football")
-        expected_fb_balance = fb_row["monthly_match_limit"] - fb_row["published_count"]
         expected_flashlive_balance = sum(
             r["monthly_match_limit"] - r["published_count"]
             for r in response.context["match_credits_rows"]
-            if r["sport_name"] != "Football"
         )
-        self.assertEqual(response.context["football_balance"], expected_fb_balance)
         self.assertEqual(response.context["flashlive_balance"], expected_flashlive_balance)
 
     def test_saving_both_schedules_and_monthly_limits(self):
@@ -4604,6 +4600,80 @@ class ManageCreditsAdminTests(TestCase):
         football.refresh_from_db()
         self.assertEqual(football.monthly_match_limit, 77)
         self.assertTrue(football.auto_fixture_0630)
+
+    def test_manage_credits_checkboxes_persist_and_control_sync(self):
+        from unittest import mock
+        from predictions.management.commands.sync_external_matches import Command as SyncCommand
+
+        admin_user = User.objects.create_superuser("admin_mc_ctrl", password="pass12345")
+        self.client.force_login(admin_user)
+
+        football = Sport.objects.get(name="Football")
+        sports = list(Sport.objects.filter(name__in=["Football", "Cricket", "Tennis", "Badminton", "Hockey"]).order_by("order", "name"))
+
+        # 1. Uncheck Football's 06:30 checkboxes: fixtures, odds, and results
+        cl_data = {
+            "form-TOTAL_FORMS": str(len(sports)),
+            "form-INITIAL_FORMS": str(len(sports)),
+            "form-MIN_NUM_FORMS": "0",
+            "form-MAX_NUM_FORMS": "1000",
+            "_save": "Save",
+        }
+        for i, s in enumerate(sports):
+            cl_data[f"form-{i}-id"] = str(s.id)
+            cl_data[f"monthly_match_limit_{s.id}"] = str(s.monthly_match_limit)
+            if s.name != "Football":
+                # Keep other sports enabled
+                cl_data[f"form-{i}-auto_fixture_0630"] = "on"
+                cl_data[f"form-{i}-auto_fixture_2030"] = "on"
+                cl_data[f"form-{i}-auto_odds_0630"] = "on"
+                cl_data[f"form-{i}-auto_odds_2030"] = "on"
+                cl_data[f"form-{i}-auto_results_0630"] = "on"
+                cl_data[f"form-{i}-auto_results_2030"] = "on"
+
+        resp = self.client.post(reverse("admin:predictions_sport_changelist"), cl_data, HTTP_HOST="localhost")
+        self.assertEqual(resp.status_code, 302)
+
+        football.refresh_from_db()
+        self.assertFalse(football.auto_fixture_0630)
+        self.assertFalse(football.auto_odds_0630)
+        self.assertFalse(football.auto_results_0630)
+
+        # 2. Run sync_external_matches for slot 06:30 and verify Football is skipped
+        cmd = SyncCommand()
+        mock_import = mock.Mock(return_value={"created": 0, "updated": 0, "skipped": 0, "new_teams": [], "called_off": []})
+        mock_results = mock.Mock(return_value={"suggested": 0, "called_off": [], "enter_by_hand": []})
+
+        with mock.patch("predictions.management.commands.sync_external_matches.import_fixtures", mock_import):
+            with mock.patch("predictions.management.commands.sync_external_matches.sync_results", mock_results):
+                with mock.patch.object(cmd, "stdout"):
+                    with mock.patch.object(cmd, "stderr"):
+                        cmd.handle(fixtures=True, results=True, list_sports=False, list_tournaments=False, sport=None, exclude_sport=None, slot="06:30", days_ahead=1, new_day_only=True, no_odds=False, dry_run=False, force=False)
+
+        called_fixture_sports = [call.args[1].name for call in mock_import.call_args_list]
+        called_result_sports = [call.args[1].name for call in mock_results.call_args_list]
+
+        self.assertNotIn("Football", called_fixture_sports)
+        self.assertNotIn("Football", called_result_sports)
+        self.assertIn("Cricket", called_fixture_sports)
+        self.assertIn("Cricket", called_result_sports)
+
+        # 3. Enable fixture for Football but leave odds unchecked
+        football.auto_fixture_0630 = True
+        football.auto_odds_0630 = False
+        football.save()
+
+        mock_import.reset_mock()
+        with mock.patch("predictions.management.commands.sync_external_matches.import_fixtures", mock_import):
+            with mock.patch.object(cmd, "stdout"):
+                with mock.patch.object(cmd, "stderr"):
+                    cmd.handle(fixtures=True, results=False, list_sports=False, list_tournaments=False, sport=None, exclude_sport=None, slot="06:30", days_ahead=1, new_day_only=True, no_odds=False, dry_run=False, force=False)
+
+        fb_call = next(c for c in mock_import.call_args_list if c.args[1].name == "Football")
+        cricket_call = next(c for c in mock_import.call_args_list if c.args[1].name == "Cricket")
+        self.assertFalse(fb_call.kwargs["with_odds"])
+        self.assertTrue(cricket_call.kwargs["with_odds"])
+
 
 
 class LoseDrawLabelTests(TestCase):
@@ -5373,6 +5443,23 @@ class SyncResultsTests(TestCase):
         summary_force = sync_results(provider2, self.football, force=True)
         self.assertEqual(summary_force["suggested"], 0)
         self.assertFalse(hasattr(provider2, "requested_kickoffs"))
+
+    def test_flashlive_sync_results_strictly_ignores_unpublished_matches(self):
+        from unittest import mock
+        from predictions.importers.flashlive import FlashLiveProvider
+
+        awaiting_external_match(external_id="fl_pub_1", home="PubA", away="PubB", is_published=True, external_source="flashlive")
+        awaiting_external_match(external_id="fl_unpub_2", home="UnpubA", away="UnpubB", is_published=False, external_source="flashlive")
+
+        provider = FlashLiveProvider(api_key="fake-key")
+        with mock.patch.object(provider, "fetch_results", return_value={}) as mock_fetch:
+            summary = sync_results(provider, self.football, force=True)
+
+        self.assertTrue(mock_fetch.called)
+        called_kickoffs = mock_fetch.call_args[0][1]
+        self.assertIn("fl_pub_1", called_kickoffs)
+        self.assertNotIn("fl_unpub_2", called_kickoffs)
+
 
 
 class ConfirmSuggestedResultTests(TestCase):
@@ -7140,28 +7227,13 @@ class MultiSportAPISyncAndH2HTests(TestCase):
             self.assertIsNone(stats)
             mock_provider.fetch_h2h_and_form.assert_not_called()
 
-    def test_api_football_provider_parsing(self):
-        from predictions.importers.api_football import APIFootballProvider
+    def test_flashlive_football_provider_support(self):
+        from predictions.importers.flashlive import FlashLiveProvider
 
-        provider = APIFootballProvider(api_key="mock-key")
+        provider = FlashLiveProvider(api_key="mock-key")
         self.assertTrue(provider.supports("Football"))
-        self.assertFalse(provider.supports("Cricket"))
+        self.assertTrue(provider.supports("Cricket"))
 
-        mock_fixture_resp = [{
-            "fixture": {"id": 1234, "date": "2026-10-15T15:00:00+00:00", "status": {"short": "NS"}},
-            "league": {"name": "Premier League", "country": "England"},
-            "teams": {"home": {"name": "Arsenal", "logo": "https://img/arsenal.png"}, "away": {"name": "Chelsea", "logo": "https://img/chelsea.png"}},
-            "goals": {"home": None, "away": None},
-        }]
-
-        with mock.patch.object(provider, "_get", return_value=mock_fixture_resp):
-            events = provider.fetch_fixtures("Football", days_ahead=0)
-            self.assertEqual(len(events), 1)
-            ev = events[0]
-            self.assertEqual(ev.external_id, "1234")
-            self.assertEqual(ev.home, "Arsenal")
-            self.assertEqual(ev.away, "Chelsea")
-            self.assertEqual(ev.event_name, "England: Premier League")
 
 
     def test_flashlive_hockey_support_and_dual_key(self):
@@ -7602,23 +7674,6 @@ class MultiSportAPISyncAndH2HTests(TestCase):
         self.assertEqual(summary.team_b_form[0]["result"], "W")
         self.assertEqual(summary.team_b_form[0]["opponent"], "England")
 
-    def test_api_football_search_team_id_suffix_cleaning(self):
-        from predictions.importers.api_football import APIFootballProvider
-
-        p = APIFootballProvider(api_key="mock")
-
-        def mock_get(path, params):
-            # "Odisha FC" has no exact name match, but "Odisha" does
-            if params.get("name") == "Odisha":
-                return [{"team": {"id": 7177, "name": "Odisha"}}]
-            if params.get("search") == "Odisha":
-                return [{"team": {"id": 7177, "name": "Odisha"}}]
-            return []
-
-        with mock.patch.object(p, "_get", side_effect=mock_get):
-            team_id = p._search_team_id("Odisha FC")
-            self.assertEqual(team_id, 7177)
-
     def test_get_or_fetch_match_stats_multi_provider_fallback(self):
         from predictions.services import get_or_fetch_match_stats
         from predictions.importers.base import H2HSummary
@@ -7627,12 +7682,12 @@ class MultiSportAPISyncAndH2HTests(TestCase):
         m.save()
 
         mock_provider1 = mock.Mock()
-        mock_provider1.name = "API-Football"
+        mock_provider1.name = "Primary"
         mock_provider1.supports.return_value = True
         mock_provider1.fetch_h2h_and_form.return_value = None  # fails
 
         mock_provider2 = mock.Mock()
-        mock_provider2.name = "Flashscore"
+        mock_provider2.name = "Secondary"
         mock_provider2.supports.return_value = True
         mock_provider2.fetch_h2h_and_form.return_value = H2HSummary(
             team_a_wins=2,
@@ -7676,26 +7731,31 @@ class MultiSportAPISyncAndH2HTests(TestCase):
         self.assertNotIn("0 past clashes", content)
 
 
-class APIFootballProviderTests(TestCase):
-    def _provider(self, responses=None, **kwargs):
+class FlashLiveFootballTests(TestCase):
+    def setUp(self):
+        super().setUp()
+        from predictions.models import Sport
+        Sport.objects.get_or_create(name="Football", defaults={"is_active": True})
+
+    def _provider(self, **kwargs):
         from unittest import mock
-        from predictions.importers.api_football import APIFootballProvider
+        from predictions.importers.flashlive import FlashLiveProvider
 
         session = mock.Mock()
-        if responses is not None:
-            session.get.side_effect = responses
-        return APIFootballProvider(
+        return FlashLiveProvider(
             api_key="test-key",
             session=session,
+            stats_session=session,
             **kwargs,
         )
 
-    def test_supports_football_only(self):
+    def test_supports_football_and_other_sports(self):
         p = self._provider()
         self.assertTrue(p.supports("Football"))
-        self.assertTrue(p.supports("football"))
-        self.assertFalse(p.supports("Cricket"))
-        self.assertFalse(p.supports("Tennis"))
+        self.assertTrue(p.supports("Tennis"))
+        self.assertTrue(p.supports("Cricket"))
+        self.assertTrue(p.supports("Badminton"))
+        self.assertTrue(p.supports("Hockey"))
 
     def test_timing_and_timezone_alignment(self):
         from datetime import timezone as dt_timezone, timedelta
@@ -7706,279 +7766,122 @@ class APIFootballProviderTests(TestCase):
         self.assertEqual(p.utc_offset, expected_offset)
         self.assertEqual(p.local_tz, dt_timezone(timedelta(hours=expected_offset)))
 
-    def test_fetch_fixtures_clamps_days_ahead_to_max_allowed(self):
+    def test_fetch_fixtures_football_with_filtering_and_odds(self):
         from unittest import mock
-        from datetime import datetime
+        from predictions.models import Sport
 
-        p = self._provider(max_days_ahead=1)
-        fixture_payload = {
-            "response": [
-                {
-                    "fixture": {"id": 101, "date": "2026-10-14T15:00:00+00:00", "status": {"short": "NS"}},
-                    "teams": {"home": {"name": "Arsenal"}, "away": {"name": "Chelsea"}},
-                    "league": {"name": "Premier League", "country": "England"},
-                }
-            ]
-        }
-        resp = mock.Mock()
-        resp.status_code = 200
-        resp.json.return_value = fixture_payload
-        p.session.get.return_value = resp
+        sport = Sport.objects.get(name="Football")
+        sport.tournaments_filter = "Premier League"
+        sport.exclude_tournaments_filter = "*U21*"
+        sport.save()
 
-        # Requesting 7 days ahead with max_days_ahead=1 should only make 2 requests (day 0 and day 1)
-        events = p.fetch_fixtures("Football", days_ahead=7, new_day_only=False, with_odds=False)
-        self.assertEqual(p.session.get.call_count, 2)
-        self.assertEqual(len(events), 2)
-
-    def test_fetch_fixtures_new_day_only_fetches_day_one(self):
-        from unittest import mock
-        from datetime import datetime, timedelta
-
-        p = self._provider(max_days_ahead=1)
-        fixture_payload = {
-            "response": [
-                {
-                    "fixture": {"id": 202, "date": "2026-10-15T15:00:00+00:00", "status": {"short": "NS"}},
-                    "teams": {"home": {"name": "Real Madrid"}, "away": {"name": "Barcelona"}},
-                    "league": {"name": "La Liga", "country": "Spain"},
-                }
-            ]
-        }
-        resp = mock.Mock()
-        resp.status_code = 200
-        resp.json.return_value = fixture_payload
-        p.session.get.return_value = resp
-
-        events = p.fetch_fixtures("Football", days_ahead=7, new_day_only=True, with_odds=False)
-        self.assertEqual(p.session.get.call_count, 1)
-        called_url, called_kwargs = p.session.get.call_args
-        tomorrow_date = (datetime.now(p.local_tz).date() + timedelta(days=1)).isoformat()
-        self.assertEqual(called_kwargs["params"]["date"], tomorrow_date)
-        self.assertEqual(len(events), 1)
-        self.assertEqual(events[0].external_id, "202")
-
-    def test_fetch_fixtures_handles_plan_limit_error_gracefully(self):
-        from unittest import mock
-
-        p = self._provider(max_days_ahead=2)
-        resp_ok = mock.Mock()
-        resp_ok.status_code = 200
-        resp_ok.json.return_value = {
-            "response": [
-                {
-                    "fixture": {"id": 303, "date": "2026-10-14T15:00:00+00:00", "status": {"short": "NS"}},
-                    "teams": {"home": {"name": "Milan"}, "away": {"name": "Inter"}},
-                    "league": {"name": "Serie A", "country": "Italy"},
-                }
-            ]
+        p = self._provider(tournaments=[])
+        fake_events = [
+            {
+                "NAME": "ENGLAND: Premier League",
+                "EVENTS": [
+                    {
+                        "EVENT_ID": "fl_fb_1",
+                        "START_TIME": 1792000000,
+                        "HOME_NAME": "Arsenal",
+                        "AWAY_NAME": "Chelsea",
+                    },
+                    {
+                        "EVENT_ID": "fl_fb_2",
+                        "START_TIME": 1792000000,
+                        "HOME_NAME": "Arsenal U21",
+                        "AWAY_NAME": "Chelsea U21",
+                    },
+                ],
+            },
+            {
+                "NAME": "ENGLAND: Championship",
+                "EVENTS": [
+                    {
+                        "EVENT_ID": "fl_fb_3",
+                        "START_TIME": 1792000000,
+                        "HOME_NAME": "Leeds United",
+                        "AWAY_NAME": "Sunderland",
+                    }
+                ],
+            },
+        ]
+        fake_odds = {
+            "fl_fb_1": (1.85, 3.40, 4.20),
         }
 
-        resp_plan_err = mock.Mock()
-        resp_plan_err.status_code = 200
-        resp_plan_err.json.return_value = {
-            "errors": {"plan": "Free plans do not have access to this date, try from 2026-10-13 to 2026-10-15."}
-        }
+        with mock.patch.object(p, "_list_events", return_value=fake_events):
+            with mock.patch.object(p, "fetch_odds", return_value=fake_odds):
+                fixtures = p.fetch_fixtures("Football", days_ahead=0, with_odds=True)
 
-        p.session.get.side_effect = [resp_ok, resp_plan_err]
-        events = p.fetch_fixtures("Football", days_ahead=2, new_day_only=False, with_odds=False)
-        self.assertEqual(len(events), 1)
-        self.assertEqual(events[0].external_id, "303")
+        self.assertEqual(len(fixtures), 1)
+        self.assertEqual(fixtures[0].external_id, "fl_fb_1")
+        self.assertEqual(fixtures[0].home, "Arsenal")
+        self.assertEqual(fixtures[0].away, "Chelsea")
+        self.assertEqual(fixtures[0].home_odds, 1.85)
+        self.assertEqual(fixtures[0].away_odds, 3.40)
+        self.assertEqual(fixtures[0].draw_odds, 4.20)
 
-    def test_fetch_fixtures_tournament_filtering(self):
+    def test_fetch_fixtures_new_day_only(self):
         from unittest import mock
 
-        p = self._provider(
-            tournaments=["*Premier League*"],
-            exclude_tournaments=["*Res.*"],
-            max_days_ahead=0,
+        p = self._provider(tournaments=["*Premier League*"])
+        with mock.patch.object(p, "_list_events", return_value=[]) as mock_list:
+            p.fetch_fixtures("Football", days_ahead=2, new_day_only=True)
+            mock_list.assert_called_once_with("Football", 2)
+
+    def test_fetch_results_football(self):
+        from unittest import mock
+        from django.utils import timezone
+
+        p = self._provider()
+        kickoffs = {"fb_ev_1": timezone.now()}
+        fake_events = [
+            {
+                "NAME": "ENGLAND: Premier League",
+                "EVENTS": [
+                    {
+                        "EVENT_ID": "fb_ev_1",
+                        "STAGE_TYPE": "FINISHED",
+                        "HOME_SCORE_CURRENT": "2",
+                        "AWAY_SCORE_CURRENT": "1",
+                        "START_TIME": 1792000000,
+                        "HOME_NAME": "Arsenal",
+                        "AWAY_NAME": "Chelsea",
+                    }
+                ],
+            }
+        ]
+        with mock.patch.object(p, "_list_events", return_value=fake_events):
+            results = p.fetch_results("Football", kickoffs)
+
+        self.assertIn("fb_ev_1", results)
+        ev = results["fb_ev_1"]
+        self.assertEqual(ev.home_score, "2")
+        self.assertEqual(ev.away_score, "1")
+        self.assertEqual(ev.result, "home")
+
+    def test_list_tournaments_returns_sorted_names_and_counts(self):
+        from unittest import mock
+
+        p = self._provider()
+        fake_events = [
+            {
+                "NAME": "ENGLAND: Premier League",
+                "EVENTS": [{"EVENT_ID": "1"}, {"EVENT_ID": "2"}],
+            },
+            {
+                "NAME": "SPAIN: LaLiga",
+                "EVENTS": [{"EVENT_ID": "3"}],
+            },
+        ]
+        with mock.patch.object(p, "_list_events", return_value=fake_events):
+            tournaments = p.list_tournaments("Football", day=0)
+
+        self.assertEqual(
+            tournaments,
+            [("ENGLAND: Premier League", 2), ("SPAIN: LaLiga", 1)],
         )
-        fixture_payload = {
-            "response": [
-                {
-                    "fixture": {"id": 1, "date": "2026-10-14T15:00:00+00:00", "status": {"short": "NS"}},
-                    "teams": {"home": {"name": "Arsenal"}, "away": {"name": "Chelsea"}},
-                    "league": {"name": "Premier League", "country": "England"},
-                },
-                {
-                    "fixture": {"id": 2, "date": "2026-10-14T15:00:00+00:00", "status": {"short": "NS"}},
-                    "teams": {"home": {"name": "Arsenal Res."}, "away": {"name": "Chelsea Res."}},
-                    "league": {"name": "Premier League Res.", "country": "England"},
-                },
-                {
-                    "fixture": {"id": 3, "date": "2026-10-14T15:00:00+00:00", "status": {"short": "NS"}},
-                    "teams": {"home": {"name": "Team A"}, "away": {"name": "Team B"}},
-                    "league": {"name": "Obscure Division", "country": "Nowhere"},
-                },
-            ]
-        }
-        resp = mock.Mock()
-        resp.status_code = 200
-        resp.json.return_value = fixture_payload
-        p.session.get.return_value = resp
-
-        events = p.fetch_fixtures("Football", days_ahead=0, new_day_only=False, with_odds=False)
-        self.assertEqual(len(events), 1)
-        self.assertEqual(events[0].external_id, "1")
-
-    def test_fetch_odds_clamped_to_max_days_ahead(self):
-        p = self._provider(max_days_ahead=1)
-        # Calling with indent_days=2 when max is 1 should make 0 requests
-        odds = p.fetch_odds("Football", indent_days=2)
-        self.assertEqual(odds, {})
-        self.assertEqual(p.session.get.call_count, 0)
-
-    def test_fetch_fixtures_db_inclusion_filter(self):
-        from unittest import mock
-        from predictions.models import Sport
-
-        sport = Sport.objects.get(name="Football")
-        sport.tournaments_filter = "Premier League\nLa Liga"
-        sport.exclude_tournaments_filter = ""
-        sport.save()
-
-        p = self._provider(max_days_ahead=0)
-        fixture_payload = {
-            "response": [
-                {
-                    "fixture": {"id": 1, "date": "2026-10-14T15:00:00+00:00", "status": {"short": "NS"}},
-                    "teams": {"home": {"name": "Arsenal"}, "away": {"name": "Chelsea"}},
-                    "league": {"name": "Premier League", "country": "England"},
-                },
-                {
-                    "fixture": {"id": 2, "date": "2026-10-14T15:00:00+00:00", "status": {"short": "NS"}},
-                    "teams": {"home": {"name": "Real Madrid"}, "away": {"name": "Barcelona"}},
-                    "league": {"name": "La Liga", "country": "Spain"},
-                },
-                {
-                    "fixture": {"id": 3, "date": "2026-10-14T15:00:00+00:00", "status": {"short": "NS"}},
-                    "teams": {"home": {"name": "Juventus"}, "away": {"name": "Inter"}},
-                    "league": {"name": "Serie A", "country": "Italy"},
-                },
-            ]
-        }
-        resp = mock.Mock()
-        resp.status_code = 200
-        resp.json.return_value = fixture_payload
-        p.session.get.return_value = resp
-
-        events = p.fetch_fixtures("Football", days_ahead=0, new_day_only=False, with_odds=False)
-        self.assertEqual({e.external_id for e in events}, {"1", "2"})
-
-    def test_fetch_fixtures_db_exclusion_filter(self):
-        from unittest import mock
-        from predictions.models import Sport
-
-        sport = Sport.objects.get(name="Football")
-        sport.tournaments_filter = ""
-        sport.exclude_tournaments_filter = "*Res.*, *U20*"
-        sport.save()
-
-        p = self._provider(max_days_ahead=0)
-        fixture_payload = {
-            "response": [
-                {
-                    "fixture": {"id": 1, "date": "2026-10-14T15:00:00+00:00", "status": {"short": "NS"}},
-                    "teams": {"home": {"name": "Arsenal"}, "away": {"name": "Chelsea"}},
-                    "league": {"name": "Premier League", "country": "England"},
-                },
-                {
-                    "fixture": {"id": 2, "date": "2026-10-14T15:00:00+00:00", "status": {"short": "NS"}},
-                    "teams": {"home": {"name": "Arsenal Res."}, "away": {"name": "Chelsea Res."}},
-                    "league": {"name": "Premier League Res.", "country": "England"},
-                },
-                {
-                    "fixture": {"id": 3, "date": "2026-10-14T15:00:00+00:00", "status": {"short": "NS"}},
-                    "teams": {"home": {"name": "U20 A"}, "away": {"name": "U20 B"}},
-                    "league": {"name": "World Cup U20", "country": "World"},
-                },
-            ]
-        }
-        resp = mock.Mock()
-        resp.status_code = 200
-        resp.json.return_value = fixture_payload
-        p.session.get.return_value = resp
-
-        events = p.fetch_fixtures("Football", days_ahead=0, new_day_only=False, with_odds=False)
-        self.assertEqual({e.external_id for e in events}, {"1"})
-
-    def test_fetch_fixtures_db_inclusion_and_exclusion_combined(self):
-        from unittest import mock
-        from predictions.models import Sport
-
-        sport = Sport.objects.get(name="Football")
-        sport.tournaments_filter = "*League*"
-        sport.exclude_tournaments_filter = "*U21*"
-        sport.save()
-
-        p = self._provider(max_days_ahead=0)
-        fixture_payload = {
-            "response": [
-                {
-                    "fixture": {"id": 1, "date": "2026-10-14T15:00:00+00:00", "status": {"short": "NS"}},
-                    "teams": {"home": {"name": "Arsenal"}, "away": {"name": "Chelsea"}},
-                    "league": {"name": "Premier League", "country": "England"},
-                },
-                {
-                    "fixture": {"id": 2, "date": "2026-10-14T15:00:00+00:00", "status": {"short": "NS"}},
-                    "teams": {"home": {"name": "Arsenal U21"}, "away": {"name": "Chelsea U21"}},
-                    "league": {"name": "Premier League U21", "country": "England"},
-                },
-                {
-                    "fixture": {"id": 3, "date": "2026-10-14T15:00:00+00:00", "status": {"short": "NS"}},
-                    "teams": {"home": {"name": "Milan"}, "away": {"name": "Inter"}},
-                    "league": {"name": "Coppa Italia", "country": "Italy"},
-                },
-            ]
-        }
-        resp = mock.Mock()
-        resp.status_code = 200
-        resp.json.return_value = fixture_payload
-        p.session.get.return_value = resp
-
-        events = p.fetch_fixtures("Football", days_ahead=0, new_day_only=False, with_odds=False)
-        self.assertEqual({e.external_id for e in events}, {"1"})
-
-    def test_fetch_fixtures_excludes_u21_teams_and_second_division(self):
-        from unittest import mock
-        from predictions.models import Sport
-
-        sport = Sport.objects.get(name="Football")
-        sport.tournaments_filter = "England: Premier League"
-        sport.exclude_tournaments_filter = "*U21*"
-        sport.save()
-
-        p = self._provider(max_days_ahead=0)
-        fixture_payload = {
-            "response": [
-                {
-                    "fixture": {"id": 101, "date": "2026-10-14T15:00:00+00:00", "status": {"short": "NS"}},
-                    "teams": {"home": {"name": "Arsenal"}, "away": {"name": "Chelsea"}},
-                    "league": {"name": "Premier League", "country": "England"},
-                },
-                {
-                    "fixture": {"id": 102, "date": "2026-10-14T15:00:00+00:00", "status": {"short": "NS"}},
-                    "teams": {"home": {"name": "Everton U21"}, "away": {"name": "Middlesbrough U21"}},
-                    "league": {"name": "Premier League 2 Division One", "country": "England"},
-                },
-                {
-                    "fixture": {"id": 103, "date": "2026-10-14T15:00:00+00:00", "status": {"short": "NS"}},
-                    "teams": {"home": {"name": "Leeds United"}, "away": {"name": "Sunderland"}},
-                    "league": {"name": "Championship", "country": "England"},
-                },
-                {
-                    "fixture": {"id": 104, "date": "2026-10-14T15:00:00+00:00", "status": {"short": "NS"}},
-                    "teams": {"home": {"name": "Hamburger SV"}, "away": {"name": "Hertha BSC"}},
-                    "league": {"name": "2. Bundesliga", "country": "Germany"},
-                },
-            ]
-        }
-        resp = mock.Mock()
-        resp.status_code = 200
-        resp.json.return_value = fixture_payload
-        p.session.get.return_value = resp
-
-        events = p.fetch_fixtures("Football", days_ahead=0, new_day_only=False, with_odds=False)
-        self.assertEqual({e.external_id for e in events}, {"101"})
 
     def test_is_fixture_excluded_helper(self):
         from predictions.constants import is_fixture_excluded
@@ -8005,48 +7908,8 @@ class APIFootballProviderTests(TestCase):
         self.assertFalse(is_fixture_excluded("Football", ["FIFA World Cup 2026", "Brazil", "Argentina"]))
         self.assertFalse(is_fixture_excluded("Football", ["UEFA Euro 2024", "England", "Spain"]))
 
-    def test_list_tournaments_returns_sorted_names_and_counts(self):
-        from unittest import mock
 
-        p = self._provider(max_days_ahead=1)
-        fixture_payload = {
-            "response": [
-                {
-                    "fixture": {"id": 1},
-                    "league": {"name": "Premier League", "country": "England"},
-                },
-                {
-                    "fixture": {"id": 2},
-                    "league": {"name": "Premier League", "country": "England"},
-                },
-                {
-                    "fixture": {"id": 3},
-                    "league": {"name": "La Liga", "country": "Spain"},
-                },
-            ]
-        }
-        resp = mock.Mock()
-        resp.status_code = 200
-        resp.json.return_value = fixture_payload
-        p.session.get.return_value = resp
 
-        tournaments = p.list_tournaments("Football", day=0)
-        self.assertEqual(
-            tournaments,
-            [("England: Premier League", 2), ("Spain: La Liga", 1)],
-        )
-
-    def test_list_tournaments_handles_plan_limit_error(self):
-        from unittest import mock
-
-        p = self._provider(max_days_ahead=1)
-        resp = mock.Mock()
-        resp.status_code = 200
-        resp.json.return_value = {"errors": {"plan": "Free plan date limit reached"}}
-        p.session.get.return_value = resp
-
-        tournaments = p.list_tournaments("Football", day=0)
-        self.assertEqual(tournaments, [])
 
 
 class SportAdminTournamentFilterTests(TestCase):
@@ -8309,15 +8172,12 @@ class BadmintonTournamentFilterTests(TestCase):
 
     def test_patterns_strips_quotes_and_splits_newlines(self):
         from predictions.importers.flashlive import _patterns as fl_patterns
-        from predictions.importers.api_football import _patterns as af_patterns
 
         raw_input = '"Premier League"\n\'La Liga\'\n*ATP*\nSuper 1000'
         parsed_fl = fl_patterns(raw_input)
-        parsed_af = af_patterns(raw_input)
 
         expected = {"premier league", "la liga", "*atp*", "super 1000"}
         self.assertEqual(parsed_fl, expected)
-        self.assertEqual(parsed_af, expected)
 
     def test_matching_without_asterisks_matches_substring(self):
         from unittest import mock
@@ -8368,7 +8228,7 @@ class BadmintonTournamentFilterTests(TestCase):
 
     def test_football_champions_league_and_epl_alias_expansion(self):
         from unittest import mock
-        from predictions.importers.api_football import APIFootballProvider
+        from predictions.importers.flashlive import FlashLiveProvider
         from predictions.models import Sport
 
         sport = Sport.objects.get(name="Football")
@@ -8376,35 +8236,53 @@ class BadmintonTournamentFilterTests(TestCase):
         sport.tournaments_filter = "EUROPE: Champions League\nPremier League"
         sport.save()
 
-        p = APIFootballProvider(api_key="mock-key")
-        fake_fixtures = [
-            # Group 1: World: UEFA Champions League (API-Football naming)
+        p = FlashLiveProvider(api_key="mock-key", tournaments=[])
+        fake_events = [
+            # Group 1: EUROPE: Champions League
             {
-                "fixture": {"id": 1001, "date": "2026-10-14T20:00:00+00:00"},
-                "league": {"name": "UEFA Champions League", "country": "World"},
-                "teams": {"home": {"name": "Man City"}, "away": {"name": "PSG"}},
+                "NAME": "EUROPE: Champions League - Group Stage",
+                "EVENTS": [
+                    {
+                        "EVENT_ID": "ucl_1",
+                        "START_TIME": 1792000000,
+                        "HOME_NAME": "Man City",
+                        "AWAY_NAME": "PSG",
+                    }
+                ],
             },
-            # Group 2: England: Premier League
+            # Group 2: England: Premier League (via alias expansion from Premier League)
             {
-                "fixture": {"id": 1002, "date": "2026-10-14T15:00:00+00:00"},
-                "league": {"name": "Premier League", "country": "England"},
-                "teams": {"home": {"name": "Arsenal"}, "away": {"name": "Chelsea"}},
+                "NAME": "ENGLAND: Premier League",
+                "EVENTS": [
+                    {
+                        "EVENT_ID": "epl_1",
+                        "START_TIME": 1792000000,
+                        "HOME_NAME": "Arsenal",
+                        "AWAY_NAME": "Chelsea",
+                    }
+                ],
             },
-            # Group 3: Uganda: Premier League (should NOT match because Premier League expanded to England)
+            # Group 3: Uganda: Premier League (should NOT match because Premier League expanded to England: Premier League)
             {
-                "fixture": {"id": 1003, "date": "2026-10-14T15:00:00+00:00"},
-                "league": {"name": "Premier League", "country": "Uganda"},
-                "teams": {"home": {"name": "Vipers SC"}, "away": {"name": "KCCA"}},
+                "NAME": "UGANDA: Premier League",
+                "EVENTS": [
+                    {
+                        "EVENT_ID": "ug_1",
+                        "START_TIME": 1792000000,
+                        "HOME_NAME": "Vipers SC",
+                        "AWAY_NAME": "KCCA",
+                    }
+                ],
             },
         ]
-        with mock.patch.object(p, "_get", return_value=fake_fixtures):
+        with mock.patch.object(p, "_list_events", return_value=fake_events):
             events = p.fetch_fixtures("Football", days_ahead=0)
 
         # Only UCL and England: Premier League matched; Uganda was excluded!
         self.assertEqual(len(events), 2)
         event_names = [e.event_name for e in events]
-        self.assertIn("World: UEFA Champions League", event_names)
-        self.assertIn("England: Premier League", event_names)
+        self.assertIn("Champions League - Group Stage", event_names)
+        self.assertIn("Premier League", event_names)
 
 
 class AdminManualSyncTests(TestCase):
@@ -8579,42 +8457,34 @@ class ProviderQuotaAndAdminNotificationTests(TestCase):
             prediction_deadline=st,
             status=Match.Status.SCHEDULED,
             external_id="12345",
-            external_source="api-football",
+            external_source="flashlive",
         )
 
-    def test_api_football_429_raises_quota_exceeded_error(self):
+    def test_flashlive_quota_persistent_db_check(self):
         from unittest import mock
-        from predictions.importers.api_football import APIFootballProvider
-        from predictions.importers.base import ProviderQuotaExceededError
+        from datetime import datetime, timedelta, timezone as dt_timezone
+        from predictions.importers.flashlive import FlashLiveProvider, reset_flashlive_quota_status
+        from predictions.models import APICreditStatus
 
-        session = mock.Mock()
-        resp = mock.Mock()
-        resp.status_code = 429
-        resp.text = "Rate limit reached"
-        session.get.return_value = resp
+        reset_flashlive_quota_status()
+        future_reset = datetime.now(dt_timezone.utc) + timedelta(hours=2)
+        APICreditStatus.objects.update_or_create(
+            provider="flashlive_primary",
+            defaults={
+                "monthly_remaining": 0,
+                "monthly_limit": 500,
+                "raw_headers": {
+                    "x-ratelimit-requests-remaining": "-1",
+                    "x-ratelimit-requests-reset": "7200",
+                },
+                "last_checked": datetime.now(dt_timezone.utc),
+            },
+        )
 
-        provider = APIFootballProvider(api_key="fake-key", session=session)
-        with self.assertRaises(ProviderQuotaExceededError) as ctx:
-            provider._get("/fixtures", {})
-        self.assertIn("daily quota reached", str(ctx.exception))
-
-    def test_api_football_json_request_limit_raises_quota_exceeded_error(self):
-        from unittest import mock
-        from predictions.importers.api_football import APIFootballProvider
-        from predictions.importers.base import ProviderQuotaExceededError
-
-        session = mock.Mock()
-        resp = mock.Mock()
-        resp.status_code = 200
-        resp.json.return_value = {
-            "errors": {"requests": "You have reached your request limit for today"}
-        }
-        session.get.return_value = resp
-
-        provider = APIFootballProvider(api_key="fake-key", session=session)
-        with self.assertRaises(ProviderQuotaExceededError) as ctx:
-            provider._get("/fixtures", {})
-        self.assertIn("API-Football daily quota reached", str(ctx.exception))
+        p = FlashLiveProvider(api_key="fake-primary", stats_api_key="fake-secondary")
+        db_reset = p._get_quota_reset("primary")
+        self.assertIsNotNone(db_reset)
+        self.assertGreater(db_reset, datetime.now(dt_timezone.utc))
 
     def test_flashlive_primary_429_raises_quota_exceeded_error(self):
         from unittest import mock
@@ -8854,7 +8724,7 @@ class ProviderQuotaAndAdminNotificationTests(TestCase):
 
         with mock.patch("predictions.admin.get_or_fetch_match_stats") as mock_stats:
             mock_stats.side_effect = ProviderQuotaExceededError(
-                "API-Football daily quota reached (100 requests/day limit). Quota resets at 00:00 UTC (05:30 AM IST)."
+                "FlashLive monthly quota on RapidAPI reached (500 requests/month). Quota restores on October 25 at 03:05 PM IST."
             )
             resp = self.client.post(
                 reverse("admin:predictions_match_change", args=[self.match.pk]),
@@ -8882,7 +8752,7 @@ class ProviderQuotaAndAdminNotificationTests(TestCase):
                 follow=True,
             )
             self.assertEqual(resp.status_code, 200)
-            self.assertContains(resp, "⚠️ API-Football daily quota reached")
+            self.assertContains(resp, "⚠️ FlashLive monthly quota on RapidAPI reached")
 
     def test_flashlive_fetch_odds_re_raises_quota_error(self):
         from unittest import mock
@@ -8933,20 +8803,6 @@ class APICreditStatusTests(TestCase):
         self.admin = User.objects.create_superuser("admin_api_credits", "api@example.com", "pass12345")
         self.client.force_login(self.admin)
 
-    def test_record_provider_headers_api_football(self):
-        from predictions.api_credits import record_provider_headers
-        from predictions.models import APICreditStatus
-
-        headers = {
-            "x-ratelimit-requests-remaining": "85",
-            "x-ratelimit-requests-limit": "100",
-        }
-        record_provider_headers("api_football", headers)
-
-        status = APICreditStatus.objects.get(provider="api_football")
-        self.assertEqual(status.daily_remaining, 85)
-        self.assertEqual(status.daily_limit, 100)
-
     def test_record_provider_headers_flashlive(self):
         from predictions.api_credits import record_provider_headers
         from predictions.models import APICreditStatus
@@ -8968,11 +8824,6 @@ class APICreditStatusTests(TestCase):
         from predictions.models import APICreditStatus
 
         APICreditStatus.objects.create(
-            provider="api_football",
-            daily_remaining=90,
-            daily_limit=100,
-        )
-        APICreditStatus.objects.create(
             provider="flashlive_primary",
             monthly_remaining=0,
             monthly_limit=500,
@@ -8986,9 +8837,6 @@ class APICreditStatusTests(TestCase):
         )
 
         summary = get_api_credits_display_summary(force_refresh=False)
-        self.assertEqual(summary["football"]["badge_class"], "badge-ok")
-        self.assertIn("90 / 100 Daily", summary["football"]["badge_text"])
-
         self.assertEqual(summary["flashlive_primary"]["badge_class"], "badge-exceeded")
         self.assertIn("0 / 500", summary["flashlive_primary"]["badge_text"])
         self.assertIn("Exhausted", summary["flashlive_primary"]["badge_text"])
@@ -9001,52 +8849,17 @@ class APICreditStatusTests(TestCase):
         from django.urls import reverse
         from predictions.models import APICreditStatus
 
-        APICreditStatus.objects.create(provider="api_football", daily_remaining=90, daily_limit=100)
         APICreditStatus.objects.create(provider="flashlive_primary", monthly_remaining=0, monthly_limit=500)
         APICreditStatus.objects.create(provider="flashlive_secondary", monthly_remaining=380, monthly_limit=500)
 
-        with mock.patch("predictions.api_credits.fetch_live_api_football_credits") as mock_fb:
-            with mock.patch("predictions.api_credits.fetch_live_flashlive_credits") as mock_fl:
-                resp = self.client.get(
-                    reverse("admin:predictions_sport_changelist") + "?refresh_api_credits=1",
-                    follow=True,
-                )
-                self.assertEqual(resp.status_code, 200)
-                self.assertContains(resp, "API balance credits refreshed successfully")
-                self.assertEqual(mock_fb.call_count, 1)
-                self.assertEqual(mock_fl.call_count, 2)  # primary and secondary
-
-    def test_api_football_ratelimit_error_message(self):
-        from unittest import mock
-        from predictions.importers.api_football import APIFootballProvider
-        from predictions.importers.base import ProviderQuotaExceededError
-
-        session = mock.Mock()
-        resp = mock.Mock()
-        resp.status_code = 200
-        resp.json.return_value = {
-            "errors": {"rateLimit": "Too many requests. Your rate limit is 10 requests per minute."}
-        }
-        session.get.return_value = resp
-
-        provider = APIFootballProvider(api_key="fake-key", session=session)
-        with self.assertRaises(ProviderQuotaExceededError) as ctx:
-            provider._get("/fixtures", {})
-        self.assertIn("10 requests/min limit", str(ctx.exception))
-
-    def test_api_football_fetch_results_caps_and_breaks_on_quota(self):
-        from unittest import mock
-        from predictions.importers.api_football import APIFootballProvider
-        from predictions.importers.base import ProviderQuotaExceededError
-
-        provider = APIFootballProvider(api_key="fake-key")
-        with mock.patch.object(provider, "_get") as mock_get:
-            mock_get.side_effect = ProviderQuotaExceededError("Rate limit reached")
-            kickoffs = {f"id_{i}": timezone.now() for i in range(30)}
-            res = provider.fetch_results("Football", kickoffs)
-            self.assertEqual(res, {})
-            # Should have stopped on the first call due to break
-            self.assertEqual(mock_get.call_count, 1)
+        with mock.patch("predictions.api_credits.fetch_live_flashlive_credits") as mock_fl:
+            resp = self.client.get(
+                reverse("admin:predictions_sport_changelist") + "?refresh_api_credits=1",
+                follow=True,
+            )
+            self.assertEqual(resp.status_code, 200)
+            self.assertContains(resp, "API balance credits refreshed successfully")
+            self.assertEqual(mock_fl.call_count, 2)  # primary and secondary
 
     def test_sync_external_matches_per_sport_transaction_isolation(self):
         from unittest import mock
@@ -9054,15 +8867,11 @@ class APICreditStatusTests(TestCase):
         from predictions.importers.base import ProviderQuotaExceededError
 
         cmd = SyncCommand()
-        mock_fb = mock.Mock()
-        mock_fb.name = "api-football"
-        mock_fb.supports.side_effect = lambda s: s.lower() == "football"
+        mock_provider = mock.Mock()
+        mock_provider.name = "flashlive"
+        mock_provider.supports.return_value = True
 
-        mock_tennis = mock.Mock()
-        mock_tennis.name = "flashlive"
-        mock_tennis.supports.side_effect = lambda s: s.lower() == "tennis"
-
-        with mock.patch("predictions.management.commands.sync_external_matches.get_providers", return_value=[mock_fb, mock_tennis]):
+        with mock.patch("predictions.management.commands.sync_external_matches.get_providers", return_value=[mock_provider]):
             with mock.patch("predictions.management.commands.sync_external_matches.import_fixtures") as mock_import:
                 def side_effect(provider, sport, **kwargs):
                     if sport.name == "Football":
@@ -9076,6 +8885,36 @@ class APICreditStatusTests(TestCase):
 
                 called_sports = [call.args[1].name for call in mock_import.call_args_list]
                 self.assertIn("Football", called_sports)
-                self.assertIn("Tennis", called_sports)
+                self.assertIn("Cricket", called_sports)
+
+    def test_sync_external_matches_morning_catchup_when_zero_today_matches(self):
+        from unittest import mock
+        from predictions.management.commands.sync_external_matches import Command as SyncCommand
+
+        cmd = SyncCommand()
+        mock_provider = mock.Mock()
+        mock_provider.name = "flashlive"
+        mock_provider.supports.return_value = True
+
+        with mock.patch("predictions.management.commands.sync_external_matches.get_providers", return_value=[mock_provider]):
+            with mock.patch("predictions.management.commands.sync_external_matches.import_fixtures") as mock_import:
+                mock_import.return_value = {"created": 1, "updated": 0, "skipped": 0, "new_teams": [], "called_off": []}
+                with mock.patch.object(cmd, "stdout"):
+                    with mock.patch.object(cmd, "stderr"):
+                        cmd.handle(fixtures=True, results=False, list_sports=False, list_tournaments=False, sport=None, exclude_sport=None, slot="06:30", days_ahead=1, new_day_only=True, no_odds=True, dry_run=False, force=False)
+
+                self.assertTrue(mock_import.called)
+                for call in mock_import.call_args_list:
+                    self.assertFalse(call.kwargs["new_day_only"])
+
+    def test_run_scheduler_once_flag(self):
+        from unittest import mock
+        from django.core.management import call_command
+        from io import StringIO
+
+        out = StringIO()
+        with mock.patch("predictions.management.commands.run_scheduler.call_command"):
+            call_command("run_scheduler", once=True, stdout=out)
+        self.assertIn("Running on-demand sync for slot", out.getvalue())
 
 

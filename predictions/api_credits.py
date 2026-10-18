@@ -14,7 +14,6 @@ logger = logging.getLogger(__name__)
 
 IST = dt_timezone(timedelta(hours=5, minutes=30))
 FLASHLIVE_HOST = "flashlive-sports.p.rapidapi.com"
-API_FOOTBALL_DEFAULT_HOST = "v3.football.api-sports.io"
 
 
 def _format_datetime_ist(dt):
@@ -56,26 +55,7 @@ def record_provider_headers(provider_name, headers):
     hdr_map = {str(k).lower(): str(v) for k, v in headers.items()}
 
     try:
-        if provider_name == "api_football":
-            rem_str = hdr_map.get("x-ratelimit-requests-remaining")
-            lim_str = hdr_map.get("x-ratelimit-requests-limit")
-            rem = int(rem_str) if rem_str and rem_str.lstrip("-").isdigit() else None
-            lim = int(lim_str) if lim_str and lim_str.isdigit() else 100
-            if rem is not None and rem < 0:
-                rem = 0
-            defaults = {
-                "daily_remaining": rem,
-                "daily_limit": lim,
-                "monthly_limit": 3000,
-                "reset_info": "Resets daily at 00:00 UTC (05:30 AM IST)",
-                "raw_headers": {k: v for k, v in hdr_map.items() if "ratelimit" in k},
-            }
-            APICreditStatus.objects.update_or_create(
-                provider=APICreditStatus.ProviderChoice.API_FOOTBALL,
-                defaults=defaults,
-            )
-
-        elif provider_name in ("flashlive_primary", "flashlive_secondary"):
+        if provider_name in ("flashlive_primary", "flashlive_secondary"):
             choice = (
                 APICreditStatus.ProviderChoice.FLASHLIVE_PRIMARY
                 if provider_name == "flashlive_primary"
@@ -109,43 +89,6 @@ def record_provider_headers(provider_name, headers):
         logger.debug("Could not record provider headers for %s: %s", provider_name, exc)
 
 
-def fetch_live_api_football_credits():
-    """Query API-Football's /status endpoint (cost: 0 requests) and persist results."""
-    key = getattr(settings, "API_FOOTBALL_KEY", "")
-    host = getattr(settings, "API_FOOTBALL_HOST", API_FOOTBALL_DEFAULT_HOST)
-    if not key:
-        return
-
-    try:
-        resp = requests.get(
-            f"https://{host}/status",
-            headers={"x-apisports-key": key},
-            timeout=8,
-        )
-        record_provider_headers("api_football", resp.headers)
-        data = resp.json() if resp.status_code == 200 else {}
-        resp_obj = data.get("response") or {}
-        req_obj = resp_obj.get("requests") or {}
-        cur = req_obj.get("current")
-        lim = req_obj.get("limit_day", 100)
-        errors = data.get("errors") or {}
-
-        rem = 0 if "requests" in errors else (max(0, lim - cur) if cur is not None else None)
-        if rem is not None:
-            APICreditStatus.objects.update_or_create(
-                provider=APICreditStatus.ProviderChoice.API_FOOTBALL,
-                defaults={
-                    "daily_remaining": rem,
-                    "daily_limit": lim,
-                    "monthly_limit": 3000,
-                    "reset_info": "Resets daily at 00:00 UTC (05:30 AM IST)",
-                    "raw_headers": {k: v for k, v in resp.headers.items() if "ratelimit" in k.lower()},
-                },
-            )
-    except Exception as exc:
-        logger.warning("Error querying API-Football status: %s", exc)
-
-
 def fetch_live_flashlive_credits(key_name="secondary"):
     """Query FlashLive /v1/sports/list to capture live RapidAPI quota headers."""
     key = (
@@ -168,10 +111,7 @@ def fetch_live_flashlive_credits(key_name="secondary"):
 
 
 def get_api_credits_display_summary(force_refresh=False):
-    """Return dictionary with badge classes and formatted texts for the 3 API balance lines."""
-    football_status = APICreditStatus.objects.filter(
-        provider=APICreditStatus.ProviderChoice.API_FOOTBALL
-    ).first()
+    """Return dictionary with badge classes and formatted texts for the FlashLive API balances."""
     primary_status = APICreditStatus.objects.filter(
         provider=APICreditStatus.ProviderChoice.FLASHLIVE_PRIMARY
     ).first()
@@ -180,12 +120,6 @@ def get_api_credits_display_summary(force_refresh=False):
     ).first()
 
     # Initial seeding or forced manual refresh
-    if force_refresh or not football_status:
-        fetch_live_api_football_credits()
-        football_status = APICreditStatus.objects.filter(
-            provider=APICreditStatus.ProviderChoice.API_FOOTBALL
-        ).first()
-
     if force_refresh or not primary_status:
         fetch_live_flashlive_credits("primary")
         primary_status = APICreditStatus.objects.filter(
@@ -197,30 +131,6 @@ def get_api_credits_display_summary(force_refresh=False):
         secondary_status = APICreditStatus.objects.filter(
             provider=APICreditStatus.ProviderChoice.FLASHLIVE_SECONDARY
         ).first()
-
-    # Format 1. Football API Daily/Monthly
-    fb_rem = football_status.daily_remaining if football_status else None
-    fb_lim = football_status.daily_limit if football_status else 100
-    if fb_rem is None:
-        fb_badge = "Available (100 Daily)"
-        fb_class = "badge-ok"
-    elif fb_rem == 0:
-        fb_badge = f"0 / {fb_lim} Daily (Exhausted)"
-        fb_class = "badge-exceeded"
-    elif fb_rem <= 15:
-        fb_badge = f"{fb_rem} / {fb_lim} Daily (Low)"
-        fb_class = "badge-low"
-    else:
-        fb_badge = f"{fb_rem} / {fb_lim} Daily"
-        fb_class = "badge-ok"
-
-    fb_updated = _format_datetime_ist(football_status.last_checked) if football_status else ""
-    football_data = {
-        "badge_text": fb_badge,
-        "badge_class": fb_class,
-        "detail": "Monthly allocation: ~3,000 requests (100 requests/day) • Resets daily at 05:30 AM IST",
-        "last_updated": fb_updated,
-    }
 
     # Format 2. FlashLive Primary API Monthly
     pri_rem = primary_status.monthly_remaining if primary_status else None
@@ -270,7 +180,6 @@ def get_api_credits_display_summary(force_refresh=False):
     }
 
     return {
-        "football": football_data,
         "flashlive_primary": flashlive_primary_data,
         "flashlive_secondary": flashlive_secondary_data,
     }

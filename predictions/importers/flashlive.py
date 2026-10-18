@@ -141,10 +141,11 @@ TENNIS_TIER_EXPANSIONS = {
 }
 
 FOOTBALL_TIER_EXPANSIONS = {
-    "world: uefa champions league": {"europe: champions league", "*champions league*"},
-    "uefa champions league": {"europe: champions league", "*champions league*"},
-    "champions league": {"europe: champions league", "*champions league*"},
-    "ucl": {"europe: champions league", "*champions league*"},
+    "world: uefa champions league": {"europe: champions league*", "*champions league*"},
+    "uefa champions league": {"europe: champions league*", "*champions league*"},
+    "europe: champions league": {"europe: champions league*", "*champions league*"},
+    "champions league": {"europe: champions league*", "*champions league*"},
+    "ucl": {"europe: champions league*", "*champions league*"},
     "premier league": {"england: premier league"},
     "epl": {"england: premier league"},
     "la liga": {"spain: laliga", "*laliga*"},
@@ -627,9 +628,46 @@ class FlashLiveProvider(Provider):
     # -- helpers -----------------------------------------------------------
 
     def _get_quota_reset(self, key_name):
-        if self._use_global_quota:
-            return _KEY_QUOTA_STATUS.get(key_name)
-        return self._instance_quota_status.get(key_name)
+        cached = (
+            _KEY_QUOTA_STATUS.get(key_name)
+            if self._use_global_quota
+            else self._instance_quota_status.get(key_name)
+        )
+        if cached is not None:
+            return cached
+
+        # Check DB persistent quota status from APICreditStatus
+        try:
+            from predictions.models import APICreditStatus
+
+            choice = (
+                APICreditStatus.ProviderChoice.FLASHLIVE_PRIMARY
+                if key_name == "primary"
+                else APICreditStatus.ProviderChoice.FLASHLIVE_SECONDARY
+            )
+            status = APICreditStatus.objects.filter(provider=choice).first()
+            if status and (status.monthly_remaining is None or status.monthly_remaining <= 0):
+                secs = 0
+                if status.raw_headers and isinstance(status.raw_headers, dict):
+                    sec_val = (
+                        status.raw_headers.get("x-ratelimit-requests-reset")
+                        or status.raw_headers.get("ratelimit-reset")
+                    )
+                    if sec_val:
+                        try:
+                            secs = int(sec_val)
+                        except (ValueError, TypeError):
+                            secs = 0
+                now = datetime.now(dt_timezone.utc)
+                if secs > 0 and status.last_checked:
+                    reset_dt = status.last_checked + timedelta(seconds=secs)
+                    if now < reset_dt:
+                        self._set_quota_reset(key_name, reset_dt)
+                        return reset_dt
+        except Exception:
+            pass
+
+        return None
 
     def _set_quota_reset(self, key_name, reset_dt):
         if self._use_global_quota:
@@ -904,7 +942,11 @@ def _matches_inclusion(keys, patterns):
             if "*" not in p and "?" not in p:
                 if p == key:
                     return True
-                if re.search(rf"(?:^|:\s*){re.escape(p)}(?:\s*\(|\s*$)", key, re.IGNORECASE):
+                if key.startswith(p + " -") or key.startswith(p + ":") or key.startswith(p + ","):
+                    return True
+                if re.search(rf"(?:^|:\s*){re.escape(p)}(?:\s*\(|\s* -|\s*,|\s*$)", key, re.IGNORECASE):
+                    return True
+                if re.search(rf"\b{re.escape(p)}\b", key, re.IGNORECASE):
                     return True
     return False
 

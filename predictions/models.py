@@ -971,7 +971,6 @@ class APICreditStatus(models.Model):
     """Stores the latest verified API quota and credit balance for third-party providers."""
 
     class ProviderChoice(models.TextChoices):
-        API_FOOTBALL = "api_football", "API-Football"
         FLASHLIVE_PRIMARY = "flashlive_primary", "FlashLive Primary API"
         FLASHLIVE_SECONDARY = "flashlive_secondary", "FlashLive Secondary API"
 

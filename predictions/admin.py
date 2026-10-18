@@ -277,7 +277,6 @@ class SportAdmin(admin.ModelAdmin):
         # Prepare data for Matches Counts & Credits Table (Table 2)
         qs = self.get_queryset(request)
         match_credits_rows = []
-        football_balance = 0
         flashlive_balance = 0
 
         for sport in qs:
@@ -296,10 +295,7 @@ class SportAdmin(admin.ModelAdmin):
                 badge_class = "badge-ok"
                 badge_text = str(balance)
 
-            if sport.name == "Football":
-                football_balance += balance
-            else:
-                flashlive_balance += balance
+            flashlive_balance += balance
 
             match_credits_rows.append({
                 "id": sport.id,
@@ -313,7 +309,6 @@ class SportAdmin(admin.ModelAdmin):
             })
 
         extra_context["match_credits_rows"] = match_credits_rows
-        extra_context["football_balance"] = football_balance
         extra_context["flashlive_balance"] = flashlive_balance
 
         # Handle on-demand API balance refresh
@@ -322,7 +317,7 @@ class SportAdmin(admin.ModelAdmin):
             get_api_credits_display_summary(force_refresh=True)
             self.message_user(
                 request,
-                "API balance credits refreshed successfully from API-Football and RapidAPI.",
+                "API balance credits refreshed successfully from RapidAPI.",
                 messages.SUCCESS,
             )
             return redirect(request.path)
@@ -975,7 +970,7 @@ class MatchAdmin(admin.ModelAdmin):
             if not providers:
                 self.message_user(
                     request,
-                    "No sports data provider configured: API_FOOTBALL_KEY or RAPIDAPI_KEY is required.",
+                    "No sports data provider configured: RAPIDAPI_KEY or RAPIDAPI_STATS_KEY is required.",
                     messages.ERROR,
                 )
                 return redirect("admin:predictions_match_sync")
@@ -1262,7 +1257,7 @@ class MatchAdmin(admin.ModelAdmin):
         for error in failed:
             self.message_user(request, error, messages.ERROR)
 
-    @admin.action(description="Fetch suggested results from provider (API-Football / Flashscore)")
+    @admin.action(description="Fetch suggested results from provider (FlashLive)")
     def fetch_suggested_results_for_matches(self, request, queryset):
         providers = get_providers()
         if not providers:

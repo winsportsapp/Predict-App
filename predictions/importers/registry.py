@@ -1,20 +1,15 @@
 from django.conf import settings
 
-from .api_football import APIFootballProvider
 from .flashlive import FlashLiveProvider
 
 
 def get_providers():
     """The providers that are configured (have an API key), in priority order.
 
-    API-Football is prioritized for Football when API_FOOTBALL_KEY is set.
-    FlashLive handles other sports (Cricket, Tennis, Badminton, Hockey) and acts
-    as a fallback.
+    FlashLive handles all sports: Football, Cricket, Tennis, Badminton, Hockey.
     """
     providers = []
-    if getattr(settings, "API_FOOTBALL_KEY", ""):
-        providers.append(APIFootballProvider())
-    if getattr(settings, "RAPIDAPI_KEY", ""):
+    if getattr(settings, "RAPIDAPI_KEY", "") or getattr(settings, "RAPIDAPI_STATS_KEY", ""):
         providers.append(FlashLiveProvider())
     return providers
 

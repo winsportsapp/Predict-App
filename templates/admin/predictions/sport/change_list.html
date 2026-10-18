@@ -393,13 +393,7 @@ document.addEventListener("DOMContentLoaded", function() {
 {% block pagination %}
 <div class="match-credits-totals-container">
   <div class="match-credits-total-line">
-    <span class="total-label">Total Balance available for Football API:</span>
-    <span class="total-badge {% if football_balance < 0 %}badge-exceeded{% elif football_balance <= 5 %}badge-low{% else %}badge-ok{% endif %}">
-      {{ football_balance }}{% if football_balance < 0 %} (Exceeded){% elif football_balance <= 5 %} (Low){% endif %}
-    </span>
-  </div>
-  <div class="match-credits-total-line">
-    <span class="total-label">Total Balance available for Other sports (Flashlive):</span>
+    <span class="total-label">Total Balance available for All sports (FlashLive):</span>
     <span class="total-badge {% if flashlive_balance < 0 %}badge-exceeded{% elif flashlive_balance <= 20 %}badge-low{% else %}badge-ok{% endif %}">
       {{ flashlive_balance }}{% if flashlive_balance < 0 %} (Exceeded){% elif flashlive_balance <= 20 %} (Low){% endif %}
     </span>
@@ -414,18 +408,7 @@ document.addEventListener("DOMContentLoaded", function() {
   </div>
 
   <div class="match-credits-total-line api-credit-line">
-    <span class="total-label">Balance credit available for Football API Daily/Monthly:</span>
-    <span class="total-badge {{ api_credits.football.badge_class }}">
-      {{ api_credits.football.badge_text }}
-    </span>
-    <span class="api-credit-detail">
-      {{ api_credits.football.detail }}
-      {% if api_credits.football.last_updated %}<span class="api-credit-timestamp">({{ api_credits.football.last_updated }})</span>{% endif %}
-    </span>
-  </div>
-
-  <div class="match-credits-total-line api-credit-line">
-    <span class="total-label">Balance credit available for Flashline Primary API Monthly:</span>
+    <span class="total-label">Balance credit available for FlashLive Primary API Monthly:</span>
     <span class="total-badge {{ api_credits.flashlive_primary.badge_class }}">
       {{ api_credits.flashlive_primary.badge_text }}
     </span>
@@ -436,7 +419,7 @@ document.addEventListener("DOMContentLoaded", function() {
   </div>
 
   <div class="match-credits-total-line api-credit-line">
-    <span class="total-label">Balance credit available for Flashline Secondary API Monthly:</span>
+    <span class="total-label">Balance credit available for FlashLive Secondary API Monthly:</span>
     <span class="total-badge {{ api_credits.flashlive_secondary.badge_class }}">
       {{ api_credits.flashlive_secondary.badge_text }}
     </span>

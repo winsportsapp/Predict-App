@@ -95,7 +95,7 @@ class Command(BaseCommand):
 
         providers = get_providers()
         if not providers:
-            raise CommandError("No provider is configured: set API_FOOTBALL_KEY or RAPIDAPI_KEY.")
+            raise CommandError("No provider is configured: set RAPIDAPI_KEY or RAPIDAPI_STATS_KEY.")
 
         sports = Sport.objects.all()
         if options["sport"]:
@@ -160,6 +160,19 @@ class Command(BaseCommand):
                                     or (not slot)
                                 )
                             )
+                            # Catch-up protection: if new_day_only was requested in the morning slot,
+                            # but today has zero matches for this sport, import today (Day 0) as well
+                            actual_new_day_only = options["new_day_only"]
+                            if actual_new_day_only and slot == "06:30":
+                                from predictions.models import Match
+                                today_ist_date = now_ist.date()
+                                has_today_matches = Match.objects.filter(
+                                    sport=sport,
+                                    start_time__date=today_ist_date,
+                                ).exists()
+                                if not has_today_matches:
+                                    actual_new_day_only = False
+
                             self._report_fixtures(
                                 sport,
                                 import_fixtures(
@@ -167,7 +180,7 @@ class Command(BaseCommand):
                                     sport,
                                     days_ahead=days_ahead,
                                     download_images=not options["dry_run"],
-                                    new_day_only=options["new_day_only"],
+                                    new_day_only=actual_new_day_only,
                                     with_odds=with_odds,
                                     force=options["force"],
                                 ),
@@ -193,17 +206,17 @@ class Command(BaseCommand):
                     err_msg = str(exc)
                     if "quota" in err_msg.lower():
                         quota_stopped = True
-                        self.stderr.write(
+                        self._safe_stderr(
                             self.style.WARNING(
                                 f"{sport.name}: {err_msg} (quota limit reached, stopped cleanly)."
                             )
                         )
                     else:
                         failed = True
-                        self.stderr.write(self.style.ERROR(f"{sport.name}: {exc}"))
+                        self._safe_stderr(self.style.ERROR(f"{sport.name}: {exc}"))
                 except Exception as exc:
                     failed = True
-                    self.stderr.write(self.style.ERROR(f"{sport.name} unexpected error: {exc}"))
+                    self._safe_stderr(self.style.ERROR(f"{sport.name} unexpected error: {exc}"))
 
         if options["dry_run"]:
             self.stdout.write(self.style.WARNING("Dry run: nothing was saved."))
@@ -219,6 +232,14 @@ class Command(BaseCommand):
             encoding = getattr(self.stdout, "encoding", None) or "ascii"
             safe = str(msg).encode(encoding, errors="replace").decode(encoding)
             self.stdout.write(safe)
+
+    def _safe_stderr(self, msg):
+        try:
+            self.stderr.write(msg)
+        except UnicodeEncodeError:
+            encoding = getattr(self.stderr, "encoding", None) or "ascii"
+            safe = str(msg).encode(encoding, errors="replace").decode(encoding)
+            self.stderr.write(safe)
 
     def _report_requests(self, providers):
         breakdown = []
