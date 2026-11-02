@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% block title %}Leaderboard{% endblock %}
+{% block meta_description %}View the official WinSports monthly and all-time sports prediction leaderboards. Track top-ranked predictors, points, medals, and fair play standings.{% endblock %}
 {% block content %}
 <div class="leaderboard-page">
   {% if user.is_authenticated and not user.profile.country %}

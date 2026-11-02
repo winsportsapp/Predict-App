@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% block title %}Performance Analytics{% endblock %}
+{% block meta_description %}Explore sports prediction performance analytics on WinSports. Track prediction accuracy percentages, win streaks, and sport discipline performance metrics.{% endblock %}
 {% block content %}
 <div class="analytics-page">
   <!-- Analytics Header -->
@@ -179,6 +180,45 @@
             </div>
           </div>
         {% endfor %}
+      </div>
+    </div>
+  </div>
+
+  <!-- How Prediction Metrics Are Calculated -->
+  <div class="card border-0 shadow-sm rounded-4 bg-white p-4 mb-4">
+    <h2 class="h5 fw-bold text-dark mb-3">Understanding Performance Analytics</h2>
+    <div class="row g-3">
+      <div class="col-md-6 col-lg-3">
+        <div class="p-3 rounded-3 bg-light-subtle border h-100">
+          <strong class="d-block text-dark small mb-1">🏆 Prediction Points</strong>
+          <p class="small text-muted mb-0">
+            Points awarded or deducted based on the locked odds of verified match outcomes. Points earned here determine monthly and all-time leaderboard rankings.
+          </p>
+        </div>
+      </div>
+      <div class="col-md-6 col-lg-3">
+        <div class="p-3 rounded-3 bg-light-subtle border h-100">
+          <strong class="d-block text-dark small mb-1">🎯 Prediction Accuracy</strong>
+          <p class="small text-muted mb-0">
+            Calculated as the percentage of won picks relative to total decided picks (Won ÷ Decided). In-progress and pending fixtures are excluded until officially finalized.
+          </p>
+        </div>
+      </div>
+      <div class="col-md-6 col-lg-3">
+        <div class="p-3 rounded-3 bg-light-subtle border h-100">
+          <strong class="d-block text-dark small mb-1">🔥 Win Streaks</strong>
+          <p class="small text-muted mb-0">
+            Current streak tracks consecutive correct predictions without a loss. Best record tracks your highest historical streak achieved across all completed fixtures.
+          </p>
+        </div>
+      </div>
+      <div class="col-md-6 col-lg-3">
+        <div class="p-3 rounded-3 bg-light-subtle border h-100">
+          <strong class="d-block text-dark small mb-1">📈 Sport Disciplines</strong>
+          <p class="small text-muted mb-0">
+            Segregated performance metrics across Football, Cricket, Tennis, Badminton, and Hockey so you can assess your analytical accuracy by sport.
+          </p>
+        </div>
       </div>
     </div>
   </div>

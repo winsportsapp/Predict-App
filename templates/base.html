@@ -496,12 +496,13 @@
       align-items: center;
       justify-content: center;
       flex: 1;
+      min-width: 0;
       height: 100%;
       color: #64748b;
       text-decoration: none;
       font-size: 0.68rem;
       font-weight: 600;
-      padding: 4px 2px;
+      padding: 4px 1px;
       transition: color 0.15s ease;
       position: relative;
     }
@@ -510,6 +511,22 @@
       line-height: 1.2;
       margin-bottom: 2px;
       display: inline-block;
+    }
+    .mobile-nav-label {
+      line-height: 1.15;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      max-width: 100%;
+    }
+    @media (max-width: 380px) {
+      .mobile-nav-item {
+        font-size: 0.58rem;
+        padding: 4px 0.5px;
+      }
+      .mobile-nav-icon {
+        font-size: 1.05rem;
+      }
     }
     .mobile-nav-item.active {
       color: #0B3D2E;

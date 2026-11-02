@@ -2,6 +2,7 @@
 {% load prediction_extras %}
 {% block title %}{{ sport_name }}{% endblock %}
 {% block full_title %}{% if is_home %}WinSports – Free Sports Predictions, Leaderboard &amp; Prizes{% else %}{{ sport_name }} · WinSports{% endif %}{% endblock %}
+{% block meta_description %}{% if is_home %}WinSports is a 100% free sports prediction game. Predict match outcomes across football, cricket, tennis, badminton and hockey, climb the leaderboard, and win monthly prizes.{% else %}Explore upcoming {{ sport_name }} matches, kickoff schedules, head-to-head records, and make free sports predictions on WinSports. Test your sports knowledge and climb the monthly leaderboard.{% endif %}{% endblock %}
 {% block extra_head %}{% if is_home %}{% include "predictions/_home_styles.html" %}{% endif %}{% endblock %}
 {% block sticky_subnav %}
   {% include "predictions/_sports_pills.html" %}

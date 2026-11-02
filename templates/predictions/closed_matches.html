@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 {% load prediction_extras %}
 {% block title %}Closed Matches{% endblock %}
+{% block meta_description %}View completed match results, verified scores, and winning prediction outcomes across football, cricket, tennis, badminton, and hockey on WinSports.{% endblock %}
 {% block sticky_subnav %}
   {% include "predictions/_sports_pills.html" with is_closed_page=True %}
 {% endblock %}

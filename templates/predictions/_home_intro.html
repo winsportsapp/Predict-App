@@ -18,7 +18,7 @@
   <p class="home-pitch-sub mb-4">Top 3 eligible players win monthly gift vouchers.</p>
   <div class="home-ctas">
     <a class="btn btn-lg home-cta" href="{% url 'register' %}">Start Predicting — It's Free</a>
-    <a class="home-secondary-link" href="#sports-nav">See today's matches <span class="home-arrow" aria-hidden="true">→</span></a>
+    <a class="home-secondary-link" href="#sports-nav">See today's matches <span class="home-arrow" aria-hidden="true">&darr;</span></a>
   </div>
 </section>
 
@@ -79,4 +79,64 @@
     Test your sports knowledge, compete on the leaderboard, and enjoy the game without paying an entry fee.
   </p>
   <p class="mb-0 home-f2p-tagline">No deposits. No betting. No wagering. Just sports predictions.</p>
+</section>
+
+<section class="mb-4" id="sports-explorer" aria-labelledby="home-sports-heading">
+  <div class="d-flex align-items-center justify-content-between mb-3">
+    <div>
+      <h2 id="home-sports-heading" class="h4 mb-1 home-section-title">Explore Daily Sports Matches</h2>
+      <p class="small text-muted mb-0">Browse open fixtures, kickoff deadlines, and point values across 5 sports.</p>
+    </div>
+  </div>
+
+  <div class="row g-3">
+    <div class="col-6 col-md-4 col-lg-2">
+      <a href="{% url 'sport_matches' 'football' %}" class="card card-body text-center text-decoration-none h-100 p-3 bg-white border rounded-3 shadow-sm">
+        <span class="fs-1 mb-1">⚽</span>
+        <strong class="text-dark small d-block">Football</strong>
+        <span class="text-muted" style="font-size: 0.72rem;">Premier League, Champions League, ISL &amp; more</span>
+        <span class="badge text-bg-success rounded-pill mt-2 py-1 px-2" style="font-size: 0.65rem;">Predict &rarr;</span>
+      </a>
+    </div>
+    <div class="col-6 col-md-4 col-lg-2">
+      <a href="{% url 'sport_matches' 'cricket' %}" class="card card-body text-center text-decoration-none h-100 p-3 bg-white border rounded-3 shadow-sm">
+        <span class="fs-1 mb-1">🏏</span>
+        <strong class="text-dark small d-block">Cricket</strong>
+        <span class="text-muted" style="font-size: 0.72rem;">Tests, ODIs, T20 Leagues &amp; International</span>
+        <span class="badge text-bg-success rounded-pill mt-2 py-1 px-2" style="font-size: 0.65rem;">Predict &rarr;</span>
+      </a>
+    </div>
+    <div class="col-6 col-md-4 col-lg-2">
+      <a href="{% url 'sport_matches' 'tennis' %}" class="card card-body text-center text-decoration-none h-100 p-3 bg-white border rounded-3 shadow-sm">
+        <span class="fs-1 mb-1">🎾</span>
+        <strong class="text-dark small d-block">Tennis</strong>
+        <span class="text-muted" style="font-size: 0.72rem;">ATP, WTA Tour &amp; Grand Slam Fixtures</span>
+        <span class="badge text-bg-success rounded-pill mt-2 py-1 px-2" style="font-size: 0.65rem;">Predict &rarr;</span>
+      </a>
+    </div>
+    <div class="col-6 col-md-4 col-lg-2">
+      <a href="{% url 'sport_matches' 'badminton' %}" class="card card-body text-center text-decoration-none h-100 p-3 bg-white border rounded-3 shadow-sm">
+        <span class="fs-1 mb-1">🏸</span>
+        <strong class="text-dark small d-block">Badminton</strong>
+        <span class="text-muted" style="font-size: 0.72rem;">BWF World Tour, Super Series &amp; Championships</span>
+        <span class="badge text-bg-success rounded-pill mt-2 py-1 px-2" style="font-size: 0.65rem;">Predict &rarr;</span>
+      </a>
+    </div>
+    <div class="col-6 col-md-4 col-lg-2">
+      <a href="{% url 'sport_matches' 'hockey' %}" class="card card-body text-center text-decoration-none h-100 p-3 bg-white border rounded-3 shadow-sm">
+        <span class="fs-1 mb-1">🏑</span>
+        <strong class="text-dark small d-block">Hockey</strong>
+        <span class="text-muted" style="font-size: 0.72rem;">FIH Pro League, World Cup &amp; International</span>
+        <span class="badge text-bg-success rounded-pill mt-2 py-1 px-2" style="font-size: 0.65rem;">Predict &rarr;</span>
+      </a>
+    </div>
+    <div class="col-6 col-md-4 col-lg-2">
+      <a href="{% url 'closed_matches' %}" class="card card-body text-center text-decoration-none h-100 p-3 bg-white border rounded-3 shadow-sm">
+        <span class="fs-1 mb-1">🔒</span>
+        <strong class="text-dark small d-block">Closed Matches</strong>
+        <span class="text-muted" style="font-size: 0.72rem;">Verified Results, Final Scores &amp; Points</span>
+        <span class="badge bg-secondary-subtle text-secondary rounded-pill mt-2 py-1 px-2" style="font-size: 0.65rem;">View &rarr;</span>
+      </a>
+    </div>
+  </div>
 </section>

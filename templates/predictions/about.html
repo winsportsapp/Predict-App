@@ -1,26 +1,44 @@
 {% extends "base.html" %}
 {% block title %}About{% endblock %}
+{% block meta_description %}Learn about WinSports, India’s 100% free-to-play sports prediction platform. Discover our editorial sports analysis methodology, scoring rules, and fair play standards.{% endblock %}
 {% block content %}
 <div class="row justify-content-center">
   <div class="col-lg-9">
     <div class="card card-body">
       <h1 class="h3 mb-3">About WinSports</h1>
-      <p>WinSports (winsports.cc) is a free-to-play sports prediction game for sports fans across India. You predict the results of real matches, earn points for correct predictions, and compete with other fans on monthly and all-time leaderboards.</p>
+      <p>WinSports (winsports.cc) is a free-to-play sports prediction platform for sports fans across India. You predict the outcomes of real matches, earn points based on your analytical accuracy, and compete with other fans on monthly and all-time leaderboards.</p>
 
       <h2 class="h5 mt-3">What You Can Predict</h2>
-      <p>We publish daily matches in Football, Cricket, Tennis, Badminton and Hockey. Each match shows the points you can win or lose for each pick before you choose, so you always know how each pick can affect your score.</p>
+      <p>We publish daily fixtures across Football, Cricket, Tennis, Badminton, and Hockey. Each match shows the points you can win or lose for each pick before you choose, so you always know how each selection can affect your score.</p>
 
       <h2 class="h5 mt-3">100% Free to Play</h2>
       <p>There are no entry fees, no deposits, and no betting or wagering of any kind. Nothing is required to play or to be eligible for prizes. Each month, the top 3 eligible players on the leaderboard may receive gift vouchers. Prizes are available to residents of India only. See our <a href="{% url 'terms' %}">Terms &amp; Conditions</a>.</p>
 
       <h2 class="h5 mt-3">Fair Play</h2>
-      <p>Leaderboard rankings are based only on prediction points. Referral credits, advertisements and anything else outside your predictions never change your score. Multiple accounts, bots and other attempts to manipulate the leaderboard are not allowed. Read the full rules on our <a href="{% url 'how_it_works' %}">How It Works</a> page.</p>
+      <p>Leaderboard rankings are based only on prediction points. Referral credits, advertisements, and anything else outside your predictions never change your score. Multiple accounts, bots, and other attempts to manipulate the leaderboard are strictly prohibited. Read the full rules on our <a href="{% url 'how_it_works' %}">How It Works</a> page.</p>
+
+      <h2 class="h5 mt-3">Sports Analysis &amp; Methodology</h2>
+      <p>In addition to our daily prediction game, WinSports evaluates match contests using structured sports analysis. Our analytical methodology is centered on objective, observable match variables:</p>
+      <ul>
+        <li><strong>Pitch &amp; Surface Conditions:</strong> Analyzing soil composition (red vs. black clay), grass cover, and bounce characteristics in cricket, or court pace index (CPI) in tennis.</li>
+        <li><strong>Venue &amp; Environmental Factors:</strong> Assessing boundary geometry, altitude, prevailing cross-winds, humidity, and evening dew dynamics.</li>
+        <li><strong>Tactical Structures:</strong> Evaluating formation dynamics, pressing traps, transition speeds, and defensive block depths in football.</li>
+        <li><strong>Phase Specialization:</strong> Examining powerplay aggression, middle-overs strike rotation, and death-over bowling execution in T20 cricket.</li>
+        <li><strong>Contextual Head-to-Head Analysis:</strong> Reviewing recent tactical encounters while filtering out outdated historical records that featured obsolete rosters or coaching philosophies.</li>
+      </ul>
+
+      <h2 class="h5 mt-3">Automated Sports Data vs. Analytical Guidelines</h2>
+      <p>To ensure absolute clarity and transparency for our visitors:</p>
+      <ul>
+        <li><strong>Automated Fixture &amp; Scoring Data:</strong> Match schedules, kickoff timestamps, team rosters, live scores, and verified final outcomes displayed on our match cards are synchronized automatically through third-party sports data feeds (FlashLive).</li>
+        <li><strong>Independent Analytical Guidelines:</strong> Educational guidelines and match previews are formulated independently by the WinSports team. Analytical content is strictly informational; it never alters match points, locked odds, or leaderboard scoring.</li>
+      </ul>
 
       <h2 class="h5 mt-3">How WinSports Is Funded</h2>
-      <p>WinSports is free for everyone. To cover running costs, the site may show third-party advertisements. Ads never affect predictions, points, rankings or prizes.</p>
+      <p>WinSports is free for everyone. To cover running costs, the site may show third-party advertisements (such as Google AdSense). Advertisements never influence predictions, points, rankings, or prizes.</p>
 
       <h2 class="h5 mt-3">Who We Are</h2>
-      <p class="mb-3">WinSports is run by the WinSports team. We built it to give sports fans a fun, fair and free way to test their sports knowledge against each other. We'd love to hear from you: questions, feedback and match suggestions are always welcome on our <a href="{% url 'contact' %}">Contact</a> page.</p>
+      <p class="mb-3">WinSports is developed and maintained by the WinSports team—a group of sports enthusiasts and analytical developers in India. We created the platform to give sports fans a fun, fair, and free way to test their sports knowledge against each other. Questions, feedback, and match suggestions are always welcome on our <a href="{% url 'contact' %}">Contact</a> page.</p>
 
       <p class="mb-0 small text-muted">
         See also our <a href="{% url 'terms' %}">Terms and Conditions</a> and <a href="{% url 'privacy' %}">Privacy Policy</a>.
