@@ -20,6 +20,17 @@ from django.views.decorators.http import require_POST
 
 from . import google_auth, push, services
 from .constants import DEFAULT_SPORT_SLUG, DRAW_SPORTS, SPORT_SLUGS, SUPPORTED_SPORTS
+from .sports_insights_data import (
+    get_all_articles,
+    get_article_by_slug,
+    get_articles_by_sport,
+    get_sports_categories,
+)
+from .tournaments_data import (
+    get_calendar_metadata,
+    get_tournament_sports_categories,
+    get_upcoming_tournaments,
+)
 from .forms import AddEmailForm, LocationForm, PredictionForm, RegistrationForm
 from .locations import STATES_BY_COUNTRY
 from .models import (
@@ -755,6 +766,64 @@ def privacy(request):
     return render(request, "predictions/privacy.html")
 
 
+def sports_insights_list(request):
+    """Sports Insights evergreen knowledge hub with sport filtering."""
+    sport = request.GET.get("sport", "all").strip().lower()
+    articles = get_articles_by_sport(sport)
+    categories = get_sports_categories()
+    calendar_meta = get_calendar_metadata()
+    return render(
+        request,
+        "predictions/sports_insights_list.html",
+        {
+            "articles": articles,
+            "categories": categories,
+            "calendar_meta": calendar_meta,
+            "active_sport": sport,
+            "total_articles": len(get_all_articles()),
+        },
+    )
+
+
+def tournaments_calendar(request):
+    """Upcoming major sports tournaments schedule (~35–40 day outlook)."""
+    sport = request.GET.get("sport", "all").strip().lower()
+    tournaments = get_upcoming_tournaments(sport)
+    categories = get_tournament_sports_categories()
+    calendar_meta = get_calendar_metadata()
+    return render(
+        request,
+        "predictions/tournaments_calendar.html",
+        {
+            "tournaments": tournaments,
+            "categories": categories,
+            "calendar_meta": calendar_meta,
+            "active_sport": sport,
+            "total_articles": len(get_all_articles()),
+        },
+    )
+
+
+def sports_insights_detail(request, slug):
+    """Full detail view for an individual evergreen sports insights article."""
+    article = get_article_by_slug(slug)
+    if not article:
+        raise Http404("Sports Insight guide not found.")
+    related = [
+        get_article_by_slug(s)
+        for s in article.get("related_slugs", [])
+        if get_article_by_slug(s)
+    ]
+    return render(
+        request,
+        "predictions/sports_insights_detail.html",
+        {
+            "article": article,
+            "related_articles": related,
+        },
+    )
+
+
 @login_required
 def add_email(request):
     """One-time page asking a logged-in user with no email for one.
@@ -824,6 +893,11 @@ SITEMAP_PAGES = (
         ("analytics", {}),
         ("leaderboard", {}),
         ("closed_matches", {}),
+        ("sports_insights_list", {}),
+        ("tournaments_calendar", {}),
+    ]
+    + [("sports_insights_detail", {"slug": a["slug"]}) for a in get_all_articles()]
+    + [
         ("how_it_works", {}),
         ("about", {}),
         ("contact", {}),

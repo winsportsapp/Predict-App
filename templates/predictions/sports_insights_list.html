@@ -1,0 +1,178 @@
+{% extends "base.html" %}
+{% block title %}{% if active_sport and active_sport != 'all' %}{{ active_sport|title }} Insights &amp; Guides{% else %}Sports Insights &amp; Tactical Guides{% endif %}{% endblock %}
+{% block meta_description %}Explore evergreen sports insights, match tactics, tournament rules, and analytical guides across cricket, football, tennis, badminton, and hockey on WinSports.{% endblock %}
+
+{% block content %}
+<div class="sports-insights-page">
+  <!-- Breadcrumbs -->
+  <nav aria-label="breadcrumb" class="mb-3">
+    <ol class="breadcrumb small">
+      <li class="breadcrumb-item"><a href="{% url 'match_list' %}" class="link-secondary text-decoration-none">Home</a></li>
+      <li class="breadcrumb-item active" aria-current="page">Sports Insights</li>
+    </ol>
+  </nav>
+
+  <!-- Section Switcher Sub-Tabs -->
+  <div class="d-flex flex-wrap align-items-center gap-2 mb-4">
+    <a href="{% url 'sports_insights_list' %}" class="btn btn-sm btn-success text-white rounded-pill px-3 py-1.5 fw-bold shadow-sm d-inline-flex align-items-center gap-1.5">
+      <span>📖</span>
+      <span>Evergreen Sports Guides</span>
+      <span class="badge rounded-pill bg-white text-success">{{ total_articles }}</span>
+    </a>
+    <a href="{% url 'tournaments_calendar' %}" class="btn btn-sm btn-outline-secondary bg-white text-dark rounded-pill px-3 py-1.5 fw-semibold d-inline-flex align-items-center gap-1.5">
+      <span>📅</span>
+      <span>Upcoming Tournaments</span>
+      <span class="badge rounded-pill bg-secondary-subtle text-secondary">{{ calendar_meta.total_tournaments }}</span>
+    </a>
+  </div>
+
+  <!-- Hero Header -->
+  <div class="card border-0 shadow-sm rounded-4 bg-white p-4 p-md-5 mb-4">
+    <div class="row align-items-center g-4">
+      <div class="col-lg-8">
+        <span class="badge text-bg-success rounded-pill px-3 py-1 mb-2 fw-semibold">Evergreen Sports Knowledge</span>
+        <h1 class="h2 fw-bold text-dark mb-2">Sports Insights &amp; Analysis</h1>
+        <p class="text-secondary mb-3 lead fs-6">
+          Original, educational guides explaining the fundamental rules, tactical structures, pitch and court conditions, and match dynamics across 5 major sports disciplines.
+        </p>
+        <p class="small text-muted mb-0">
+          Independent sports analysis designed to enrich your appreciation of the game. 100% free and accessible to all sports fans.
+        </p>
+      </div>
+      <div class="col-lg-4 text-lg-end d-none d-lg-block">
+        <div class="d-inline-flex gap-2 p-3 rounded-4 bg-light-subtle border">
+          <div class="text-center px-2">
+            <span class="fs-4 d-block">🏏</span>
+            <small class="text-muted fw-semibold">Cricket</small>
+          </div>
+          <div class="text-center px-2">
+            <span class="fs-4 d-block">⚽</span>
+            <small class="text-muted fw-semibold">Football</small>
+          </div>
+          <div class="text-center px-2">
+            <span class="fs-4 d-block">🎾</span>
+            <small class="text-muted fw-semibold">Tennis</small>
+          </div>
+          <div class="text-center px-2">
+            <span class="fs-4 d-block">🏸</span>
+            <small class="text-muted fw-semibold">Badminton</small>
+          </div>
+          <div class="text-center px-2">
+            <span class="fs-4 d-block">🏑</span>
+            <small class="text-muted fw-semibold">Hockey</small>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Sport Category Filter Tabs -->
+  <div class="mb-4">
+    <div class="d-flex flex-wrap gap-2 align-items-center">
+      <span class="small fw-bold text-secondary me-1">Filter by Sport:</span>
+      {% for cat in categories %}
+        <a href="{% url 'sports_insights_list' %}{% if cat.slug != 'all' %}?sport={{ cat.slug }}{% endif %}"
+           class="btn btn-sm rounded-pill px-3 py-1.5 d-inline-flex align-items-center gap-1.5 text-decoration-none {% if active_sport == cat.slug or not active_sport and cat.slug == 'all' %}btn-success text-white fw-bold shadow-sm{% else %}btn-outline-secondary bg-white text-dark{% endif %}">
+          <span>{{ cat.icon }}</span>
+          <span>{{ cat.name }}</span>
+          <span class="badge rounded-pill {% if active_sport == cat.slug or not active_sport and cat.slug == 'all' %}bg-white text-success{% else %}bg-secondary-subtle text-secondary{% endif %}" style="font-size: 0.65rem;">{{ cat.count }}</span>
+        </a>
+      {% endfor %}
+    </div>
+  </div>
+
+  <!-- Articles Grid -->
+  {% if articles %}
+    <div class="row g-3 g-md-4 mb-5">
+      {% for article in articles %}
+        <div class="col-md-6 col-lg-6">
+          <div class="card h-100 border-0 shadow-sm rounded-4 bg-white d-flex flex-column transition-hover">
+            <div class="card-body p-4 d-flex flex-column">
+              <!-- Card Header -->
+              <div class="d-flex align-items-center justify-content-between mb-2">
+                <span class="badge bg-light text-dark border rounded-pill px-2.5 py-1 small fw-semibold">
+                  {{ article.sport_icon }} {{ article.sport_display }}
+                </span>
+                <span class="small text-muted">
+                  ⏱️ {{ article.read_time }}
+                </span>
+              </div>
+
+              <!-- Title -->
+              <h2 class="h5 fw-bold text-dark mt-2 mb-2">
+                <a href="{% url 'sports_insights_detail' article.slug %}" class="text-dark text-decoration-none hover-underline">
+                  {{ article.title }}
+                </a>
+              </h2>
+
+              <!-- Summary -->
+              <p class="small text-secondary mb-3 flex-grow-1" style="line-height: 1.55;">
+                {{ article.summary }}
+              </p>
+
+              <!-- Key Takeaways Preview -->
+              {% if article.key_takeaways %}
+                <div class="p-2.5 rounded-3 bg-light-subtle border mb-3 small">
+                  <strong class="d-block text-dark small mb-1">💡 Key Insight:</strong>
+                  <span class="text-muted small d-block text-truncate">{{ article.key_takeaways.0 }}</span>
+                </div>
+              {% endif %}
+
+              <!-- Card Footer Action -->
+              <div class="pt-2 border-top d-flex align-items-center justify-content-between mt-auto">
+                <span class="small text-muted">{{ article.published_date }}</span>
+                <a href="{% url 'sports_insights_detail' article.slug %}" class="btn btn-sm btn-outline-success rounded-pill px-3 fw-semibold">
+                  Read Guide &rarr;
+                </a>
+              </div>
+            </div>
+          </div>
+        </div>
+      {% endfor %}
+    </div>
+  {% else %}
+    <div class="card card-body text-center p-5 rounded-4 bg-white border-0 shadow-sm mb-5">
+      <span class="fs-1 mb-2">📚</span>
+      <h3 class="h5 fw-bold text-dark mb-1">No guides found</h3>
+      <p class="text-muted small mb-3">No articles match the selected sport filter.</p>
+      <a href="{% url 'sports_insights_list' %}" class="btn btn-success btn-sm rounded-pill px-4 align-self-center">
+        View All Sports Insights
+      </a>
+    </div>
+  {% endif %}
+
+  <!-- Upcoming Tournaments Outlook Banner -->
+  <div class="card border-0 shadow-sm rounded-4 bg-white p-4 mb-4">
+    <div class="d-flex flex-column flex-md-row align-items-md-center justify-content-between gap-3">
+      <div class="d-flex align-items-center gap-3">
+        <span class="fs-2 text-primary">📅</span>
+        <div>
+          <div class="d-flex align-items-center gap-2 mb-0.5">
+            <h3 class="h6 fw-bold text-dark mb-0">Looking for Upcoming Tournaments?</h3>
+            <span class="badge bg-light text-secondary border rounded-pill" style="font-size: 0.68rem;">~35–40 Day Outlook</span>
+          </div>
+          <p class="small text-muted mb-0">
+            Browse our curated, manually verified schedule of major events scheduled over the next ~35–40 days across all 5 sports disciplines.
+          </p>
+        </div>
+      </div>
+      <a href="{% url 'tournaments_calendar' %}" class="btn btn-sm btn-outline-success rounded-pill px-3 fw-bold text-nowrap align-self-start align-self-md-center">
+        View Tournament Calendar &rarr;
+      </a>
+    </div>
+  </div>
+
+  <!-- Educational Trust Guarantee Callout -->
+  <div class="card border-0 shadow-sm rounded-4 bg-white p-4 mb-4">
+    <div class="d-flex align-items-start gap-3">
+      <div class="fs-2 text-success">🛡️</div>
+      <div>
+        <h3 class="h6 fw-bold text-dark mb-1">WinSports Educational Commitment</h3>
+        <p class="small text-muted mb-0">
+          All Sports Insights articles are compiled independently by the WinSports team for educational, non-commercial sports analysis. We believe that understanding tactical systems, pitch dynamics, and official rules enriches the spectator experience. These guides are strictly informational and never alter prediction scoring, locked odds, or leaderboard rankings.
+        </p>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

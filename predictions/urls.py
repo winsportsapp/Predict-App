@@ -28,7 +28,17 @@ urlpatterns = [
     path("accounts/google/callback/", views.google_callback, name="google_callback"),
     # Match alerts (app notifications); called by pwa.js.
     path("push/subscribe/", views.push_subscribe, name="push_subscribe"),
-    path("push/unsubscribe/", views.push_unsubscribe, name="push_unsubscribe"),
+    path("sports-insights/", views.sports_insights_list, name="sports_insights_list"),
+    path(
+        "sports-insights/tournaments/",
+        views.tournaments_calendar,
+        name="tournaments_calendar",
+    ),
+    path(
+        "sports-insights/<slug:slug>/",
+        views.sports_insights_detail,
+        name="sports_insights_detail",
+    ),
     path("about/", views.about, name="about"),
     path("contact/", views.contact, name="contact"),
     path("how-it-works/", views.how_it_works, name="how_it_works"),

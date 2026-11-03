@@ -645,6 +645,10 @@
               <a class="nav-link text-white-50 px-2 py-1 rounded {% if request.resolver_match.url_name == 'analytics' %}text-white fw-bold active-sport-link{% endif %}"
                  href="{% url 'analytics' %}">Analytics</a>
             </li>
+            <li class="nav-item">
+              <a class="nav-link text-white-50 px-2 py-1 rounded {% if 'sports_insights' in request.resolver_match.url_name or request.resolver_match.url_name == 'tournaments_calendar' %}text-white fw-bold active-sport-link{% endif %}"
+                 href="{% url 'sports_insights_list' %}">Insights</a>
+            </li>
             {% if user.is_authenticated %}
               <li class="nav-item">
                 <a class="nav-link text-white-50 px-2 py-1 rounded {% if request.resolver_match.url_name == 'my_predictions' %}text-white fw-bold active-sport-link{% endif %}"
@@ -705,6 +709,8 @@
   <footer class="container pb-4 small text-muted text-center">
     <div class="d-flex flex-wrap justify-content-center gap-2 mb-2">
       <a class="link-secondary text-decoration-none" href="{% url 'about' %}">About</a>
+      <span>·</span>
+      <a class="link-secondary text-decoration-none" href="{% url 'sports_insights_list' %}">Sports Insights</a>
       <span>·</span>
       <a class="link-secondary text-decoration-none" href="{% url 'contact' %}">Contact</a>
       <span>·</span>
