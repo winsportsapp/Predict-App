@@ -1927,6 +1927,15 @@ class LeaderboardViewTests(TestCase):
         self.assertIn("Kerala", row)
         self.assertIn("India", row)
 
+    def test_duplicate_medal_eligibility_pill_removed_while_rules_preserved(self):
+        response = self.client.get(reverse("leaderboard"))
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, "200 Picks minimum required for medal eligibility")
+        self.assertContains(
+            response,
+            "Rule: Minimum of 200 Picks required along with the higher points to be eligible for Medals",
+        )
+
 
 class MonthlyLeaderboardTests(TestCase):
     """The monthly board sums ScoreAdjustment rows created this month --
@@ -6805,10 +6814,19 @@ class OddsAndPointsTests(TestCase):
         self.assertEqual(win, 75)
         self.assertEqual(lose, -25)
 
-        # invalid/missing odds fallback to default (10, -5)
+        # odd = 1.0 -> win = round(100 - 100) = 0, lose = 0 - 100 = -100
+        win, lose = calculate_points_from_odd(1.0)
+        self.assertEqual(win, 0)
+        self.assertEqual(lose, -100)
+        self.assertEqual(calculate_points_from_odd(1), (0, -100))
+        self.assertEqual(calculate_points_from_odd("1.0"), (0, -100))
+        self.assertEqual(calculate_points_from_odd("1"), (0, -100))
+
+        # invalid/missing odds (< 1.0 or non-numeric) fallback to default (10, -5)
         self.assertEqual(calculate_points_from_odd(None), (10, -5))
-        self.assertEqual(calculate_points_from_odd(1.0), (10, -5))
         self.assertEqual(calculate_points_from_odd(0.5), (10, -5))
+        self.assertEqual(calculate_points_from_odd(0), (10, -5))
+        self.assertEqual(calculate_points_from_odd(-1.0), (10, -5))
         self.assertEqual(calculate_points_from_odd("invalid"), (10, -5))
 
     def test_calculate_match_points_football_with_draw(self):
@@ -7018,6 +7036,236 @@ class OddsAndPointsTests(TestCase):
             mock_fetch_event_odds.assert_not_called()
             self.assertEqual(res[m1.pk], (1.8, 3.5, 3.2))
             self.assertEqual(res[m2.pk], (2.0, 3.0, 3.5))
+
+    def test_automatically_imported_cricket_match_has_zero_draw_fields_immediately(self):
+        """Issue 1 regression test: Automatically imported cricket matches must have
+        draw_win_points=0, draw_lose_points=0, and draw_odds=None immediately upon creation,
+        both with and without odds, without requiring an admin to edit anything."""
+        from predictions.importers.base import ExternalEvent
+        from predictions.services import import_fixtures
+
+        cricket = Sport.objects.get(name="Cricket")
+
+        # 1. Cricket fixture imported WITH odds
+        event_with_odds = ExternalEvent(
+            source="test_provider",
+            external_id="cricket-odds-1",
+            sport="Cricket",
+            event_name="IPL",
+            home="Mumbai Indians",
+            away="Chennai Super Kings",
+            start_time=timezone.now() + timedelta(days=2),
+            home_odds=1.85,
+            away_odds=1.95,
+            draw_odds=None,
+        )
+        provider = mock.Mock()
+        provider.name = "test_provider"
+        provider.fetch_fixtures.return_value = [event_with_odds]
+        provider.fetch_image.return_value = None
+
+        import_fixtures(provider, cricket, with_odds=True)
+        m_with_odds = Match.objects.get(external_source="test_provider", external_id="cricket-odds-1")
+
+        self.assertEqual(m_with_odds.draw_win_points, 0)
+        self.assertEqual(m_with_odds.draw_lose_points, 0)
+        self.assertIsNone(m_with_odds.draw_odds)
+        self.assertFalse(m_with_odds.allows_draw)
+        self.assertGreater(m_with_odds.team_a_win_points, 0)
+        self.assertGreater(m_with_odds.team_b_win_points, 0)
+
+        # 2. Cricket fixture imported WITHOUT odds
+        event_no_odds = ExternalEvent(
+            source="test_provider",
+            external_id="cricket-no-odds-1",
+            sport="Cricket",
+            event_name="Big Bash League",
+            home="Perth Scorchers",
+            away="Sydney Sixers",
+            start_time=timezone.now() + timedelta(days=3),
+            home_odds=None,
+            away_odds=None,
+            draw_odds=None,
+        )
+        provider.fetch_fixtures.return_value = [event_no_odds]
+        import_fixtures(provider, cricket, with_odds=False)
+        m_no_odds = Match.objects.get(external_source="test_provider", external_id="cricket-no-odds-1")
+
+        self.assertEqual(m_no_odds.draw_win_points, 0)
+        self.assertEqual(m_no_odds.draw_lose_points, 0)
+        self.assertIsNone(m_no_odds.draw_odds)
+        self.assertFalse(m_no_odds.allows_draw)
+        self.assertEqual(m_no_odds.team_a_win_points, 10)
+        self.assertEqual(m_no_odds.team_a_lose_points, -5)
+        self.assertEqual(m_no_odds.team_b_win_points, 10)
+        self.assertEqual(m_no_odds.team_b_lose_points, -5)
+
+    def test_other_sports_retain_existing_intended_draw_defaults(self):
+        """Issue 1 safety test: Existing intended draw behavior for other sports
+        (Football, Hockey with draw; Tennis, Badminton without) remains unchanged."""
+        from predictions.importers.base import ExternalEvent
+        from predictions.services import import_fixtures
+
+        football = Sport.objects.get(name="Football")
+        hockey = Sport.objects.get(name="Hockey")
+        tennis = Sport.objects.get(name="Tennis")
+
+        provider = mock.Mock()
+        provider.name = "test_provider"
+        provider.fetch_image.return_value = None
+
+        # Football without odds retains defaults (10, -5) and allows_draw=True
+        fb_event = ExternalEvent(
+            source="test_provider",
+            external_id="fb-no-odds-1",
+            sport="Football",
+            event_name="Premier League",
+            home="Liverpool",
+            away="Everton",
+            start_time=timezone.now() + timedelta(days=2),
+            home_odds=None,
+            away_odds=None,
+            draw_odds=None,
+        )
+        provider.fetch_fixtures.return_value = [fb_event]
+        import_fixtures(provider, football, with_odds=False)
+        m_fb = Match.objects.get(external_source="test_provider", external_id="fb-no-odds-1")
+        self.assertEqual(m_fb.draw_win_points, 10)
+        self.assertEqual(m_fb.draw_lose_points, -5)
+        self.assertTrue(m_fb.allows_draw)
+
+        # Hockey without odds retains defaults (10, -5) and allows_draw=True
+        hk_event = ExternalEvent(
+            source="test_provider",
+            external_id="hk-no-odds-1",
+            sport="Hockey",
+            event_name="NHL",
+            home="Boston Bruins",
+            away="Toronto Maple Leafs",
+            start_time=timezone.now() + timedelta(days=2),
+            home_odds=None,
+            away_odds=None,
+            draw_odds=None,
+        )
+        provider.fetch_fixtures.return_value = [hk_event]
+        import_fixtures(provider, hockey, with_odds=False)
+        m_hk = Match.objects.get(external_source="test_provider", external_id="hk-no-odds-1")
+        self.assertEqual(m_hk.draw_win_points, 10)
+        self.assertEqual(m_hk.draw_lose_points, -5)
+        self.assertTrue(m_hk.allows_draw)
+
+        # Tennis without odds has draw fields 0 and allows_draw=False
+        tn_event = ExternalEvent(
+            source="test_provider",
+            external_id="tn-no-odds-1",
+            sport="Tennis",
+            event_name="Wimbledon",
+            home="Carlos Alcaraz",
+            away="Jannik Sinner",
+            start_time=timezone.now() + timedelta(days=2),
+            home_odds=None,
+            away_odds=None,
+            draw_odds=None,
+        )
+        provider.fetch_fixtures.return_value = [tn_event]
+        import_fixtures(provider, tennis, with_odds=False)
+        m_tn = Match.objects.get(external_source="test_provider", external_id="tn-no-odds-1")
+        self.assertEqual(m_tn.draw_win_points, 0)
+        self.assertEqual(m_tn.draw_lose_points, 0)
+        self.assertFalse(m_tn.allows_draw)
+
+    def test_odd_exactly_one_calculates_correct_points_immediately(self):
+        """Issue 2 regression test: An odd of exactly 1 (or 1.0) must produce
+        correct points immediately upon creation across all sports, without admin edit."""
+        from predictions.importers.base import ExternalEvent
+        from predictions.services import calculate_match_points, import_fixtures
+
+        # 2-way sport (e.g. Tennis/Cricket): odd 1.0 vs 2.0
+        pts_2way = calculate_match_points(odds_a=1.0, odds_b=2.0, allows_draw=False)
+        self.assertEqual(pts_2way["team_a_win_points"], 33)
+        self.assertEqual(pts_2way["team_a_lose_points"], -67)
+        self.assertEqual(pts_2way["team_b_win_points"], 67)
+        self.assertEqual(pts_2way["team_b_lose_points"], -33)
+        self.assertEqual(pts_2way["draw_win_points"], 0)
+        self.assertEqual(pts_2way["draw_lose_points"], 0)
+
+        # 3-way sport (e.g. Football): odd 1.0, draw 4.0, away 8.0
+        pts_3way = calculate_match_points(odds_a=1.0, odds_b=8.0, odds_draw=4.0, allows_draw=True)
+        self.assertEqual(pts_3way["team_a_win_points"], 27)
+        self.assertEqual(pts_3way["team_a_lose_points"], -73)
+        self.assertEqual(pts_3way["draw_win_points"], 82)
+        self.assertEqual(pts_3way["draw_lose_points"], -18)
+        self.assertEqual(pts_3way["team_b_win_points"], 91)
+        self.assertEqual(pts_3way["team_b_lose_points"], -9)
+
+        # Equal heavy favorite odds: 1.0 and 1.0
+        pts_equal = calculate_match_points(odds_a=1.0, odds_b=1.0, allows_draw=False)
+        self.assertEqual(pts_equal["team_a_win_points"], 50)
+        self.assertEqual(pts_equal["team_a_lose_points"], -50)
+        self.assertEqual(pts_equal["team_b_win_points"], 50)
+        self.assertEqual(pts_equal["team_b_lose_points"], -50)
+
+        # Imported fixture with odd 1.0 has correct points immediately before admin edit
+        cricket = Sport.objects.get(name="Cricket")
+        event = ExternalEvent(
+            source="test_provider",
+            external_id="odd-one-fixture-1",
+            sport="Cricket",
+            event_name="T20 Blast",
+            home="Surrey",
+            away="Middlesex",
+            start_time=timezone.now() + timedelta(days=2),
+            home_odds=1.0,
+            away_odds=2.0,
+            draw_odds=None,
+        )
+        provider = mock.Mock()
+        provider.name = "test_provider"
+        provider.fetch_fixtures.return_value = [event]
+        provider.fetch_image.return_value = None
+
+        import_fixtures(provider, cricket, with_odds=True)
+        match = Match.objects.get(external_source="test_provider", external_id="odd-one-fixture-1")
+        self.assertEqual(float(match.team_a_odds), 1.0)
+        self.assertEqual(float(match.team_b_odds), 2.0)
+        self.assertEqual(match.team_a_win_points, 33)
+        self.assertEqual(match.team_a_lose_points, -67)
+        self.assertEqual(match.team_b_win_points, 67)
+        self.assertEqual(match.team_b_lose_points, -33)
+        self.assertEqual(match.draw_win_points, 0)
+        self.assertEqual(match.draw_lose_points, 0)
+
+    def test_editing_odd_away_from_one_and_back_produces_identical_result(self):
+        """Issue 2 consistency test: Editing an odd away from 1 and back to 1
+        produces the same result as the initial calculation."""
+        from predictions.services import apply_odds_and_points
+
+        m = sport_match("Tennis", "Player One", "Player Two")
+
+        # Initial calculation with odd 1.0
+        apply_odds_and_points(m, odds_a=1.0, odds_b=3.0, save=True)
+        m.refresh_from_db()
+        initial_a_win = m.team_a_win_points
+        initial_a_lose = m.team_a_lose_points
+        initial_b_win = m.team_b_win_points
+        initial_b_lose = m.team_b_lose_points
+        self.assertEqual(initial_a_win, 25)
+        self.assertEqual(initial_a_lose, -75)
+        self.assertEqual(initial_b_win, 75)
+        self.assertEqual(initial_b_lose, -25)
+
+        # Edit away from 1.0 to 2.5
+        apply_odds_and_points(m, odds_a=2.5, odds_b=1.5, save=True)
+        m.refresh_from_db()
+        self.assertNotEqual(m.team_a_win_points, initial_a_win)
+
+        # Edit back to 1.0
+        apply_odds_and_points(m, odds_a=1.0, odds_b=3.0, save=True)
+        m.refresh_from_db()
+        self.assertEqual(m.team_a_win_points, initial_a_win)
+        self.assertEqual(m.team_a_lose_points, initial_a_lose)
+        self.assertEqual(m.team_b_win_points, initial_b_win)
+        self.assertEqual(m.team_b_lose_points, initial_b_lose)
 
 
 class MultiSportAPISyncAndH2HTests(TestCase):

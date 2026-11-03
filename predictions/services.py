@@ -50,7 +50,7 @@ def calculate_points_from_odd(odd):
       odd = 2.0 -> win = 50, lose = -50
       odd = 1.5 -> win = 33, lose = -67
 
-    Falls back to (POINTS_CORRECT, POINTS_WRONG) if odd is missing or <= 1.0.
+    Falls back to (POINTS_CORRECT, POINTS_WRONG) if odd is missing or < 1.0.
     """
 def _round_half_up(val):
     return int(Decimal(str(val)).quantize(Decimal("1"), rounding=ROUND_HALF_UP))
@@ -61,7 +61,7 @@ def _safe_odd(odd):
         return None
     try:
         val = float(odd)
-        return val if val > 1.0 else None
+        return val if val >= 1.0 else None
     except (ValueError, TypeError):
         return None
 
@@ -70,7 +70,7 @@ def calculate_points_from_odd(odd):
     """Fallback single-odd calculation: (win, lose) points from an individual odd.
 
     win = round(100 - (100 / odd)), lose = win - 100
-    Falls back to (POINTS_CORRECT, POINTS_WRONG) if odd is missing or <= 1.0.
+    Falls back to (POINTS_CORRECT, POINTS_WRONG) if odd is missing or < 1.0.
     """
     val = _safe_odd(odd)
     if val is None:
@@ -161,7 +161,7 @@ def calculate_match_points(odds_a=None, odds_b=None, odds_draw=None, allows_draw
 
 def apply_odds_and_points(match, odds_a=None, odds_b=None, odds_draw=None, save=True):
     """Update match with odds and calculate points fields accordingly."""
-    allows_draw = match.sport.name in DRAW_SPORTS
+    allows_draw = match.sport.name in DRAW_SPORTS and match.sport.name != "Cricket"
     if odds_a is not None:
         match.team_a_odds = odds_a
     if odds_b is not None:
@@ -383,7 +383,7 @@ def import_fixtures(
 
 
     now = timezone.now()
-    allows_draw = sport.name in DRAW_SPORTS
+    allows_draw = sport.name in DRAW_SPORTS and sport.name != "Cricket"
 
     try:
         events = provider.fetch_fixtures(

@@ -38,7 +38,7 @@
     function floatValue(input) {
       if (!input) return null;
       var val = parseFloat(input.value.trim());
-      return (!isNaN(val) && isFinite(val) && val > 1.0) ? val : null;
+      return (!isNaN(val) && isFinite(val) && val >= 1.0) ? val : null;
     }
 
     function intValue(input) {
