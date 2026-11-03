@@ -118,9 +118,14 @@
             Predict upcoming {{ article.sport_display }} match outcomes for free on WinSports. Test your sports knowledge and compete on the monthly leaderboard.
           </p>
         </div>
-        <a href="{% url 'sport_matches' article.sport %}" class="btn btn-success btn-sm rounded-pill px-4 fw-bold text-nowrap align-self-start align-self-sm-center">
-          Predict {{ article.sport_display }} &rarr;
-        </a>
+        <div class="d-flex flex-column flex-sm-row gap-2 align-self-stretch align-self-sm-center">
+          <a href="{% url 'sport_matches' article.sport %}" class="btn btn-success btn-sm rounded-pill px-3 fw-bold text-nowrap text-center">
+            Predict {{ article.sport_display }} &rarr;
+          </a>
+          <a href="{% url 'tournaments_calendar' %}?sport={{ article.sport }}" class="btn btn-outline-secondary btn-sm rounded-pill px-3 fw-semibold text-nowrap text-center">
+            📅 View Calendar
+          </a>
+        </div>
       </div>
     </div>
 

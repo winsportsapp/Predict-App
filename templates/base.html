@@ -512,6 +512,10 @@
       margin-bottom: 2px;
       display: inline-block;
     }
+    .mobile-nav-icon-trophy {
+      font-size: 1.14em;
+      line-height: 1.05;
+    }
     .mobile-nav-label {
       line-height: 1.15;
       white-space: nowrap;
@@ -519,13 +523,31 @@
       text-overflow: ellipsis;
       max-width: 100%;
     }
-    @media (max-width: 380px) {
+    @media (max-width: 420px) {
       .mobile-nav-item {
-        font-size: 0.58rem;
-        padding: 4px 0.5px;
+        font-size: 0.62rem;
+        padding: 3px 0.5px;
       }
       .mobile-nav-icon {
-        font-size: 1.05rem;
+        font-size: 1.1rem;
+      }
+    }
+    @media (max-width: 380px) {
+      .mobile-nav-item {
+        font-size: 0.56rem;
+        padding: 3px 0.5px;
+      }
+      .mobile-nav-icon {
+        font-size: 1.0rem;
+      }
+    }
+    @media (max-width: 340px) {
+      .mobile-nav-item {
+        font-size: 0.50rem;
+        padding: 2px 0;
+      }
+      .mobile-nav-icon {
+        font-size: 0.92rem;
       }
     }
     .mobile-nav-item.active {
@@ -649,12 +671,15 @@
               <a class="nav-link text-white-50 px-2 py-1 rounded {% if 'sports_insights' in request.resolver_match.url_name or request.resolver_match.url_name == 'tournaments_calendar' %}text-white fw-bold active-sport-link{% endif %}"
                  href="{% url 'sports_insights_list' %}">Insights</a>
             </li>
-            {% if user.is_authenticated %}
-              <li class="nav-item">
+            <li class="nav-item">
+              {% if user.is_authenticated %}
                 <a class="nav-link text-white-50 px-2 py-1 rounded {% if request.resolver_match.url_name == 'my_predictions' %}text-white fw-bold active-sport-link{% endif %}"
                    href="{% url 'my_predictions' %}">My Picks</a>
-              </li>
-            {% endif %}
+              {% else %}
+                <a class="nav-link text-white-50 px-2 py-1 rounded"
+                   href="{% url 'login' %}?next={% url 'my_predictions' %}">My Picks</a>
+              {% endif %}
+            </li>
             <li class="nav-item">
               <a class="nav-link text-white-50 px-2 py-1 rounded {% if request.resolver_match.url_name == 'how_it_works' %}text-white fw-bold active-sport-link{% endif %}"
                  href="{% url 'how_it_works' %}">Fair Play</a>
@@ -738,8 +763,15 @@
         <span class="mobile-nav-icon">✨</span>
         <span class="mobile-nav-label">Analytics</span>
       </a>
+      <a href="{% url 'sports_insights_list' %}"
+         class="mobile-nav-item {% if 'sports_insights' in request.resolver_match.url_name or request.resolver_match.url_name == 'tournaments_calendar' %}active{% endif %}"
+         title="Sports Insights"
+         aria-label="Sports Insights">
+        <span class="mobile-nav-icon">📖</span>
+        <span class="mobile-nav-label">Insights</span>
+      </a>
       <a href="{% url 'leaderboard' %}" class="mobile-nav-item {% if request.resolver_match.url_name == 'leaderboard' %}active{% endif %}">
-        <span class="mobile-nav-icon">🏆</span>
+        <span class="mobile-nav-icon mobile-nav-icon-trophy">🏆</span>
         <span class="mobile-nav-label">Leaders</span>
       </a>
       {% if user.is_authenticated %}
@@ -752,6 +784,11 @@
           </span>
           <span class="mobile-nav-label">My Picks</span>
         </a>
+      {% else %}
+        <a href="{% url 'login' %}?next={% url 'my_predictions' %}" class="mobile-nav-item {% if request.resolver_match.url_name == 'my_predictions' %}active{% endif %}">
+          <span class="mobile-nav-icon">✓</span>
+          <span class="mobile-nav-label">My Picks</span>
+        </a>
       {% endif %}
       <a href="{% url 'how_it_works' %}" class="mobile-nav-item {% if request.resolver_match.url_name == 'how_it_works' %}active{% endif %}">
         <span class="mobile-nav-icon">🛡️</span>
@@ -760,12 +797,12 @@
       {% if user.is_authenticated %}
         <a href="{% url 'my_account' %}" class="mobile-nav-item {% if request.resolver_match.url_name == 'my_account' %}active{% endif %}">
           <span class="mobile-nav-icon">👤</span>
-          <span class="mobile-nav-label">My Account</span>
+          <span class="mobile-nav-label">Account</span>
         </a>
       {% else %}
         <a href="{% url 'login' %}" class="mobile-nav-item {% if request.resolver_match.url_name in 'login register' %}active{% endif %}">
           <span class="mobile-nav-icon">👤</span>
-          <span class="mobile-nav-label">My Account</span>
+          <span class="mobile-nav-label">Account</span>
         </a>
       {% endif %}
     </div>

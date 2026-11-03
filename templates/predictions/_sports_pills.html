@@ -19,6 +19,14 @@
          class="btn btn-sm text-nowrap sports-tab-pill {% if is_closed_page or request.resolver_match.url_name == 'closed_matches' %}active-pill{% else %}inactive-pill{% endif %}">
         <span class="pill-sport-name">🔒 Closed</span>
       </a>
+      <a href="{% url 'sports_insights_list' %}"
+         class="btn btn-sm text-nowrap sports-tab-pill {% if 'sports_insights' in request.resolver_match.url_name %}active-pill{% else %}inactive-pill{% endif %}">
+        <span class="pill-sport-name">📖 Insights</span>
+      </a>
+      <a href="{% url 'tournaments_calendar' %}"
+         class="btn btn-sm text-nowrap sports-tab-pill {% if request.resolver_match.url_name == 'tournaments_calendar' %}active-pill{% else %}inactive-pill{% endif %}">
+        <span class="pill-sport-name">📅 Calendar</span>
+      </a>
     </div>
   </div>
 </div>

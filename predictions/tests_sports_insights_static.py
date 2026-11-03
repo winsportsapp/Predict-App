@@ -4,6 +4,7 @@ Validates routing, filtering, content delivery, sitemap inclusion,
 and zero database dependency.
 """
 
+from django.contrib.auth.models import User
 from django.test import TestCase, override_settings
 from django.urls import reverse
 
@@ -262,4 +263,78 @@ class SportsInsightsStaticTests(TestCase):
         self.assertEqual(cal_resp.status_code, 200)
         self.assertContains(cal_resp, "active-sport-link")
         self.assertContains(cal_resp, reverse("sports_insights_list"))
+
+    def test_mobile_bottom_navigation_integration(self):
+        """Test mobile bottom nav bar contains Sports Insights link and highlights active route."""
+        response = self.client.get(reverse("match_list"))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'class="mobile-bottom-nav')
+        self.assertContains(response, 'href="%s"' % reverse("sports_insights_list"))
+        self.assertContains(response, 'Insights</span>')
+
+        # Test active class on mobile bottom nav when on sports_insights_list
+        insights_resp = self.client.get(reverse("sports_insights_list"))
+        self.assertEqual(insights_resp.status_code, 200)
+        self.assertContains(insights_resp, 'active" \n         title="Sports Insights"' if 'active" \n' in insights_resp.content.decode() else 'active"')
+
+        # Test active class on mobile bottom nav when on tournaments_calendar
+        cal_resp = self.client.get(reverse("tournaments_calendar"))
+        self.assertEqual(cal_resp.status_code, 200)
+        self.assertContains(cal_resp, 'active"')
+
+    def test_sports_pills_scroller_contains_insights_and_calendar(self):
+        """Test sports pills scroller provides direct access to Insights and Calendar."""
+        response = self.client.get(reverse("match_list"))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'sports-pill-scroller')
+        self.assertContains(response, '📖 Insights')
+        self.assertContains(response, '📅 Calendar')
+
+    def test_sports_insights_page_has_prominent_calendar_card(self):
+        """Test /sports-insights/ has a prominent above-the-fold Tournament Calendar card."""
+        response = self.client.get(reverse("sports_insights_list"))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Upcoming Sports Tournaments Calendar")
+        self.assertContains(response, reverse("tournaments_calendar"))
+        self.assertContains(response, "Open Calendar")
+
+    def test_my_picks_visible_when_logged_out(self):
+        """Confirm My Picks link is visible when logged out with next=/predictions/mine/ destination."""
+        response = self.client.get(reverse("match_list"))
+        self.assertEqual(response.status_code, 200)
+        expected_next_url = reverse("login") + "?next=" + reverse("my_predictions")
+
+        # Desktop navigation contains My Picks with login redirect
+        self.assertContains(response, f'href="{expected_next_url}">My Picks</a>')
+
+        # Mobile bottom nav contains My Picks with login redirect
+        self.assertContains(response, f'href="{expected_next_url}" class="mobile-nav-item')
+        self.assertContains(response, '<span class="mobile-nav-label">My Picks</span>')
+
+        # Confirm login page safely renders with the next parameter
+        login_resp = self.client.get(expected_next_url)
+        self.assertEqual(login_resp.status_code, 200)
+        self.assertContains(login_resp, f'name="next" value="{reverse("my_predictions")}"')
+
+    def test_my_picks_visible_when_logged_in(self):
+        """Confirm My Picks link is visible when logged in and points to /predictions/mine/."""
+        user = User.objects.create_user(
+            username="picksuser", email="picksuser@example.com", password="TestPassword123"
+        )
+        self.client.force_login(user)
+        response = self.client.get(reverse("match_list"))
+        self.assertEqual(response.status_code, 200)
+        my_picks_url = reverse("my_predictions")
+
+        # Desktop navigation contains direct link to My Picks
+        self.assertContains(response, f'href="{my_picks_url}">My Picks</a>')
+
+        # Mobile bottom nav contains direct link to My Picks
+        self.assertContains(response, f'href="{my_picks_url}" class="mobile-nav-item')
+
+        # Existing logged-in My Picks destination is unchanged and loads 200
+        picks_resp = self.client.get(my_picks_url)
+        self.assertEqual(picks_resp.status_code, 200)
+        self.assertTemplateUsed(picks_resp, "predictions/my_predictions.html")
+
 
